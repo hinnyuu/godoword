@@ -510,5 +510,26 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "1"
+  },
+  {
+    "file": "2026-11-16-2340-quadlet-single-publish.md",
+    "title": "quadlet 双栈发布定论：单条不带 IP（实测）",
+    "date": "2026-11-16T23:40+08:00",
+    "keywords": [
+      "quadlet",
+      "publishport",
+      "pasta",
+      "dual-stack",
+      "fedora",
+      "empirical"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]

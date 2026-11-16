@@ -5,10 +5,11 @@
 
 ## quadlet（rootless 推荐）
 
-`quadlet/godoword.container` 为 systemd 用户单元。语法要点：**双栈发布须两条 PublishPort**
-（`0.0.0.0:8080:8080` 绑 IPv4 + `[::]:8080:8080` 绑 IPv6）——单条 `[::]` 在 `IPV6_V6ONLY=1`
-的系统（如 Fedora）上仅 IPv6，`127.0.0.1` 会被拒绝；单条不带 IP 仅 IPv4，`localhost`（::1）会被拒绝。
-两条并存才能让 IPv4 与 IPv6 皆可达。`Volume=godoword-data:/data:Z`（SELinux relabel）；
+`quadlet/godoword.container` 为 systemd 用户单元。语法要点：**双栈发布用单条不带 IP 的
+`PublishPort=8080:8080`**——pasta 默认同时绑 IPv4 与 IPv6（Fedora 44 / podman 5.8.7 实测
+`127.0.0.1` 与 `localhost` 皆可达）。两个陷阱：显式 `PublishPort=[::]:8080:8080` 在
+`IPV6_V6ONLY=1` 的系统仅 IPv6（`127.0.0.1` 被拒绝）；两条同端口 PublishPort（IPv4+IPv6）
+会致 pasta 端口转发冲突、服务启动失败。`Volume=godoword-data:/data:Z`（SELinux relabel）；
 `TimeoutStartSec=300` 容纳首次镜像拉取；`[Install] WantedBy=default.target` 开机自启。
 
 **podman ≥ 5.8** 用便捷命令安装（自动 reload systemd）：

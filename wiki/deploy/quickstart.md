@@ -76,8 +76,8 @@ curl http://127.0.0.1:8080/healthz
 ```
 
 移除：`systemctl --user stop godoword.service && podman quadlet rm godoword.container`。
-quadlet 双栈发布用两条 PublishPort（IPv4 `0.0.0.0:8080:8080` + IPv6 `[::]:8080:8080`），
-单条 `[::]` 在 Fedora 等 v6only 系统仅 IPv6。详见 [deploy/README](../../deploy/README.md)。
+quadlet 双栈发布用单条不带 IP 的 `PublishPort=8080:8080`（pasta 默认双栈）；显式 `[::]` 仅 IPv6，
+两条同端口会冲突。详见 [deploy/README](../../deploy/README.md)。
 
 ## 说明
 

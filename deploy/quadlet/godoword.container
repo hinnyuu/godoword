@@ -4,8 +4,7 @@ Description=godoword 外语学习服务
 [Container]
 Image=ghcr.io/hinnyuu/godoword:latest
 ContainerName=godoword
-PublishPort=0.0.0.0:8080:8080
-PublishPort=[::]:8080:8080
+PublishPort=8080:8080
 Volume=godoword-data:/data:Z
 
 [Service]
