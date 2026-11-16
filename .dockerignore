@@ -1,0 +1,12 @@
+target
+.git
+.github
+devenv.md
+node_modules
+data
+*.key
+.env
+.env.*
+docs
+wiki
+history

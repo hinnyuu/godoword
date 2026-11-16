@@ -1,0 +1,14 @@
+services:
+  godoword:
+    image: ghcr.io/hinnyuu/godoword:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - godoword-data:/data
+    restart: unless-stopped
+
+volumes:
+  godoword-data:

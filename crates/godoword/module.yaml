@@ -1,0 +1,12 @@
+id: godoword
+name: 组合根
+version: 0.0.0
+kind: root
+description: 注册模块并启动服务；M0 为最小 hello 服务
+
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+cross_module:
+  - kernel-api

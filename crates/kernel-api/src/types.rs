@@ -263,6 +263,7 @@ pub enum ModuleKind {
     KernelApi,
     Adapter,
     Teaching,
+    Root,
 }
 
 /// 适配器提供的能力。
