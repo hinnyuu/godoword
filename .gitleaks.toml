@@ -1,0 +1,17 @@
+title = "godoword gitleaks"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "文档中的示例与占位（非真实密钥）"
+paths = [
+  '''docs/''',
+  '''wiki/''',
+  '''history/''',
+  '''Cargo.lock''',
+]
+regexes = [
+  '''gho_\*+''',
+  '''GODOWORD_MASTER_KEY''',
+]

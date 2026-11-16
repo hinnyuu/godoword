@@ -1,0 +1,35 @@
+# 环境本地文档，严禁提交（含 git add -f）
+devenv.md
+
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node / 前端
+node_modules/
+web/**/dist/
+.vite/
+*.tsbuildinfo
+
+# 运行时数据与密钥（绝不入仓库）
+/data/
+*.key
+.env
+.env.*
+!.env.example
+
+# 编辑器与系统
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 测试与临时产物
+/tmp/
+coverage/
+*.log
+
+# Python
+__pycache__/
+*.pyc

@@ -1,0 +1,25 @@
+# 项目级关系图谱规则（跨模块与基础设施）。模块级规则在各 crate/module.yaml。
+# CI 聚合二者做覆盖率与漏改检查。见 gates.md。
+rules:
+  - match: "crates/kernel-api/**"
+    docs: [docs/project/architecture.md, "crates/*/docs/"]
+    history: required
+    note: 契约变更牵连全部模块文档
+  - match: "scripts/**"
+    docs: [docs/project/gates.md]
+    history: required
+  - match: ".github/workflows/**"
+    docs: [docs/project/conventions.md, docs/project/gates.md]
+    history: required
+  - match: "docs/project/glossary.yaml"
+    docs: [docs/project/conventions.md]
+    history: required
+  - match: "docker/**"
+    docs: [wiki/deploy/]
+    history: required
+  - match: "deploy/**"
+    docs: [wiki/deploy/]
+    history: required
+  - match: "web/**"
+    docs: [docs/project/architecture.md]
+    history: required

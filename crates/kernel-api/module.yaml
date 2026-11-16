@@ -1,0 +1,11 @@
+id: kernel-api
+name: 模块契约
+version: 0.0.0
+kind: kernel-api
+description: trait 与共享类型，无实现；适配器与教学模块的唯一依赖
+
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+cross_module: []
