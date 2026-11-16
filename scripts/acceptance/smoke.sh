@@ -17,7 +17,13 @@ while id "$SMOKE_UID" >/dev/null 2>&1; do SMOKE_UID=$((SMOKE_UID + 1)); done
 SMOKE_HOME="/home/${SMOKE_USER}"
 BIND_USER="${SMOKE_HOME}/data"
 
-as_user() { sudo -u "$SMOKE_USER" -i "$@"; }
+# 显式 cd 到临时用户 HOME（避免继承调用者私有 cwd 致 chdir 失败），并导出 HOME/XDG 到
+# 临时用户自有路径（避免继承调用者如 CI runner 的 XDG_CONFIG_HOME 误读他人私有配置）。
+as_user() {
+  local cmd
+  cmd=$(printf '%q ' "$@")
+  sudo -u "$SMOKE_USER" bash -c "cd '$SMOKE_HOME' && export HOME='$SMOKE_HOME' XDG_CONFIG_HOME='$SMOKE_HOME/.config' XDG_DATA_HOME='$SMOKE_HOME/.local/share' XDG_RUNTIME_DIR='$SMOKE_HOME/.run'; $cmd"
+}
 
 pass() { echo "  PASS: $1"; PASS=$((PASS + 1)); }
 fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
@@ -42,6 +48,8 @@ trap cleanup EXIT
 echo "== 准备：临时用户 ${SMOKE_USER}(uid ${SMOKE_UID}) + 拉取镜像 =="
 sudo useradd -m -u "$SMOKE_UID" "$SMOKE_USER"
 loginctl enable-linger "$SMOKE_USER" >/dev/null 2>&1 || true
+as_user mkdir -p "$SMOKE_HOME/.config" "$SMOKE_HOME/.local/share" "$SMOKE_HOME/.run"
+as_user chmod 700 "$SMOKE_HOME/.run"
 as_user podman pull "$IMAGE" >/dev/null 2>&1
 sudo podman pull "$IMAGE" >/dev/null 2>&1
 
