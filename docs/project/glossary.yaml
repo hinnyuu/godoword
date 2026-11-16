@@ -1,0 +1,72 @@
+# 术语表：规范词 + 禁用别名。CI 机械扫描禁用别名（本文件自身除外）。
+# 新术语须同 PR 入表。写作前查本表。
+terms:
+  - canonical: 内核
+    banned: [核心模块]
+    definition: kernel，配置/存储/加密/会话/运行时/注册/outbox/计量
+  - canonical: 适配器
+    banned: [适配模块, 驱动模块]
+    definition: 实现 LlmProvider/TtsProvider/AuthProvider 的协议适配 crate
+  - canonical: 教学模块
+    banned: [课程模块, 学习模块]
+    definition: 实现 TeachingModule 的模块，自带路由/前端/工具/进度事件
+  - canonical: 评估模块
+    banned: [评测模块]
+    definition: teach-assess，实现 PlanProvider，教学核心
+  - canonical: 契约
+    banned: [接口约定]
+    definition: kernel-api 中的 trait 与类型
+  - canonical: 组合根
+    banned: [主程序]
+    definition: godoword bin crate，feature 注册各模块
+  - canonical: 模块清单
+    banned: [模块配置]
+    definition: module.yaml
+  - canonical: 绑定
+    banned: [关联配置]
+    definition: bindings 表，用户/模块/能力/role 到 provider+model 的映射
+  - canonical: 预设
+    banned: [预置]
+    definition: 配置文件中的 provider 模板（不含 key）
+  - canonical: 密钥
+    banned: [秘钥]
+    definition: 用户 API key（CS 英文词 key 允许）
+  - canonical: 主密钥
+    banned: [主秘钥, 根密钥]
+    definition: master key，静态加密用户密钥
+  - canonical: 教学方案
+    banned: [学习计划, 教学规划]
+    definition: LearningPlan，structured + teacher_prompt
+  - canonical: 会话
+    banned: [对话会话]
+    definition: session，用户与某教学模块的一次持续交互
+  - canonical: 回合
+    banned: [运行轮]
+    definition: run，一次用户消息触发的完整 LLM 循环（讨论轮次用 round 区分）
+  - canonical: 进度事件
+    banned: [学习事件]
+    definition: ProgressEvent，持久 outbox 中的结构化事件
+  - canonical: 提取报告
+    banned: [进度报告]
+    definition: 评估模块从转录异步提取的教学进度报告
+  - canonical: 转录
+    banned: [对话记录]
+    definition: transcript，持久化的会话消息全文
+  - canonical: 关系图谱
+    banned: [依赖图, 影响图]
+    definition: impact 规则构成的文件→文档牵连图
+  - canonical: 门禁
+    banned: [卡点, 检查器]
+    definition: CI 与提交前的强制检查
+  - canonical: 运行时
+    banned: [执行器]
+    definition: agent runtime，kernel 的回合循环
+  - canonical: 淘汰
+    banned: [驱逐]
+    definition: eviction，上下文超预算时移出历史
+  - canonical: 摘要
+    banned: [总结]
+    definition: summarize，淘汰时 LLM 压缩历史（opt-in）
+  - canonical: 邀请码
+    banned: [注册码]
+    definition: invite code，invite 注册模式凭据

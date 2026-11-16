@@ -1,0 +1,27 @@
+# 协作者指南
+
+> 面向协助开发者与 agent。开发规范与门禁的权威定义在 [docs/project](../../docs/project/)，
+> 本 wiki 提供人类向的入门解释。
+
+## 如何阅读本项目
+
+- 先读 [架构](../../docs/project/architecture.md) 理解三层与依赖纪律。
+- 写作前查 [术语表](../../docs/project/glossary.yaml)，遵守 [规范](../../docs/project/conventions.md)。
+- 提交前过 [门禁自查清单](../../docs/project/gates.md)。
+- 决策背景查 [history](../../history/)（当前事实只在 docs）。
+
+## 如何新增一个教学模块
+
+1. 在 `crates/` 建 crate，依赖 `kernel-api`，实现 `TeachingModule` trait。
+2. 写 `module.yaml`（id/kind/requires/session_params/frontend/impact/cross_module）。
+3. 建 `docs/`（agent 向：接口契约、内部设计）与 `wiki/`（人类向：模块是什么、怎么用）。
+4. 自有迁移放 `migrations/`，表用 `mod_<id>_*` 前缀。
+5. 前端放 `web/modules/<id>/`，领域逻辑进 `web/core`（框架无关）。
+6. 在组合根 `godoword` 以 feature 注册。
+7. 登记 impact 规则（覆盖率门禁强制），过 docs-gate。
+
+模块互不 import，跨模块只经持久事件与契约接口。失败模块可整 crate 移除，不影响整体。
+
+## 开发环境
+
+本机环境事实见仓库根 `devenv.md`（不入仓库）。重构建走 CI，本机 `cargo check` 为主。
