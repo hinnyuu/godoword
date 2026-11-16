@@ -95,10 +95,12 @@ jobs:
     needs: [image]
     steps:
       - uses: actions/checkout@v4
-      - name: 安装 podman
+      - name: 安装 podman 并配置 rootless 环境
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman
+          sudo apt-get install -y podman slirp4netns
+          # ubuntu 24.04 默认限制非特权 userns（AppArmor），放宽以允许 rootless podman（仅 CI 临时环境）
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 2>/dev/null || true
           podman --version
       - name: 容器冒烟测试
         env:
