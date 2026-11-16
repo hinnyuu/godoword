@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 20 条。
+共 21 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -24,3 +24,4 @@
 - [会话协议、运行时与进度提取](2026-11-16-0900-session-protocol-runtime.md) — 2026-11-16T09:00+08:00 · decision · accepted · scope: project, kernel, kernel-api · keywords: session, sse, runtime, disconnect, extraction, history, eviction
 - [kernel-api 契约 trait 签名](2026-11-16-0930-kernel-api-traits.md) — 2026-11-16T09:30+08:00 · decision · accepted · scope: kernel-api · keywords: kernel-api, traits, llmprovider, ttsprovider, authprovider, teachingmodule, planprovider
 - [里程碑与 M0 脚手架](2026-11-16-1000-milestones-m0.md) — 2026-11-16T10:00+08:00 · decision · accepted · scope: project · keywords: milestones, m0, module-yaml, skeleton, scaffolding
+- [M0 人工验收发现与修正](2026-11-16-1930-m0-acceptance-fixes.md) — 2026-11-16T19:30+08:00 · change · accepted · scope: project, godoword · keywords: acceptance, ipv6, dual-stack, bind-mount, podman, runbook, lingering

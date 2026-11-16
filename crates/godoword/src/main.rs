@@ -29,14 +29,27 @@ async fn main() {
         .route("/api/v1/meta", get(meta))
         .fallback_service(ServeDir::new("web/shell/public"));
 
-    let listen = std::env::var("GODOWORD_LISTEN").unwrap_or_else(|_| "0.0.0.0:8080".to_string());
+    // 默认双栈监听 [::]（Linux 默认 IPV6_V6ONLY=0，兼容 IPv4），localhost 的 IPv6/IPv4 皆可达；
+    // IPv6 不可用时回退 IPv4。显式 GODOWORD_LISTEN 优先。
+    let listen = std::env::var("GODOWORD_LISTEN").unwrap_or_else(|_| "[::]:8080".to_string());
     let addr: std::net::SocketAddr = listen
         .parse()
         .expect("GODOWORD_LISTEN 须为合法 socket 地址");
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("绑定端口失败");
-    tracing::info!("godoword M0 监听 {addr}");
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) if addr.is_ipv6() => {
+            let fallback: std::net::SocketAddr = format!("0.0.0.0:{}", addr.port())
+                .parse()
+                .expect("回退地址合法");
+            tracing::warn!("IPv6 绑定失败（{e}），回退 {fallback}");
+            tokio::net::TcpListener::bind(fallback)
+                .await
+                .expect("绑定端口失败")
+        }
+        Err(e) => panic!("绑定端口失败：{e}"),
+    };
+    let local = listener.local_addr().expect("读取本地地址");
+    tracing::info!("godoword M0 监听 {local}");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())

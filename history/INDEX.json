@@ -423,5 +423,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-16-1930-m0-acceptance-fixes.md",
+    "title": "M0 人工验收发现与修正",
+    "date": "2026-11-16T19:30+08:00",
+    "keywords": [
+      "acceptance",
+      "ipv6",
+      "dual-stack",
+      "bind-mount",
+      "podman",
+      "runbook",
+      "lingering"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]

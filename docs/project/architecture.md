@@ -94,7 +94,9 @@ kernel 拥有 users/sessions/messages/providers/bindings/call_log/progress_event
 单容器 all-in-one，镜像无状态，一切持久状态入 `/data`（db/keys/cache）。entrypoint 全幂等
 （建目录 → 主密钥 → 迁移 → 启动），容器误删重建零丢失。podman rootless 优先，兼容 docker。
 自适应降权：应用初始化读 `/data` 属主 + `/proc/self/uid_map`，以属主映射的容器 uid 运行，
-bind 目录文件永远归宿主用户。端口 8080，`/healthz` `/readyz`，优雅退出排空 SSE + WAL checkpoint。
+bind 目录文件永远归宿主用户。默认双栈监听 `[::]:8080`（兼容 IPv4，IPv6 不可用回退 `0.0.0.0`，
+`GODOWORD_LISTEN` 可覆盖）；`/healthz` `/readyz`，优雅退出排空 SSE + WAL checkpoint。
+podman bind mount 源目录须自建（与 docker 不同，podman 不自动创建）。
 生产文档给 quadlet（podman≥4.4）+ 反代 TLS；快速上手给 podman run + docker-compose。
 
 ## 当前状态与 roadmap 差异（M0）
