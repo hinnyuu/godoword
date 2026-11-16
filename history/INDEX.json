@@ -467,5 +467,26 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "1"
+  },
+  {
+    "file": "2026-11-16-2250-quadlet-syntax-runbook.md",
+    "title": "quadlet 语法修正与人工残留 runbook 补全",
+    "date": "2026-11-16T22:50+08:00",
+    "keywords": [
+      "quadlet",
+      "podman",
+      "selinux",
+      "runbook",
+      "dual-stack",
+      "acceptance"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]

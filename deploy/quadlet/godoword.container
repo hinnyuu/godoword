@@ -1,15 +1,15 @@
 [Unit]
 Description=godoword 外语学习服务
-After=network-online.target
 
 [Container]
 Image=ghcr.io/hinnyuu/godoword:latest
-PublishPort=8080:8080
+ContainerName=godoword
+PublishPort=[::]:8080:8080
 Volume=godoword-data:/data:Z
-Environment=GODOWORD_LISTEN=0.0.0.0:8080
 
 [Service]
 Restart=always
+TimeoutStartSec=300
 
 [Install]
 WantedBy=default.target

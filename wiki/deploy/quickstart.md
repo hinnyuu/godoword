@@ -65,6 +65,19 @@ docker run -d --name godoword -p 8080:8080 -v godoword-data:/data ghcr.io/hinnyu
 或使用 [docker-compose](../../docker/docker-compose.yml)：`docker compose up -d`。
 docker 会自动创建缺失的 bind 源目录（与 podman 不同）。
 
+## quadlet（生产推荐，podman ≥ 4.4）
+
+以 systemd 用户单元管理，开机自启。podman ≥ 5.8 用便捷命令：
+
+```bash
+podman quadlet install deploy/quadlet/godoword.container
+systemctl --user start godoword.service
+curl http://127.0.0.1:8080/healthz
+```
+
+移除：`systemctl --user stop godoword.service && podman quadlet rm godoword.container`。
+详见 [deploy/README](../../deploy/README.md)。
+
 ## 说明
 
 - M0 镜像仅含 hello 服务与 `/healthz`，用于验收部署链路。

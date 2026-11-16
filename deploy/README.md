@@ -3,9 +3,23 @@
 > M0 阶段为最小 hello 服务。完整部署形态（自适应降权、卷初始化、主密钥、备份恢复、
 > 反向代理 + TLS）随 M1 落地。快速开始见 [wiki/deploy/quickstart](../wiki/deploy/quickstart.md)。
 
-## quadlet（podman ≥ 4.4，rootless 推荐）
+## quadlet（rootless 推荐）
 
-`quadlet/godoword.container` 为 systemd 用户单元示例：
+`quadlet/godoword.container` 为 systemd 用户单元。语法要点：`PublishPort=[::]:8080:8080`
+双栈绑定（localhost 的 IPv6/IPv4 皆可达）；`Volume=godoword-data:/data:Z`（SELinux _relabel）；
+`TimeoutStartSec=300` 容纳首次镜像拉取；`[Install] WantedBy=default.target` 开机自启。
+
+**podman ≥ 5.8** 用便捷命令安装（自动 reload systemd）：
+
+```bash
+podman quadlet install quadlet/godoword.container
+systemctl --user start godoword.service
+podman quadlet list                 # 查看已安装
+```
+
+更新用 `podman quadlet install --replace quadlet/godoword.container`；移除用 `podman quadlet rm godoword.container`。
+
+**podman 4.4–5.7**（无 quadlet 子命令）手动安装：
 
 ```bash
 mkdir -p ~/.config/containers/systemd
@@ -14,7 +28,8 @@ systemctl --user daemon-reload
 systemctl --user start godoword.service
 ```
 
-注意：quadlet 需 podman ≥ 4.4。开发机 podman 4.3.1 不支持，须在生产主机（较新 podman）使用。
+注意：quadlet 需 podman ≥ 4.4 与 cgroup v2。开发机 podman 4.3.1 不支持，须在生产主机使用。
+语法详见 podman-systemd.unit(5)；调试用 `systemd-analyze --user --generators=true verify godoword.service`。
 
 ## 卷与持久化
 
