@@ -531,5 +531,26 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "1"
+  },
+  {
+    "file": "2026-11-16-2350-m0-accepted.md",
+    "title": "M0 验收通过",
+    "date": "2026-11-16T23:50+08:00",
+    "keywords": [
+      "m0",
+      "acceptance",
+      "docker",
+      "selinux",
+      "quadlet",
+      "milestone"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]
