@@ -70,3 +70,9 @@ terms:
   - canonical: 邀请码
     banned: [注册码]
     definition: invite code，invite 注册模式凭据
+  - canonical: 冒烟测试
+    banned: [烟雾测试]
+    definition: smoke test，确定性 CLI 自动化验收（scripts/acceptance/smoke.sh）
+  - canonical: 人工残留验收
+    banned: [人工冒烟]
+    definition: 自动化覆盖不到、需人类判断或访问权的验收项

@@ -446,5 +446,26 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "1"
+  },
+  {
+    "file": "2026-11-16-2140-acceptance-split.md",
+    "title": "验收拆分：自动化冒烟 + 人工残留",
+    "date": "2026-11-16T21:40+08:00",
+    "keywords": [
+      "acceptance",
+      "smoke-test",
+      "ci",
+      "podman",
+      "automation",
+      "human-residual"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]

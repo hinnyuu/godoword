@@ -25,3 +25,10 @@
 ## 开发环境
 
 本机环境事实见仓库根 `devenv.md`（不入仓库）。重构建走 CI，本机 `cargo check` 为主。
+
+## 验收：自动化冒烟 + 人工残留
+
+确定性 CLI 检查（healthz、uid/卷矩阵、双栈、优雅退出等）由 `scripts/acceptance/smoke.sh`
+在 CI 自动跑并自动清理，无需人工。人工只验收自动化覆盖不到的项：webui 视觉交互、TTS 音质、
+以及需要其他主机的项（SELinux/quadlet/docker）。merge 前置 = 冒烟绿 + 人工对残留 sign-off。
+详见 [conventions](../../docs/project/conventions.md)。

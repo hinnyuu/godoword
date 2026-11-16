@@ -52,11 +52,24 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 ## 提交与验收流程
 
 - 严格 conventional commits；squash merge，PR 标题 conventional。
-- 分支开发 → PR → CI 全绿（含 docs-gate）→ 构建推送 `ghcr.io/hinnyuu/godoword:pr-N`/`sha-xxxx`
-  → **人工 podman 部署验收** → squash merge 进 main → main 构建 `:latest`，release 打 semver。
+- 分支开发 → PR → CI 全绿（含 docs-gate 与**容器冒烟测试**）→ 构建推送
+  `ghcr.io/hinnyuu/godoword:pr-N`/`sha-xxxx` → CI 自动跑冒烟 → **人工对残留清单 sign-off** →
+  squash merge 进 main → main 构建 `:latest`，release 打 semver。
 - main 分支保护：必须 PR + 检查全绿。
-- **每个进入验收的 PR，agent 必须产出验收 runbook**（具体命令、初始化预期、测试清单、通过标准），
-  写入 PR 描述的固定章节。验收对象与合并对象须为同一镜像 digest。
+
+### 验收拆分：自动化冒烟 + 人工残留
+
+判据：**确定性 CLI 反馈 + agent 有访问权 + 可客观断言 → 自动化冒烟**；
+**需人类感官/判断（webui 视觉交互、TTS 音质）或 agent 缺访问权（SELinux/quadlet/docker 主机）→ 人工**。
+
+- **自动化冒烟**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后自动执行（podman）。
+  覆盖 healthz/meta/静态页、双栈 localhost+IPv4、优雅退出、uid/卷矩阵（rootless named/bind、
+  非 1000 uid、rootful bind）、删容器重建、bind 属主断言。资源用唯一前缀隔离 + 专用端口段，
+  `trap EXIT` 自动清理（含临时用户与镜像），**只清自有资源，绝不碰用户容器**。
+- **人工残留验收**：仅自动化覆盖不到的项。agent 须在 PR 列出残留清单（具体命令/步骤/通过标准），
+  人工 sign-off。webui 时代视觉交互、TTS 音质等必须人工。
+- **merge 前置 = 自动化冒烟绿 + 人工对残留 sign-off**。人工介入仍强制，但聚焦于真正需要人的部分。
+- 验收对象与合并对象须为同一镜像 digest。
 
 ## agent 提交前自查
 

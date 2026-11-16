@@ -24,8 +24,11 @@
 9. **依赖许可证**：cargo-deny 白名单（MIT/Apache-2.0/BSD/ISC 等），其余个案审。
 10. **Rust**：fmt / clippy / check / test。**前端**：lint / build（M1 起）。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
+12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
+    （healthz/meta/静态/双栈/优雅退出/uid 卷矩阵/删容器重建/bind 属主），资源隔离 + 自动清理。
 
-本地预检：`python3 scripts/docs-gate/gate.py --local`（检查 2–7，无需网络）。
+本地预检：`python3 scripts/docs-gate/gate.py --local`（检查 2–7，无需网络）；
+容器冒烟可本地跑 `bash scripts/acceptance/smoke.sh <镜像>`（需 podman，自动清理）。
 
 ## agent 提交前自查清单
 
