@@ -488,5 +488,27 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "1"
+  },
+  {
+    "file": "2026-11-16-2320-quadlet-dualstack-fix.md",
+    "title": "quadlet 双栈发布回归修正（两条 PublishPort）",
+    "date": "2026-11-16T23:20+08:00",
+    "keywords": [
+      "quadlet",
+      "ipv6",
+      "dual-stack",
+      "publishport",
+      "bindv6only",
+      "fedora",
+      "regression"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "1"
   }
 ]

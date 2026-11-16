@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 23 条。
+共 24 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -27,3 +27,4 @@
 - [M0 人工验收发现与修正](2026-11-16-1930-m0-acceptance-fixes.md) — 2026-11-16T19:30+08:00 · change · accepted · scope: project, godoword · keywords: acceptance, ipv6, dual-stack, bind-mount, podman, runbook, lingering
 - [验收拆分：自动化冒烟 + 人工残留](2026-11-16-2140-acceptance-split.md) — 2026-11-16T21:40+08:00 · decision · accepted · scope: project · keywords: acceptance, smoke-test, ci, podman, automation, human-residual
 - [quadlet 语法修正与人工残留 runbook 补全](2026-11-16-2250-quadlet-syntax-runbook.md) — 2026-11-16T22:50+08:00 · change · accepted · scope: project · keywords: quadlet, podman, selinux, runbook, dual-stack, acceptance
+- [quadlet 双栈发布回归修正（两条 PublishPort）](2026-11-16-2320-quadlet-dualstack-fix.md) — 2026-11-16T23:20+08:00 · change · accepted · scope: project · keywords: quadlet, ipv6, dual-stack, publishport, bindv6only, fedora, regression
