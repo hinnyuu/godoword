@@ -12,7 +12,8 @@ use kernel_api::{
     ToolResult, TtsProvider, UserId, SPEAK_TOOL_NAME,
 };
 use serde_json::json;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -20,15 +21,17 @@ use crate::persona::DEFAULT_TEACHER_PERSONA;
 use crate::seam::{AudioCache, BindingResolver, CachedAudio, SessionRepo};
 use crate::speak::prepare_speak;
 
-/// 单活跃回合锁守卫（stream 被丢弃时自动释放，支持断开即取消）。
+/// 单活跃回合锁守卫（stream 被丢弃时自动释放活跃锁与取消标志，支持断开即取消）。
 struct ActiveGuard {
     active: Arc<Mutex<HashSet<SessionId>>>,
+    cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
     session: SessionId,
 }
 
 impl Drop for ActiveGuard {
     fn drop(&mut self) {
         self.active.lock().unwrap().remove(&self.session);
+        self.cancels.lock().unwrap().remove(&self.session);
     }
 }
 
@@ -83,6 +86,7 @@ pub struct Runtime {
     tool_cap: u32,
     turn_timeout: Duration,
     active: Arc<Mutex<HashSet<SessionId>>>,
+    cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
 }
 
 impl Runtime {
@@ -103,6 +107,7 @@ impl Runtime {
             tool_cap: 8,
             turn_timeout: Duration::from_secs(120),
             active: Arc::new(Mutex::new(HashSet::new())),
+            cancels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -122,13 +127,20 @@ impl Runtime {
         self.audio.clone()
     }
 
+    /// 显式取消会话活跃回合（置取消标志，循环检查后中止）。
+    pub fn cancel(&self, session: SessionId) {
+        if let Some(flag) = self.cancels.lock().unwrap().get(&session) {
+            flag.store(true, Ordering::Relaxed);
+        }
+    }
+
     /// 跑一个回合，返回 SessionEvent 流（SSE）。断开即取消（drop 流中止上游，释放活跃锁）。
     pub fn run_turn(
         &self,
         user: UserId,
         session: SessionId,
         user_text: String,
-    ) -> impl Stream<Item = SessionEvent> + Send {
+    ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let llm = self.llm.clone();
         let tts = self.tts.clone();
         let bindings = self.bindings.clone();
@@ -137,6 +149,7 @@ impl Runtime {
         let tool_cap = self.tool_cap;
         let turn_timeout = self.turn_timeout;
         let active = self.active.clone();
+        let cancels = self.cancels.clone();
 
         async_stream::stream! {
             let run_id = RunId::new();
@@ -150,7 +163,9 @@ impl Runtime {
                 yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
                 return;
             }
-            let _guard = ActiveGuard { active: active.clone(), session };
+            let cancel_flag = Arc::new(AtomicBool::new(false));
+            cancels.lock().unwrap().insert(session, cancel_flag.clone());
+            let _guard = ActiveGuard { active: active.clone(), cancels: cancels.clone(), session };
             let deadline = Instant::now() + turn_timeout;
 
             let binding = match bindings.resolve(user, None, Capability::Llm, Role::Default).await {
@@ -185,6 +200,9 @@ impl Runtime {
             let mut iterations: u32 = 0;
 
             let finish = loop {
+                if cancel_flag.load(Ordering::Relaxed) {
+                    break FinishReason::Cancelled;
+                }
                 if Instant::now() > deadline {
                     yield SessionEvent::Error {
                         code: "timeout".to_string(),
@@ -226,6 +244,10 @@ impl Runtime {
                 let mut pending: Vec<ToolCall> = Vec::new();
                 let mut chunk_finish = FinishReason::Stop;
                 while let Some(item) = stream.next().await {
+                    if cancel_flag.load(Ordering::Relaxed) {
+                        chunk_finish = FinishReason::Cancelled;
+                        break;
+                    }
                     let chunk = match item {
                         Ok(c) => c,
                         Err(e) => {
