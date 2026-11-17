@@ -42,9 +42,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: gitleaks 密钥扫描
+      - name: gitleaks 密钥扫描（校验和验证后执行）
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_checksums.txt -o /tmp/gitleaks_checksums.txt
+          grep 'gitleaks_8.21.2_linux_x64.tar.gz' /tmp/gitleaks_checksums.txt | (cd /tmp && sha256sum -c -)
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           /tmp/gitleaks detect --source . --redact --no-banner --exit-code 1
 
@@ -81,10 +83,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: 双后端存储契约测试（SQLite + PostgreSQL，纪律➀）
+      - name: 双后端存储测试（workspace 级，SQLite + PostgreSQL，纪律➀）
         env:
           TEST_PG_URL: postgres://postgres:postgres@localhost:5432/godoword_test
-        run: cargo test -p kernel-api --test storage
+        run: cargo test --workspace
 
   image:
     runs-on: ubuntu-latest

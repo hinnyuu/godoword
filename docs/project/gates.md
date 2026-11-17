@@ -12,7 +12,8 @@
 ## CI 检查清单
 
 1. **commitlint**：PR 标题与 commits 符合 conventional（type/scope 英文，subject 中文）。
-2. **覆盖率**：`crates/*/src/` 每个文件须命中本 crate impact 规则；
+2. **覆盖率**：`crates/*/src/` 与 `crates/*/tests/` 每个文件须命中本 crate impact 规则
+   （tests/ 纳入——serde 黄金测试等是契约锚点，改动触发文档要求）；
    `scripts/`、`.github/workflows/`、`docker/`、`deploy/`、`web/` 每个文件须命中项目规则。
    新文件未登记 → 红（防图谱腐烂）。Cargo.toml/module.yaml/docs 自身豁免覆盖率。
 3. **漏改门禁**：改动文件命中的 docs/wiki 须在同 PR 更新，或显式豁免。
@@ -21,15 +22,19 @@
    **history 豁免**——历史正文不可变，写入时用词合规由当时门禁保证）。
 6. **中文门禁**：解释型 markdown 须含 CJK 字符（纯英文文档 → 红）。
 7. **禁入路径**：`devenv.md`、`*.key`、`.env*`（除 .env.example）等不得出现在提交。
-8. **gitleaks**：密钥扫描；豁免收窄为占位符与 CI 测试凭据 regex，**保留 docs/wiki/history 目录扫描**。
+8. **gitleaks**：密钥扫描；**下载二进制经 sha256 校验和验证后执行**；豁免收窄为占位符与
+   CI 测试凭据 regex，保留 docs/wiki/history 目录扫描。
 9. **依赖许可证**：cargo-deny 白名单（MIT/Apache-2.0/BSD/ISC 等），其余个案审。
 10. **Rust**：fmt / clippy / check / test。**前端**：lint / build（M1 起）。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
 12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
     （healthz/meta/静态/双栈/优雅退出/uid 卷矩阵/删容器重建/bind 属主），资源隔离 + 自动清理。
-13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 真测双后端
-    （迁移幂等 + uuid/chrono/json/bool round-trip + CRUD），**main 分支保护 required check**，
-    方言漂移双向捕获。release 亦对 main 镜像重跑冒烟（R4 same-tree）。
+13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 跑 **workspace 级**
+    `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；
+    **main 分支保护 required check**，方言漂移双向捕获。含共享 SQL 的 crate 须走 `backends()` 夹具。
+    release 亦对 main 镜像重跑冒烟（R4 same-tree）。
+14. **status 新鲜度**：改 `src/` 或 `tests/` 须同 PR 更新 `docs/project/status.md`（live 交接），
+    可 docs-nochange 豁免。见 [conventions](conventions.md#agent-交接与入门)。
 
 本地预检：`python3 scripts/docs-gate/gate.py --local`（检查 2–7，无需网络）；
 容器冒烟可本地跑 `bash scripts/acceptance/smoke.sh <镜像>`（需 podman，自动清理）；

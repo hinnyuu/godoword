@@ -17,6 +17,8 @@ async fn backends() -> Vec<Store> {
     if let Ok(url) = std::env::var("TEST_PG_URL") {
         let pg = PgPool::connect(&url).await.unwrap();
         v.push(Store::Pg(pg));
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过——仅测 SQLite（CI storage job 必设此变量跑双后端）");
     }
     v
 }

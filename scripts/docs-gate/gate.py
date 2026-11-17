@@ -58,7 +58,7 @@ def project_rules():
 
 
 def md_files():
-    files = [Path("README.md")] if (ROOT / "README.md").exists() else []
+    files = [Path(p) for p in ("README.md", "AGENTS.md") if (ROOT / p).exists()]
     for d in MD_DIRS:
         files += sorted((ROOT / d).rglob("*.md"))
     return files
@@ -66,12 +66,13 @@ def md_files():
 
 def check_coverage(files, mods, proj, fails):
     for crate, rules in mods.items():
-        prefix = f"crates/{crate}/src/"
-        for f in files:
-            if f.startswith(prefix):
-                rel = f[len(f"crates/{crate}/"):]
-                if not any(fnmatch.fnmatch(rel, r["match"]) for r in rules):
-                    fails.append(f"[覆盖率] {f} 未命中 {crate}/module.yaml 任何 impact 规则")
+        for sub in ("src/", "tests/"):
+            prefix = f"crates/{crate}/{sub}"
+            for f in files:
+                if f.startswith(prefix):
+                    rel = f[len(f"crates/{crate}/"):]
+                    if not any(fnmatch.fnmatch(rel, r["match"]) for r in rules):
+                        fails.append(f"[覆盖率] {f} 未命中 {crate}/module.yaml 任何 impact 规则")
     for f in files:
         if f.startswith(PROJECT_PREFIXES):
             if not any(fnmatch.fnmatch(f, r["match"]) for r in proj):
@@ -94,7 +95,7 @@ def check_omission(chg, mods, proj, waiver, fails):
         matched = []
         if f.startswith(PROJECT_PREFIXES):
             matched += [r for r in proj if fnmatch.fnmatch(f, r["match"])]
-        m = re.match(r"crates/([^/]+)/src/", f)
+        m = re.match(r"crates/([^/]+)/(src|tests)/", f)
         if m and m.group(1) in mods:
             crate = m.group(1)
             rel = f[len(f"crates/{crate}/"):]
@@ -183,6 +184,16 @@ def check_forbidden(files, fails):
             fails.append(f"[禁入] {f} 严禁提交")
 
 
+def check_status(chg, waiver, fails):
+    # live 交接新鲜度：代码（src/tests）改动须同 PR 更新 status.md
+    work = any(re.match(r"crates/[^/]+/(src|tests)/", f) for f in chg)
+    if work and "docs/project/status.md" not in set(chg):
+        if waiver:
+            print("[status·豁免] 代码改动但 status.md 未更新（docs-nochange）")
+        else:
+            fails.append("[status] 代码改动须同 PR 更新 docs/project/status.md（live 交接新鲜度）")
+
+
 def build_index():
     entries = []
     for f in sorted((ROOT / "history").glob("20*.md")):
@@ -237,12 +248,14 @@ def main():
     check_chinese(fails)
     check_forbidden(files, fails)
     if args.local or args.ci:
-        check_omission(changed(args.base), mods, proj, waiver, fails)
+        chg = changed(args.base)
+        check_omission(chg, mods, proj, waiver, fails)
+        check_status(chg, waiver, fails)
     if fails:
         print("\n".join(fails))
         print(f"\n门禁失败：{len(fails)} 项")
         return 1
-    print("门禁通过（覆盖率/漏改/链接/术语/中文/禁入路径）")
+    print("门禁通过（覆盖率/漏改/链接/术语/中文/禁入路径/status 新鲜度）")
     return 0
 
 

@@ -96,6 +96,11 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 残余真方言点收口 kernel helper。共享代码用运行时 `query_as` + 薄分发宏；`query!` 仅驱动专属。
 **CI 真测双后端**（纪律➀，storage required check）兜底：违反子集 → 某一后端测试红，双向捕获。
 
+**双后端夹具约定**：凡含共享 SQL 的 crate，其存储测试须走 `backends()` 模式
+（参照 `crates/kernel-api/tests/storage.rs`：SQLite 恒跑 + `TEST_PG_URL` 驱动 PG，未设时显式 skip 提示）。
+CI `storage` job 跑 **workspace 级** `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试
+自动获双后端——无需维护 crate 清单。rust job 的 workspace 测试未设 `TEST_PG_URL`（验代码健康，PG 侧 skip）。
+
 ## 契约级变更全量审查（制度化）
 
 凡 **kernel-api 契约级变更**（trait 签名、Store 形态、协议类型、耦合版本），除机械门禁外
@@ -105,3 +110,16 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 - agent 全量读所有 docs/wiki，核对每个论断符合新现实，搜剿旧表述残留（如废弃契约名、旧规则），
   交叉核对文档间一致性，修不一致。非抽查，是全量。
 - 审查结论记一条 history。机械门禁防漏改，全量审查防**语义漂移**——两者互补。
+
+## agent 交接与入门
+
+旋转 agent 模型的关键基础设施（详见根 [AGENTS.md](../../AGENTS.md)）：
+
+- **AGENTS.md**（根，committed）：稳定入门地图 + 阅读顺序 + 接续协议。短小，指向文档不复述。
+- **docs/project/status.md**（committed）：live 交接状态——当前里程碑、done/in-flight/blocked、
+  下一动作、待拍板决策、近期上下文。随仓库走（跨机器交接），与 devenv（环境本地、gitignored）相反。
+- **持续维护**：每完成有意义步骤更新 status；收工前确认反映现实。上下文可能突然耗尽，
+  持续维护比临终遗言健壮。
+- **新鲜度门禁**：改 `src/` 或 `tests/` 须同 PR 更新 status.md（gate 强制，可 docs-nochange 豁免）。
+- 新 agent 接续：先读 status → 查 git log/开放 PR/history INDEX 交叉验证 → 待拍板决策交用户，
+  已定决策不重议。
