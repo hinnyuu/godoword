@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T22:06+08:00
-- 当前里程碑: **M1b 实现完成（分支 feat/m1b-storage-substrate，待 CI 绿 + SELinux 人工残留 sign-off + merge）**
+- verified: 2026-11-17T22:30+08:00
+- 当前里程碑: **M1b CI 全绿（PR #7），待 SELinux 人工残留 sign-off + merge**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ 交接（8b5c1a4）→ **M1b（待合并）**
 
 ## done
@@ -39,7 +39,8 @@
   + release 用户级 REST 把守 + 冒烟 uid/卷矩阵扩展）。本地真 key 全链路实证：dev 种入加密 → DB 绑定解析解密
   → 回合 finish=stop 零 error + speak 出声 + 词级时间戳 + 音频回放 + 转录 + models 端点 + provider/binding CRUD。
   phase 7 文档/history 已同步（history 2206 + kernel/docs/storage.md + architecture/roadmap/wiki/deploy）。
-  workspace fmt/clippy/test 双后端全绿。**待 CI 7 checks 绿（含 storage 双后端 + 完整 uid/卷冒烟）+ SELinux 人工残留 sign-off + merge**。
+  workspace fmt/clippy/test 双后端全绿。**CI 7 checks 全绿（PR #7，含 storage 双后端 + 完整 uid/卷冒烟 PASS=29 FAIL=0）**。
+  待 SELinux 人工残留 sign-off（Fedora 主机）→ squash merge → main release 重测冒烟。
 
 ## blocked / 待拍板决策
 
