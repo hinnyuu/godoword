@@ -1,0 +1,178 @@
+data: {"model":"qwen4.0-max-preview","id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","created":1794907875,"object":"chat.completion.chunk","usage":null,"choices":[{"logprobs":null,"index":0,"delta":{"role":"assistant","content":"","reasoning_content":""},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":"The","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" user is","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" asking for the","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" pronunciation of","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" \"こんにちは\"","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" and a slow T","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":"TS reading. I'll call","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" speak with a","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" rate of","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" 0.5 or","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"reasoning_content":" 0.6","content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"「こんにちは」是","reasoning_content":"."},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"日语中最","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"常用的白天","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"问候语，相当于","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"中文","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"的\"你好\"","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"。\n\n","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"**发音要点：**","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"\n- 假","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"名拆解","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"：こ・ん","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"・に","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"・ち・は","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"\n- 罗马音：**","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"kon-ni-ch","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"i-wa**","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"（注意","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"：最后的","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"「は」","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"在这里作","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"助词残留","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"，读作 **","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"wa**","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"，而不是 ha！","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"）\n- 音节","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"节奏","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"：ko","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"-n-ni-ch","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"i-wa，","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"共 5 拍","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"，每","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"拍时长","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"均匀\n- 语调","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"：一般","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"读","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"作","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"平板","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"或","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"中","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"高","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"型，「ん","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"」之后","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"音","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"高微微","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"上升，整体平稳，不要","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"像中文","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"那样有","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"大幅","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"声","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"调变化","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"\n\n**近似","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"中文","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"谐音**","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"：","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"阔","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"恩","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"尼","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"奇哇（仅作参考","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"，日语","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"的「ん」","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"是鼻音，","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"不发出","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"完整的","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"\"恩","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"\"音节","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"）\n\n下面","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"我用慢速为您","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"content":"朗读：","reasoning_content":""},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_ca646ff5d83149bf8b48d7eb","type":"function","index":0,"function":{"name":"speak","arguments":""}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"type":"function","index":0,"function":{"arguments":"{\"text\": \"こんにちは"}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"type":"function","index":0,"function":{"arguments":"\""}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"type":"function","index":0,"function":{"arguments":", \"rate\": 0"}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"type":"function","index":0,"function":{"arguments":".5"}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{"tool_calls":[{"type":"function","index":0,"function":{"arguments":"}"}}]},"logprobs":null,"finish_reason":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls","logprobs":null}],"usage":null}
+
+data: {"id":"chatcmpl-ae5d1a2d-03a9-454f-8717-5e58de0457f5","object":"chat.completion.chunk","created":1794907875,"model":"qwen4.0-max-preview","choices":[],"usage":{"prompt_tokens":234,"total_tokens":486,"completion_tokens":252,"prompt_tokens_details":{"cached_tokens":0,"text_tokens":234},"completion_tokens_details":{"reasoning_tokens":36}}}
+
+data: [DONE]
+

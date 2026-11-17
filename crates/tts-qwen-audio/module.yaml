@@ -1,0 +1,17 @@
+id: tts-qwen-audio
+name: qwen-audio TTS 适配器
+version: 0.0.0
+kind: adapter
+description: 实现 TtsProvider，DashScope 原生 SpeechSynthesizer 流式（PCM/词级时间戳归一化）
+provides:
+  capability: tts
+  adapter_id: tts-qwen-audio
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
+cross_module:
+  - kernel-api

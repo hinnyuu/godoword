@@ -677,5 +677,57 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-1828-m1a-vertical-slice.md",
+    "title": "M1a 垂直切片实现 + speak 契约落地 + 全量语义审查",
+    "date": "2026-11-17T18:28+08:00",
+    "keywords": [
+      "m1a",
+      "vertical-slice",
+      "speak",
+      "contract",
+      "adapter",
+      "sse",
+      "audit",
+      "dev-bypass",
+      "tool-calls"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "llm-openai",
+      "tts-qwen-audio",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-17-1844-cargo-deny-m1a-deps.md",
+    "title": "M1a 依赖合规：CDLA-Permissive-2.0 白名单 + chrono unmaintained 风险接受",
+    "date": "2026-11-17T18:44+08:00",
+    "keywords": [
+      "cargo-deny",
+      "chrono",
+      "rustsec",
+      "license",
+      "webpki-roots",
+      "cdla",
+      "risk-acceptance",
+      "m1a"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

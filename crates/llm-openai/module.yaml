@@ -1,0 +1,17 @@
+id: llm-openai
+name: OpenAI 兼容 LLM 适配器
+version: 0.0.0
+kind: adapter
+description: 实现 LlmProvider，OpenAI 兼容 chat/completions 流式（reasoning_content/tool_calls 归一化）
+provides:
+  capability: llm
+  adapter_id: llm-openai
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
+cross_module:
+  - kernel-api

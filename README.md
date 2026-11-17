@@ -4,7 +4,7 @@
 LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-one，podman 优先、兼容 docker。
 
 - 许可证：AGPL-3.0（见 [LICENSE](LICENSE)）
-- 状态：M0 完成，M1 前置契约修订中（详见 [roadmap](docs/project/roadmap.md)）
+- 状态：M1a 垂直切片完成（适配器 + 回合循环 + SSE 出声），M1b–M1d 进行中（详见 [roadmap](docs/project/roadmap.md)）
 
 ## 文档入口
 
@@ -25,5 +25,5 @@ LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-
 
 ## 快速开始
 
-M0 阶段仅提供最小 hello 服务，部署方式见 [wiki/deploy/quickstart](wiki/deploy/quickstart.md)。
-完整教学功能随里程碑 M1–M3 落地。
+M1a 已能驱动 LLM 教师对话与语音合成（开发态切片），部署方式见 [wiki/deploy/quickstart](wiki/deploy/quickstart.md)。
+完整教学功能与配置界面随里程碑 M1b–M3 落地。

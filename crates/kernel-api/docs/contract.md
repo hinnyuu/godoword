@@ -30,7 +30,11 @@
   走 `backends()` 夹具（SQLite 恒跑 + PG 由 `TEST_PG_URL` 驱动，未设时显式 skip）。
 - `SessionEvent` 为后端→前端 SSE 协议（tag=event, content=data），回合内全序。
 - `ProgressEvent` 为持久 outbox 信封；SessionEvicted 的 span 存于 detail。
-- `speak` 工具规格由 kernel 定义并经 TtsProvider 执行，教学模块不实现 speak。
+- `speak` 工具规格由 **kernel-api 定义**（`SPEAK_TOOL_NAME` / `SpeakArgs` / `speak_tool_spec()`，
+  黄金测试锚定 spec↔SpeakArgs），kernel 运行时反序列化 arguments→SpeakArgs→合并绑定→TtsRequest
+  经 TtsProvider 执行，教学模块不实现 speak。规格落契约层使演进触发全量审查防漂移（决策 A）。
+  LLM 可控子集为 text/voice/rate/pitch/instruction/language_hints；model/format/sample_rate/word_timestamps
+  由 kernel 从绑定/配置填，不暴露给 LLM。
 
 ## 有意耦合声明（R3）
 
@@ -40,5 +44,6 @@ kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）**与 
 
 ## 当前状态与 roadmap 差异
 
-契约为 M0 定义，尚无实现 crate。kernel/适配器/教学模块 M1+ 落地。
+契约 M0 定义；M1a 新增 speak 工具契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）。
+kernel（回合循环）+ llm-openai + tts-qwen-audio 适配器 M1a 已实现；auth-local M1c、教学模块 M2+。
 token 估算当前为字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。

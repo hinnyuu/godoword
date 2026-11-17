@@ -23,7 +23,7 @@
 7. 登记 impact 规则（覆盖率门禁强制），过 docs-gate。
 
 模块互不 import，跨模块只经持久事件与契约接口。失败模块可整 crate 移除，不影响整体。
-改动 kernel-api 契约（trait/Store/协议类型）须走**契约级全量 docs+wiki 语义审查**（见 conventions）。
+改动 kernel-api 契约（trait/Store/协议类型/speak 规格）须走**契约级全量 docs+wiki 语义审查**（见 conventions）。
 
 ## 开发环境
 

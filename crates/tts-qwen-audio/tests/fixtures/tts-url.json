@@ -1,0 +1,18 @@
+{
+  "output": {
+    "audio": {
+      "data": "",
+      "id": "audio_eb4cdfb5-5abc-4553-981a-74bab5a34e6d",
+      "expires_at": 1794994382,
+      "url": "http://example.invalid/redacted-audio.pcm"
+    },
+    "finish_reason": "stop"
+  },
+  "usage": {
+    "input_tokens": 2,
+    "output_tokens": 11,
+    "total_tokens": 13,
+    "characters": 5
+  },
+  "request_id": "eb4cdfb5-5abc-4553-981a-74bab5a34e6d"
+}

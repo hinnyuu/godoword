@@ -1,14 +1,14 @@
 # 部署快速开始
 
-> 面向部署者。M0 阶段为最小 hello 服务。完整部署形态（自适应降权、卷初始化、quadlet、
-> 反代 TLS、备份）随 M1 落地，见 [架构](../../docs/project/architecture.md)。
+> 面向部署者。M1a 镜像含会话 REST/SSE（开发态切片，回合需 dev-bypass 开发模式）。
+> 完整部署形态（自适应降权、卷初始化、主密钥、迁移）随 M1b 落地，见 [架构](../../docs/project/architecture.md)。
 
 ## 前置
 
 - podman（推荐，rootless 即可）或 docker
 - 一个持久卷：named volume（推荐，省心）或 bind mount 目录
 
-## podman 运行（M0 hello，named volume）
+## podman 运行（named volume）
 
 ```bash
 podman run -d --name godoword \
@@ -81,7 +81,7 @@ quadlet 双栈发布用单条不带 IP 的 `PublishPort=8080:8080`（pasta 默�
 
 ## 说明
 
-- M0 镜像仅含 hello 服务与 `/healthz`，用于验收部署链路。
-- 数据持久化、主密钥自动生成、数据库迁移等完整初始化逻辑 M1 落地。
-- 生产部署（quadlet systemd 单元、反向代理 + TLS、备份恢复）文档 M1 补全。
+- M1a 镜像含健康检查、会话 REST/SSE 与静态占位页；回合对话需 dev-bypass 开发模式（release 镜像不含）。
+- 数据持久化、主密钥自动生成、数据库迁移、自适应降权等完整初始化逻辑 M1b 落地。
+- 生产部署（quadlet systemd 单元、反向代理 + TLS、备份恢复）文档 M1b 补全。
 - SELinux 主机 bind mount 需 `:Z` 标签；quadlet 需 podman≥4.4。
