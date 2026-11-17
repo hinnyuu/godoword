@@ -22,6 +22,13 @@ allow = [
 [advisories]
 version = 2
 yanked = "warn"
+ignore = [
+  # RUSTSEC-2026-0459（CVE-2026-119375）：SQLite <3.54 页缓存内存泄露，本地向量，
+  # 需打开不可信方 crafted 的 DB+wal 文件对。godoword 自建自有 DB（/data），从不打开
+  # 外部 DB 文件，攻击前提不成立。sqlx 0.8/0.9 均 pin libsqlite3-sys <0.38（无 patched 0.39）；
+  # 上游支持后升级并移除此忽略（见 roadmap 远期）。风险接受决策见 history。
+  "RUSTSEC-2026-0459",
+]
 
 [bans]
 multiple-versions = "warn"

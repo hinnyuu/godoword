@@ -76,9 +76,22 @@ TTS 缓存 key = hash(model+voice+text+params)，缓存音频 + 时间戳，回�
 ## 数据与存储
 
 默认 SQLite（WAL，`/data/db`），支持外接 PostgreSQL；MySQL 缓议（见 roadmap）。
+存储契约为**双具体驱动 enum** `Store { Sqlite(SqlitePool), Pg(PgPool) }`（sqlx Any 已证伪：
+类型集封闭，不支持 uuid/chrono/json，见 history）。模块经 `ModuleContext.store()` 拿 `Store`，
+用薄分发宏（`execute_both!` / `fetch_one_both!` / `fetch_optional_both!` / `fetch_all_both!`）
++ 运行时 `query_as` 跑**双兼容 SQL 子集**；编译期 `query!` 宏仅用于驱动专属代码（单宏 pin 死单驱动）。
+表前缀约定 `mod_<id>_*`。薄 enum 分发，不隐藏方言。
+
+**双兼容 SQL 子集约定**（纪律➁，把方言点设计掉）：uuid 主键（灭自增方言）、应用侧时间戳
+（灭 DB 默认值方言）、JSON 整取回 Rust 不在 SQL 过滤（灭 `->>`/`json_extract` 分裂）；
+单一 PG 风格类型名迁移集靠 SQLite 类型亲和性双后端通用。残余真方言点收口 kernel helper。
+
+**CI 真测双后端**（纪律➀）：`storage` job 以 postgres service + SQLite 对两后端跑迁移幂等 +
+uuid/chrono/json/bool round-trip + CRUD，列为 main 分支保护 required check；模块写 PG 专属 SQL
+则 SQLite 测试红，反之亦然，方言漂移双向捕获，杜绝静默上线。
+
 kernel 拥有 users/sessions/messages/providers/bindings/call_log/progress_events/tokens/invites 等表；
 教学模块拥有 `mod_<id>_*` 私有表 + 自有迁移。迁移顺序 kernel → 模块注册序，迁移前自动备份。
-模块经 `ModuleContext.store()` 拿 scoped sqlx pool（实用派，不造存储抽象）。
 
 ## 安全
 

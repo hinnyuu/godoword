@@ -10,8 +10,8 @@ use crate::types::{
     ModuleManifest, SessionId, SessionParams, ToolCall, ToolResult, ToolSpec, UserId,
 };
 
-/// 模块 scoped 存储句柄：sqlx Any pool + 表前缀约定 mod_<id>_*（实用派，不造存储抽象）。
-pub type ModuleStore = sqlx::Pool<sqlx::Any>;
+/// 模块 scoped 存储句柄：双具体驱动 enum（见 [`crate::store`]）+ 表前缀约定 mod_<id>_*。
+pub type ModuleStore = crate::store::Store;
 
 /// 模块受控访问 kernel 服务，由 kernel 实现。模块永不直接接触上游 HTTP 与 key。
 #[async_trait]
