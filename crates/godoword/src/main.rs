@@ -1,39 +1,28 @@
 //! godoword 组合根。M1b：幂等 entrypoint（配置→自适应降权→主密钥→迁移→启动）+ 存储基底 +
-//! DB 绑定解析 + 会话 REST/SSE + 配置只读。dev-bypass feature 启用固定 dev user（DEV-DEBT T1，release 永不启用）；
-//! 认证 M1c。
+//! DB 绑定解析 + 会话 REST/SSE + provider/binding CRUD + 配置只读 + OpenAPI。
+//! dev-bypass feature 启用固定 dev user + env 种入 DB（DEV-DEBT T1，release 永不启用）；认证 M1c。
 
 #[cfg(feature = "dev-bypass")]
 mod dev;
 mod init;
+mod openapi;
 mod rest;
+mod settings;
 
 use axum::{
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 #[cfg(feature = "dev-bypass")]
 use kernel::DbBindingResolver;
 #[cfg(feature = "dev-bypass")]
 use kernel::Runtime;
 use kernel::{run_migrations, Config, MasterKey, MemAudio, MemSessions, KERNEL_MIGRATIONS};
-use serde_json::{json, Value};
+use kernel_api::{LlmProvider, TtsProvider};
 use std::sync::Arc;
 use tower_http::services::ServeDir;
 
 use rest::AppState;
-
-async fn healthz() -> Json<Value> {
-    Json(json!({ "status": "ok" }))
-}
-
-async fn meta() -> Json<Value> {
-    Json(json!({
-        "name": "godoword",
-        "version": env!("CARGO_PKG_VERSION"),
-        "milestone": "M1b",
-        "dev_bypass": cfg!(feature = "dev-bypass"),
-    }))
-}
 
 #[tokio::main]
 async fn main() {
@@ -43,7 +32,7 @@ async fn main() {
     let cfg = Config::load().expect("配置加载失败");
     let listen = cfg.listen.clone();
     init::init_data_dir(&cfg.data_dir).expect("/data 初始化失败");
-    let master = MasterKey::load(&cfg.data_dir).expect("主密钥加载失败");
+    let master = Arc::new(MasterKey::load(&cfg.data_dir).expect("主密钥加载失败"));
     let store = Arc::new(match &cfg.database_url {
         Some(url) => kernel::open_pg(url).await.expect("PostgreSQL 连接失败"),
         None => kernel::open_sqlite(&cfg.sqlite_path())
@@ -59,24 +48,34 @@ async fn main() {
     let audio = Arc::new(MemAudio::new());
 
     #[cfg(feature = "dev-bypass")]
-    let (runtime, user) = {
-        let resolver = Arc::new(DbBindingResolver::new(store.clone(), Arc::new(master)));
+    let (runtime, user, llm, tts) = {
+        let llm = Arc::new(llm_openai::OpenAiProvider::new());
+        let tts = Arc::new(tts_qwen_audio::QwenTtsProvider::new());
+        let resolver = Arc::new(DbBindingResolver::new(store.clone(), master.clone()));
         let rt = Runtime::new(
-            Arc::new(llm_openai::OpenAiProvider::new()),
-            Arc::new(tts_qwen_audio::QwenTtsProvider::new()),
+            llm.clone(),
+            tts.clone(),
             resolver,
             sessions.clone(),
             audio.clone(),
         );
+        let user = dev::dev_user();
+        dev::seed(&store, &master, user).await;
         tracing::warn!("dev-bypass 启用：固定 dev user + DB 绑定解析（仅开发测试，release 不含）");
-        (Some(Arc::new(rt)), dev::dev_user())
+        (
+            Some(Arc::new(rt)),
+            user,
+            Some(llm as Arc<dyn LlmProvider>),
+            Some(tts as Arc<dyn TtsProvider>),
+        )
     };
     #[cfg(not(feature = "dev-bypass"))]
-    let (runtime, user) = {
-        // release M1b 已生成主密钥文件；用户级 REST 待 M1c 认证开放，主密钥值此时不入状态。
-        let _ = master;
-        (None, kernel_api::UserId(uuid::Uuid::nil()))
-    };
+    let (runtime, user, llm, tts) = (
+        None,
+        kernel_api::UserId(uuid::Uuid::nil()),
+        None::<Arc<dyn LlmProvider>>,
+        None::<Arc<dyn TtsProvider>>,
+    );
 
     let state = Arc::new(AppState {
         sessions,
@@ -85,13 +84,17 @@ async fn main() {
         user,
         store,
         cfg,
+        master,
+        llm,
+        tts,
     });
 
     let app = Router::new()
-        .route("/healthz", get(healthz))
+        .route("/healthz", get(rest::healthz))
         .route("/readyz", get(rest::readyz))
-        .route("/api/v1/meta", get(meta))
+        .route("/api/v1/meta", get(rest::meta))
         .route("/api/v1/config", get(rest::config))
+        .route("/api/v1/openapi.json", get(openapi::openapi_json))
         .route(
             "/api/v1/sessions",
             post(rest::create_session).get(rest::list_sessions),
@@ -103,6 +106,34 @@ async fn main() {
         .route("/api/v1/sessions/{id}/messages", post(rest::messages))
         .route("/api/v1/sessions/{id}/cancel", post(rest::cancel))
         .route("/api/v1/audio/{id}", get(rest::get_audio))
+        .route(
+            "/api/v1/providers",
+            post(settings::create_provider).get(settings::list_providers),
+        )
+        .route(
+            "/api/v1/providers/{id}",
+            get(settings::get_provider)
+                .put(settings::update_provider)
+                .delete(settings::delete_provider),
+        )
+        .route(
+            "/api/v1/providers/{id}/models",
+            get(settings::provider_models),
+        )
+        .route(
+            "/api/v1/providers/{id}/voices",
+            get(settings::provider_voices),
+        )
+        .route(
+            "/api/v1/bindings",
+            post(settings::create_binding).get(settings::list_bindings),
+        )
+        .route(
+            "/api/v1/bindings/{id}",
+            get(settings::get_binding)
+                .put(settings::update_binding)
+                .delete(settings::delete_binding),
+        )
         .fallback_service(ServeDir::new("web/shell/public"))
         .with_state(state);
 

@@ -5,15 +5,18 @@
 //! bindings.module_id 哨兵 `*` 表全模块默认；UNIQUE(user_id,module_id,capability,role) 两后端约束。
 
 use chrono::{DateTime, Utc};
-use kernel_api::{execute_both, fetch_all_both, fetch_optional_both, KernelError, Store};
+use kernel_api::{
+    execute_both, fetch_all_both, fetch_optional_both, KernelError, ProviderConn, Store,
+};
+use secrecy::SecretString;
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use uuid::Uuid;
 
 use crate::crypto::MasterKey;
 
 /// provider 域类型（不含 key）：既是 DB 行也是 REST 序列化体。
-#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, utoipa::ToSchema)]
 pub struct Provider {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -26,7 +29,7 @@ pub struct Provider {
 }
 
 /// binding 域类型：capability/role 为 lowercase 字符串（llm/tts/stt；default/summarizer/extractor/assessor）。
-#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+#[derive(Debug, Clone, sqlx::FromRow, Serialize, utoipa::ToSchema)]
 pub struct Binding {
     pub id: Uuid,
     pub user_id: Uuid,
@@ -55,6 +58,30 @@ const BINDING_COLS: &str =
 
 fn storage_err(e: impl std::fmt::Display) -> KernelError {
     KernelError::Storage(e.to_string())
+}
+
+/// 确保用户行存在（缺失则建，is_admin=true）。M1b 供 dev 种入与前瞻；M1c 认证接管正式用户创建。
+pub async fn ensure_user(store: &Store, id: Uuid) -> Result<(), KernelError> {
+    let exists: Option<(Uuid,)> =
+        fetch_optional_both!(store, "SELECT id FROM users WHERE id = $1", (Uuid,), id)
+            .map_err(storage_err)?;
+    if exists.is_none() {
+        let now = Utc::now();
+        execute_both!(
+            store,
+            "INSERT INTO users (id, email, display_name, is_admin, status, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)",
+            id,
+            Option::<String>::None,
+            "dev",
+            true,
+            "active",
+            now,
+            now
+        )
+        .map_err(storage_err)?;
+    }
+    Ok(())
 }
 
 /// 新建 provider（key 加密存储）。
@@ -175,6 +202,29 @@ pub(crate) async fn get_provider_secret(
         id
     )
     .map_err(storage_err)
+}
+
+/// 取用户 provider 的解密连接（models/voices 测试端点用）。非本用户/不存在 → None。
+pub async fn provider_conn(
+    store: &Store,
+    master: &MasterKey,
+    user_id: Uuid,
+    id: Uuid,
+) -> Result<Option<ProviderConn>, KernelError> {
+    if get_provider(store, user_id, id).await?.is_none() {
+        return Ok(None);
+    }
+    let secret = get_provider_secret(store, id)
+        .await?
+        .ok_or_else(|| KernelError::Storage(format!("provider 不存在：{id}")))?;
+    let key_bytes = master.decrypt(&secret.key_enc)?;
+    let key = String::from_utf8(key_bytes)
+        .map_err(|_| KernelError::Internal("provider key 非 UTF-8".to_string()))?;
+    Ok(Some(ProviderConn {
+        base_url: secret.base_url,
+        api_key: SecretString::from(key),
+        extra: secret.extra_json.unwrap_or_else(|| json!({})),
+    }))
 }
 
 /// 新建 binding。UNIQUE(user,module,cap,role) 冲突 → Storage 错误。

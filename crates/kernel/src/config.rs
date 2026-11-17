@@ -26,7 +26,7 @@ impl EnvSource for SystemEnv {
 }
 
 /// 注册模式（默认 invite，首用户例外成管理员；M1c 认证落地）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum RegistrationMode {
     /// 邀请码注册。
@@ -52,7 +52,7 @@ impl RegistrationMode {
 }
 
 /// provider 预设（配置文件定义，不含 key）。
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, utoipa::ToSchema)]
 pub struct ProviderPreset {
     /// 预设标识。
     pub id: String,
@@ -166,7 +166,7 @@ impl Config {
 }
 
 /// 配置脱敏只读视图（REST 序列化）。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct ConfigView {
     pub listen: String,
     pub data_dir: String,

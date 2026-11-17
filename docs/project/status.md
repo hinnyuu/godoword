@@ -29,9 +29,11 @@
   本会话已完整探索项目 + 与用户对齐全部 M1b 设计决策（见下「M1b 决策定案」），按 6 phase 推进。
   已完成 phase 1（schema + 双后端迁移 runner + 备份）+ phase 2（主密钥 + AES-256-GCM）
   + phase 3（DbBindingResolver 5 级 fallback + 解密 + providers/bindings 仓储 CRUD）
-  + phase 4（配置 env>file>默认 + 预设 + 脱敏视图）+ phase 5（自适应降权 + 幂等 entrypoint，
-  本地实证 rootful 降权 uid 1000 + 幂等重启密钥复用 + 迁移前备份 + readyz/config），均测试绿。
-  当前 phase 6：provider/binding CRUD REST + models/voices + dev 种入 + 冒烟 uid/卷矩阵。
+  + phase 4（配置 env>file>默认 + 预设 + 脱敏视图）+ phase 5（自适应降权 + 幂等 entrypoint）
+  + phase 6（provider/binding CRUD REST + models/voices 测试端点 + utoipa OpenAPI + dev env 幂等种入 DB
+  + release 用户级 REST 把守 + 冒烟 uid/卷矩阵扩展）。本地真 key 全链路实证：dev 种入加密 → DB 绑定解析解密
+  → 回合 finish=stop 零 error + speak 出声 + 词级时间戳 + 音频回放 + 转录 + models 端点 + provider/binding CRUD。
+  当前 phase 7：文档/history 同步 + CI 绿 + 人工残留 sign-off。
 
 ## blocked / 待拍板决策
 
