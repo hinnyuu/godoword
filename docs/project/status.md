@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T17:20+08:00
-- 当前里程碑: M1（蓝图定案，M1a 待启动）
-- 主线: M0 完成（51d16c3）→ M1 前置存储契约 C（bf952a3）→ M1 前置小 PR（f8ff64c）→ M1 蓝图定案
+- verified: 2026-11-17T17:40+08:00
+- 当前里程碑: M1a（垂直切片：适配器 + 回合循环 + SSE 出声）
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ M1 前置小 PR（f8ff64c）→ M1 蓝图（bde1ba8）→ M1a 进行中
 
 ## done
 
@@ -24,7 +24,14 @@
 
 ## in-flight
 
-- M1 蓝图 PR（分支 feat/m1-blueprint）：roadmap M1 章节 + status + history 决策。待 CI 绿 → sign-off → merge。
+- **M1a**（分支 feat/m1a-vertical-slice，蓝图见 [roadmap](roadmap.md#m1-拆分蓝图)）：
+  - phase 1 ✅ fixtures 录制 + 适配器 crate 骨架：本地真 key 录脱敏 LLM/TTS 响应
+    （llm-openai/tests/fixtures/{models.json,chat-stream-toolcall.sse}、
+    tts-qwen-audio/tests/fixtures/{tts-stream.sse,tts-url.json}，signed url 已脱敏）；
+    两适配器 crate 骨架（module.yaml/docs/wiki/stub）入 workspace；cargo check/clippy/fmt 洁净。
+    上游协议事实已记入各适配器 docs/README.md。
+  - phase 2–6 待做：llm-openai 实现 → tts-qwen-audio 实现 → kernel 回合循环 + speak 契约（全量审查）+ SSE
+    → godoword 接线 + 会话 REST → 端到端验证 + 文档/history + PR。
 
 ## blocked / 待拍板决策
 
@@ -33,9 +40,8 @@
 
 ## 下一动作
 
-1. 蓝图 PR CI 绿 → 用户 sign-off → merge。
-2. **M1a 启动**，首任务 = fixtures 录制（本地真 key 录脱敏 LLM/TTS 响应入 crates/<adapter>/tests/fixtures/）。
-   随后 llm-openai → tts-qwen-audio → kernel 回合循环 + speak（契约新增，走全量审查）+ SSE → godoword 接线。
+1. M1a phase 2：llm-openai 适配器实现（chat_stream 流式归一化 + list_models + features）+ fixture 黄金测试。
+2. 随后 phase 3–6（见 in-flight）。M1a 单 PR 多 commit（phase 级），phase 6 开 PR → CI 绿 → sign-off → merge。
 
 ## 开发态临时取舍登记（dev-debt，须回归）
 

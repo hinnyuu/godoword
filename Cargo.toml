@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/kernel-api", "crates/godoword"]
+members = ["crates/kernel-api", "crates/llm-openai", "crates/tts-qwen-audio", "crates/godoword"]
 
 [workspace.package]
 version = "0.0.0"

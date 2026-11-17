@@ -1,0 +1,8 @@
+[package]
+name = "tts-qwen-audio"
+description = "godoword qwen-audio TTS 适配器（DashScope 原生协议）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
