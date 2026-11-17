@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T21:01+08:00
-- 当前里程碑: **M1b 进行中（分支 feat/m1b-storage-substrate，phase 1 schema/迁移）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ 交接（8b5c1a4）→ **M1b（进行中）**
+- verified: 2026-11-17T22:06+08:00
+- 当前里程碑: **M1b 实现完成（分支 feat/m1b-storage-substrate，待 CI 绿 + SELinux 人工残留 sign-off + merge）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ 交接（8b5c1a4）→ **M1b（待合并）**
 
 ## done
 
@@ -22,6 +22,11 @@
   本地真 key 全链路实证：回合 stop 零 error + 2 次 speak 出声 + 词级时间戳 + 回放 + 转录。修 tool_calls 回喂归一化 bug。
 - M1a 依赖合规（history 1844）：CDLA-Permissive-2.0 白名单（webpki-roots CA 数据）+ chrono unmaintained
   （RUSTSEC-2026-0543）书面风险接受（用户认可，roadmap 跟踪）。
+- **M1b 存储基底 + 部署初始化（history 2206，分支 feat/m1b-storage-substrate 待合并）**：完整 kernel schema（11 表）
+  + 自定义双后端迁移 runner（版本表/checksum/迁移前备份）+ 主密钥 AES-256-GCM + DbBindingResolver（5 级 fallback + 解密）
+  + providers/bindings 仓储 CRUD + 配置（env>file>默认 + 预设 + 脱敏）+ 自适应降权 + 幂等 entrypoint
+  + provider/binding/config REST + models/voices 测试端点 + utoipa OpenAPI + 冒烟完整 uid/卷矩阵。
+  不改 kernel-api 契约。本地真 key 全链路 + entrypoint 幂等实证。dev-debt **T3 回归**（降权上线）、T2 绑定部分回归（DB）。
 
 ## in-flight
 
@@ -33,7 +38,8 @@
   + phase 6（provider/binding CRUD REST + models/voices 测试端点 + utoipa OpenAPI + dev env 幂等种入 DB
   + release 用户级 REST 把守 + 冒烟 uid/卷矩阵扩展）。本地真 key 全链路实证：dev 种入加密 → DB 绑定解析解密
   → 回合 finish=stop 零 error + speak 出声 + 词级时间戳 + 音频回放 + 转录 + models 端点 + provider/binding CRUD。
-  当前 phase 7：文档/history 同步 + CI 绿 + 人工残留 sign-off。
+  phase 7 文档/history 已同步（history 2206 + kernel/docs/storage.md + architecture/roadmap/wiki/deploy）。
+  workspace fmt/clippy/test 双后端全绿。**待 CI 7 checks 绿（含 storage 双后端 + 完整 uid/卷冒烟）+ SELinux 人工残留 sign-off + merge**。
 
 ## blocked / 待拍板决策
 
@@ -60,11 +66,14 @@
    不触发契约级全量审查，仅常规 docs/wiki/history 同步。kernel 内新增 storage/migrate/crypto/config/binding 模块，
    godoword 新增 init 模块，不新增 crate。SessionRepo/AudioCache DB/文件系统 impl 属 M1c（M1b 不动回合循环）。
 
-## 下一动作（M1b 执行中）
+## 下一动作（M1b 收尾 → M1c）
 
-1. 按 6 phase 推进（单 PR 多 commit），每 phase 本机 cargo check/test（jobs≤2）+ gate --local 预检，持续维护本文件。
-2. phase 1 schema/迁移 → 2 加密 → 3 绑定 DB → 4 配置 → 5 降权/entrypoint → 6 REST/冒烟 → 7 文档/history。
-3. M1b 完成 → CI 绿（含 storage 双后端 + 完整 uid/卷冒烟）→ SELinux 人工残留 sign-off → merge。
+1. push 分支 feat/m1b-storage-substrate → 开 PR → CI 7 checks 绿（docs-gate/commitlint/secrets/rust/storage 双后端/image/smoke 完整 uid/卷矩阵）。
+2. **人工残留 sign-off：SELinux :Z（Fedora 主机）**——bind mount :Z 标签下 /data 可写、降权后文件属主正确、无 EACCES。
+   本机无 SELinux（Debian 12），须 Fedora/RHEL 主机补测（runbook 见 PR 残留清单）。
+3. sign-off 通过 → squash merge → main release 重跑冒烟（R4 same-tree）→ M1b 完成。
+4. M1c 接续：会话/音频 DB/文件系统 impl（T2 余部）+ auth-local（argon2 + invite/首用户管理员 + cookie/CSRF/限流）
+   + 管理员重置 + 认证中间件（替换 user_access 门）+ 删除 dev-bypass（T1）+ call_log 计量 + 上下文预算/淘汰/outbox。
 
 ## M1b 启动规划（交接棒）
 
