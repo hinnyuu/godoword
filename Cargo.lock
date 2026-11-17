@@ -532,13 +532,22 @@ dependencies = [
 name = "godoword"
 version = "0.0.0"
 dependencies = [
+ "async-trait",
  "axum",
+ "bytes",
+ "futures-util",
+ "kernel",
  "kernel-api",
+ "llm-openai",
+ "secrecy",
+ "serde",
  "serde_json",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "tts-qwen-audio",
+ "uuid",
 ]
 
 [[package]]

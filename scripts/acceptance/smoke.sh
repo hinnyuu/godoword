@@ -61,8 +61,10 @@ echo "== T1 rootless + named volume（双栈/healthz/meta/静态/优雅退出）
 as_user podman run -d --name "${TAG}-named" -p 18080:8080 -v "${TAG}-named:/data:Z" "$IMAGE" >/dev/null
 assert_eq "healthz(127.0.0.1)" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18080/healthz)"
 assert_eq "healthz(localhost 双栈)" '{"status":"ok"}' "$(curl -s --max-time 8 http://localhost:18080/healthz)"
-assert_contains "meta milestone=M0" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/meta)" '"milestone":"M0"'
+assert_contains "meta milestone=M1a" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/meta)" '"milestone":"M1a"'
 assert_contains "静态占位页" "$(curl -s --max-time 8 http://127.0.0.1:18080/)" '<title>godoword</title>'
+assert_contains "会话创建" "$(curl -s --max-time 8 -X POST http://127.0.0.1:18080/api/v1/sessions)" '"id"'
+assert_contains "会话列表" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/sessions)" '"sessions"'
 assert_contains "启动日志双栈 [::]" "$(as_user podman logs "${TAG}-named" 2>&1)" '[::]'
 as_user podman stop "${TAG}-named" >/dev/null 2>&1
 assert_contains "优雅退出日志" "$(as_user podman logs "${TAG}-named" 2>&1)" '优雅关闭'

@@ -41,6 +41,30 @@ fn bearer(conn: &ProviderConn) -> String {
     format!("Bearer {}", conn.api_key.expose_secret())
 }
 
+/// kernel ToolCall 形 `{id,name,arguments:Value}` → OpenAI 线缆形
+/// `{id,type:"function",function:{name,arguments:字符串}}`（回喂历史用）。
+fn normalize_tool_calls(tc: &Value) -> Value {
+    match tc {
+        Value::Array(arr) => Value::Array(
+            arr.iter()
+                .map(|t| {
+                    let args = &t["arguments"];
+                    let args_str = match args {
+                        Value::String(s) => s.clone(),
+                        other => serde_json::to_string(other).unwrap_or_default(),
+                    };
+                    json!({
+                        "id": t["id"],
+                        "type": "function",
+                        "function": { "name": t["name"], "arguments": args_str }
+                    })
+                })
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 /// 组装 OpenAI 请求体（stream=true，tools 转 function 形，extra 顶层合并）。
 fn build_request(req: &ChatRequest) -> Value {
     let messages: Vec<Value> = req
@@ -49,7 +73,7 @@ fn build_request(req: &ChatRequest) -> Value {
         .map(|m| {
             let mut obj = json!({ "role": m.role, "content": m.content });
             if let Some(tc) = &m.tool_calls {
-                obj["tool_calls"] = tc.clone();
+                obj["tool_calls"] = normalize_tool_calls(tc);
             }
             if let Some(id) = &m.tool_call_id {
                 obj["tool_call_id"] = json!(id);
@@ -188,5 +212,48 @@ impl LlmProvider for OpenAiProvider {
             return Err(map_error(resp, &req.model).await);
         }
         Ok(sse::normalize(resp.bytes_stream()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel_api::{ChatMessage, ToolSpec};
+
+    #[test]
+    fn tool_calls_feedback_openai_shape() {
+        let req = ChatRequest {
+            model: "m".to_string(),
+            messages: vec![ChatMessage {
+                role: "assistant".to_string(),
+                content: String::new(),
+                reasoning: None,
+                tool_calls: Some(json!([
+                    { "id": "call_1", "name": "speak", "arguments": { "text": "こんにちは", "rate": 0.8 } }
+                ])),
+                tool_call_id: None,
+            }],
+            tools: vec![ToolSpec {
+                name: "speak".to_string(),
+                description: "d".to_string(),
+                parameters: json!({}),
+            }],
+            temperature: None,
+            max_tokens: None,
+            extra: json!({}),
+        };
+        let body = build_request(&req);
+        let tc = &body["messages"][0]["tool_calls"][0];
+        assert_eq!(tc["type"], "function");
+        assert_eq!(tc["id"], "call_1");
+        assert_eq!(tc["function"]["name"], "speak");
+        // arguments 须为 JSON 字符串（非对象）
+        let args = tc["function"]["arguments"]
+            .as_str()
+            .expect("arguments 应为字符串");
+        let parsed: Value = serde_json::from_str(args).unwrap();
+        assert_eq!(parsed["text"], "こんにちは");
+        assert_eq!(body["tools"][0]["type"], "function");
+        assert_eq!(body["stream"], true);
     }
 }

@@ -11,6 +11,9 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 kernel-api = { path = "crates/kernel-api" }
+kernel = { path = "crates/kernel" }
+llm-openai = { path = "crates/llm-openai" }
+tts-qwen-audio = { path = "crates/tts-qwen-audio" }
 async-stream = "0.3"
 async-trait = "0.1"
 axum = { version = "0.8", default-features = false }

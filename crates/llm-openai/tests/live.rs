@@ -56,7 +56,10 @@ async fn live_chat_speak() {
         max_tokens: None,
         extra: json!({}),
     };
-    let mut stream = p.chat_stream(&conn(), req).await.expect("chat_stream 应成功");
+    let mut stream = p
+        .chat_stream(&conn(), req)
+        .await
+        .expect("chat_stream 应成功");
     let mut got_tool = false;
     let mut got_finish = false;
     let mut got_usage = false;
