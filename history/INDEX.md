@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 34 条。
+共 35 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -38,3 +38,4 @@
 - [M1a 垂直切片实现 + speak 契约落地 + 全量语义审查](2026-11-17-1828-m1a-vertical-slice.md) — 2026-11-17T18:28+08:00 · change · accepted · scope: project, kernel, kernel-api, llm-openai, tts-qwen-audio, godoword · keywords: m1a, vertical-slice, speak, contract, adapter, sse, audit, dev-bypass, tool-calls
 - [M1a 依赖合规：CDLA-Permissive-2.0 白名单 + chrono unmaintained 风险接受](2026-11-17-1844-cargo-deny-m1a-deps.md) — 2026-11-17T18:44+08:00 · decision · accepted · scope: project · keywords: cargo-deny, chrono, rustsec, license, webpki-roots, cdla, risk-acceptance, m1a
 - [M1b 存储基底 + 部署初始化实现（schema/迁移/加密/绑定/配置/降权/REST）](2026-11-17-2206-m1b-storage-substrate.md) — 2026-11-17T22:06+08:00 · change · accepted · scope: project, kernel, godoword · keywords: m1b, storage, migration, encryption, master-key, binding, config, privilege-drop, entrypoint, dual-backend, rest, utoipa, dev-debt
+- [人工残留验收清单纪律化（M1b 验收批评触发）](2026-11-17-2302-human-residual-checklist-discipline.md) — 2026-11-17T23:02+08:00 · decision · accepted · scope: project · keywords: acceptance, human-residual, checklist, discipline, selinux, quadlet, runbook, pr

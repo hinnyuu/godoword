@@ -66,8 +66,13 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
   覆盖 healthz/meta/静态页、双栈 localhost+IPv4、优雅退出、uid/卷矩阵（rootless named/bind、
   非 1000 uid、rootful bind）、删容器重建、bind 属主断言。资源用唯一前缀隔离 + 专用端口段，
   `trap EXIT` 自动清理（含临时用户与镜像），**只清自有资源，绝不碰用户容器**。
-- **人工残留验收**：仅自动化覆盖不到的项。agent 须在 PR 列出残留清单（具体命令/步骤/通过标准），
-  人工 sign-off。webui 时代视觉交互、TTS 音质等必须人工。
+- **人工残留验收**：仅自动化覆盖不到的项。agent 须在 PR 列出残留清单，人工 sign-off。
+  webui 时代视觉交互、TTS 音质等必须人工。
+- **人工残留清单纪律**（M1b 验收批评后制度化，防再犯）：PR 残留清单**逐项**须含三件——
+  ①**完整可复制命令**（含**具体镜像 tag**，如 `pr-7`，禁笼统 `pr-N`；含前置准备如建目录/装单元）；
+  ②**明确通过标准**（期望输出/状态）；③**测试后清理命令**（容器/卷/单元/临时目录，只清自有资源）。
+  **覆盖全部残留项**（如 SELinux 须含 `:Z` 正例 + 不带 `:Z` 负例 + quadlet，不得只列部分），
+  每项命令与清理一一对应。agent 撰写后逐项自检完整性；人工审视清单可执行性。
 - **merge 前置 = 自动化冒烟绿 + 人工对残留 sign-off**。人工介入仍强制，但聚焦于真正需要人的部分。
 - 验收与合并须为**同一 tree 内容**（squash merge 保持 tree 不变）；**merge 后 CI 对 main 镜像重跑冒烟**
   （release.yaml smoke job）。不要求同一镜像 digest（重建必生新 digest），以 same-tree + main 重测保证一致。

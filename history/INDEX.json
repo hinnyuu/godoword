@@ -759,5 +759,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-2302-human-residual-checklist-discipline.md",
+    "title": "人工残留验收清单纪律化（M1b 验收批评触发）",
+    "date": "2026-11-17T23:02+08:00",
+    "keywords": [
+      "acceptance",
+      "human-residual",
+      "checklist",
+      "discipline",
+      "selinux",
+      "quadlet",
+      "runbook",
+      "pr"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "7"
   }
 ]
