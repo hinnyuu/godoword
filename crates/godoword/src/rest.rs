@@ -8,24 +8,41 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
-use kernel::{AudioCache, MemAudio, MemSessions, Runtime, SessionRepo};
-use kernel_api::{AudioId, SessionEvent, SessionId, UserId};
+use kernel::{AudioCache, Config, ConfigView, MemAudio, MemSessions, Runtime, SessionRepo};
+use kernel_api::{AudioId, SessionEvent, SessionId, Store, UserId};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::convert::Infallible;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// 应用状态（M1a 内存态；runtime 仅 dev-bypass 模式存在）。
+/// 应用状态（M1b：内存会话/音频 + DB 存储基底 + 配置；runtime 仅 dev-bypass 模式存在）。
 pub struct AppState {
     /// 会话仓储。
     pub sessions: Arc<MemSessions>,
     /// 音频缓存。
     pub audio: Arc<MemAudio>,
-    /// 运行时（dev-bypass 模式 Some；release M1a None，回合返回 503）。
+    /// 运行时（dev-bypass 模式 Some；release M1b None，回合返回 503）。
     pub runtime: Option<Arc<Runtime>>,
-    /// 当前用户（M1a dev 固定用户；M1c 真认证）。
+    /// 当前用户（M1b dev 固定用户；M1c 真认证）。
     pub user: UserId,
+    /// 存储基底（迁移已应用；readyz 探活 + 绑定解析）。
+    pub store: Arc<Store>,
+    /// 部署级配置（/config 脱敏只读）。
+    pub cfg: Config,
+}
+
+/// 就绪探针：存储连通（SELECT 1）才算就绪。
+pub async fn readyz(State(st): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
+    kernel::ping(&st.store)
+        .await
+        .map_err(|_| StatusCode::SERVICE_UNAVAILABLE)?;
+    Ok(Json(json!({ "status": "ok" })))
+}
+
+/// 配置脱敏只读视图。
+pub async fn config(State(st): State<Arc<AppState>>) -> Json<ConfigView> {
+    Json(st.cfg.view())
 }
 
 fn to_sse(ev: SessionEvent) -> Event {

@@ -3,9 +3,16 @@
 
 use std::path::Path;
 
-use kernel_api::{KernelError, Store};
+use kernel_api::{execute_both, KernelError, Store};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
 use sqlx::PgPool;
+
+/// 存储连通探活（SELECT 1，readyz 用）。
+pub async fn ping(store: &Store) -> Result<(), KernelError> {
+    execute_both!(store, "SELECT 1")
+        .map_err(|e| KernelError::Storage(format!("存储探活失败：{e}")))?;
+    Ok(())
+}
 
 /// 打开 SQLite（WAL 日志模式 + 外键约束启用，文件缺失自动建）。
 pub async fn open_sqlite(db_path: &Path) -> Result<Store, KernelError> {

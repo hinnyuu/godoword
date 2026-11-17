@@ -24,4 +24,4 @@ pub use persona::DEFAULT_TEACHER_PERSONA;
 pub use repo::{Binding, Provider};
 pub use runtime::Runtime;
 pub use seam::{AudioCache, BindingResolver, CachedAudio, ResolvedBinding, SessionRepo};
-pub use storage::{open_pg, open_sqlite};
+pub use storage::{open_pg, open_sqlite, ping};
