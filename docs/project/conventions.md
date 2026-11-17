@@ -108,15 +108,18 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 CI `storage` job 跑 **workspace 级** `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试
 自动获双后端——无需维护 crate 清单。rust job 的 workspace 测试未设 `TEST_PG_URL`（验代码健康，PG 侧 skip）。
 
-## 契约级变更全量审查（制度化）
+## 全量语义审查（制度化）
 
-凡 **kernel-api 契约级变更**（trait 签名、Store 形态、协议类型、耦合版本），除机械门禁外
-**强制全量 docs+wiki 语义审查**：
+两类变更除机械门禁外**强制全量 docs+wiki 语义审查**：
+①**kernel-api 契约级变更**（trait 签名、Store 形态、协议类型、耦合版本）；
+②**supersede 蓝图/architecture 既有假设的设计方向变更**（非契约变更但跨多文档制造真实分歧，
+如音频缓存指纹→显式白名单）。设计方向级审查须趁上下文仍在做二审复核（一审自查难免盲点）。
 
 - 附**核对矩阵**（行=所有 docs/wiki 文件，列=本次变更事实），逐格核对"需改/已改/一致"。
-- agent 全量读所有 docs/wiki，核对每个论断符合新现实，搜剿旧表述残留（如废弃契约名、旧规则），
+- agent 全量读所有 docs/wiki，核对每个论断符合新现实，搜剿旧表述残留（如废弃契约名、旧规则、被 supersede 的旧假设），
   交叉核对文档间一致性，修不一致。非抽查，是全量。
-- 审查结论记一条 history。机械门禁防漏改，全量审查防**语义漂移**——两者互补。
+- 审查结论记一条 history（含触发理由：契约级 or 设计方向级 supersede）。机械门禁防漏改，全量审查防**语义漂移**——两者互补。
+- 部分精化既有 history 条目（非整体取代）时，新条目正文引用澄清，**不**动旧条目 frontmatter（整体取代才改 status/superseded_by）。
 
 ## agent 交接与入门
 

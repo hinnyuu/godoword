@@ -65,8 +65,12 @@
 新增模块/文件须登记 impact 规则（覆盖率检查强制）。模块退役须清理其规则与跨模块边。
 图谱规则本身变更（gates/impact-map/glossary）须更新本文档并记 history。
 
-## 契约级变更全量审查
+## 全量语义审查（契约级与设计方向级）
 
-机械门禁防漏改，不防语义漂移。**凡 kernel-api 契约级变更**（trait 签名/Store 形态/协议类型/
-耦合版本），强制全量 docs+wiki 语义审查：附核对矩阵（doc 文件×变更事实），agent 全量读核对、
-搜剿旧表述残留、修不一致，结论记 history。见 [conventions](conventions.md#契约级变更全量审查制度化)。
+机械门禁防漏改，不防语义漂移。两类变更强制全量 docs+wiki 语义审查：
+①**kernel-api 契约级变更**（trait 签名/Store 形态/协议类型/耦合版本）；
+②**supersede 蓝图/architecture 既有假设的设计方向变更**（非契约变更，但跨多文档制造真实分歧，
+如音频缓存指纹 hash→显式白名单、角色扮演分层精化）。
+审查附核对矩阵（doc 文件×变更事实），agent 全量读核对、搜剿旧表述残留、修不一致，结论记 history
+（含触发理由，防未来 agent 漏审/滥审）；设计方向级审查趁上下文仍在做二审复核。
+见 [conventions](conventions.md#全量语义审查制度化)。

@@ -24,7 +24,9 @@
   godoword（dev-bypass feature）；M1b/c DB 5 级 fallback + 解密。
 - `SessionRepo`：create/exists/history/append/list/delete。`MemSessions`（内存）M1a 生产默认（临时，dev-debt T2）
   + 永久测试替身；M1c DB impl。
-- `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统 `/data/cache`。
+- `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统
+  `/data/cache/<id>.pcm` + sidecar（原子写，TTL+容量上限有界）。**默认新鲜合成**（随机 AudioId 存供回放）；
+  复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断）+ 静态资产（M2 模块入仓库）。见 history 音频白名单条目。
 
 ## 存储基底（M1b）
 

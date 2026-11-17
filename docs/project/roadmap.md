@@ -99,7 +99,9 @@ providers（key_enc BYTEA：nonce+密文+tag）、bindings（module_id 哨兵 `*
 sessions（module_id/plan_version 可空/on_disconnect）、messages（tool_calls/audio_refs JSONB 整取/reasoning 可空）、
 call_log（tokens/characters 可空/latency_ms/status）、progress_events（skill_tags/detail JSONB 整取）、
 tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/max_uses/used_count）。
-音频缓存走文件系统 `/data/cache`（key=hash(model+voice+text+params)）+ sidecar 时间戳 JSON，可再生可丢弃不入库。
+音频缓存走文件系统 `/data/cache`（随机 AudioId + sidecar 时间戳 JSON，可再生可丢弃不入库，TTL+容量上限有界）。
+**默认新鲜合成**（每次新合成存供回放）；复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断——
+不靠指纹推断同一性，由模块权威声明）+ 静态资产（M2 模块入仓库 canonical 音频，零 TTS）。见 history 音频白名单条目。
 双兼容 SQL 子集：uuid 主键应用生成、时间戳应用侧、JSON 整取回 Rust、占位符 `$1`、key_enc BYTEA 亲和。
 
 ### REST / SSE 面（按阶段）
@@ -122,6 +124,8 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - chrono unmaintained（RUSTSEC-2026-0543）风险接受跟踪：监控社区 fork/复活或 sqlx 切换
   jiff/time，届时迁移并移除 cargo-deny 忽略（当前 sqlx 传递依赖 + 契约类型用 chrono，替换不可行）
 - 更多教学模块（卡片闯关、LLM 考官考试等）与失败模块退役
+- 角色扮演横切声音基础设施（地基 persona/binding/voice 原语 + 模块编排 + 内核角色音色档案实体；
+  音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）——M2+ 方向，见 history 角色扮演条目
 - PWA / 移动端增强
 - E2E 自动化测试（当前单测 + fixture + 人工验收）
 - mid-run 回放缓冲（若需求出现）

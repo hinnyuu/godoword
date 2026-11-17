@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T23:47+08:00
-- 当前里程碑: **M1b 已合并（9d9c907）→ M1c 待启动（交接新 agent）**
+- verified: 2026-11-18T03:29+08:00
+- 当前里程碑: **M1b 已合并（9d9c907）→ M1c 设计已定案（本 docs PR 落档 + 全量审查）→ 待启动实现**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ **M1b（9d9c907）**
 
 ## done
@@ -30,47 +30,56 @@
 
 ## in-flight
 
-- 本交接 docs PR（分支 docs/m1b-accepted-m1c-handoff）：status 更新到 M1b 已合并 + M1c 启动规划。
-  合并后新 agent 从 main 接续 M1c。
+- 本 docs PR（分支 docs/m1c-design-decisions）：M1c 设计决策落档（history 0329 三条目 + 触发规则条目）
+  + 全量语义审查（一审 + 二审，设计方向级 supersede 蓝图 hash-cache 触发）+ docs reconciliation。
+  合并后开 feat/m1c-session-auth 实现分支。
 
 ## blocked / 待拍板决策
 
-- 无当前阻塞。M1b 全部设计决策已定案并落地（history 2206，不重议）。
-- 远期留 M2 拍板：无模块默认教师模式是否作永久"自由聊天"产品态（dev-debt T4）。
+- 无当前阻塞。M1c 设计决策已定案（history 0329，不重议）；M1b 设计已落地（history 2206）。
+- 远期留 M2 拍板：无模块默认教师模式是否作永久"自由聊天"产品态（dev-debt T4）；角色音色档案实体形态（M2）。
 
-## 下一动作（新 agent 接续 M1c）
+## 下一动作（设计落档合并后接续 M1c 实现）
 
-1. 读 AGENTS.md → 本文件 → roadmap M1 蓝图 → architecture → kernel-api 契约 → kernel/docs（M1b 事实，含 storage.md）
-   → godoword/docs。交叉验证 git log（M1b=9d9c907）+ history INDEX（2206 M1b/2302 清单纪律）。
-2. 建分支 feat/m1c-session-auth，按下方 phase 推进，单 PR 多 commit，持续维护本文件。
+1. 读本文件 M1c 启动规划（设计已定案）→ history 0329 三条目（M1c 决策/音频白名单/角色扮演）+ 触发规则条目
+   → roadmap M1 蓝图 → architecture → kernel-api 契约 → kernel/docs → godoword/docs。交叉验证 git log + history INDEX。
+2. 建分支 feat/m1c-session-auth，按上方 phase 推进，单 PR 多 commit，持续维护本文件。已定案决策不重议。
 3. M1c 完成 → CI 绿（含 storage 双后端 + auth 流冒烟）→ 人工残留 sign-off（清单纪律）→ merge。
 
-## M1c 启动规划（交接棒）
+## M1c 启动规划（交接棒，设计已定案）
 
 **范围**（蓝图 M1c）：会话运行时接基底 + 认证 + 管理（无 UI）。回归 dev-debt **T1**（删除 dev-bypass）、
 **T2 余部**（会话/音频内存→DB/文件系统）。无 UI → 无人工视觉验收（完整人工感官验收在 M1d）。
 
-**执行 phase**（建议，实现决策重大者交用户）：
-1. DB `SessionRepo`（sessions/messages 表 M1b 已建）+ 文件系统 `AudioCache`（`/data/cache`，key=hash(model+voice+text+params)
-   + sidecar 时间戳 JSON）替换内存生产默认；内存 impl 仅留测试。双后端测试（backends() 夹具）。
-2. 上下文装配/预算/淘汰（truncate 默认 / summarize opt-in，summarizer role 绑定）+ 淘汰前进度提取 + outbox
-   （progress_events 表）+ call_log 计量（所有上游调用）。
-3. on_disconnect continue（detach 服务端跑完）+ cancel（M1a 已有 cancel）。
-4. 新 crate `auth-local`：argon2 密码哈希 + users/local_credentials/invites/tokens 逻辑 + invite 注册（首用户例外成管理员）
-   + cookie（HttpOnly/Secure/SameSite）/CSRF/登录限流 + 管理员重置。
-5. godoword 认证中间件（替换 `user_access` 门）+ auth/admin REST（register/login/logout/me + admin reset/invites/users）
-   + **删除 dev-bypass（T1）** + 适配器转非 optional + 用户级 REST release 开放。
-6. 冒烟 auth 流 curl + 会话持久化 + 文档/history。
+**设计决策已定案**（详见 history 2026-11-18-0329 三条目 + 触发规则条目，不重议）：
+①不改 kernel-api 契约（auth-local 实现 authenticate seam + crate 函数注册/邀请/重置；extra_routes 留 M4 OIDC；
+内部接缝 SessionRepo/AudioCache 扩展非契约）。②continue 执行/投递分离（tokio task + 有界 mpsc，活跃锁归 task，
+detach semaphore 默认 4 可配、try_acquire 失败降级 cancel）。③音频**默认新鲜合成** + 文件系统回放存储（随机 AudioId）
++ 缓存有界（TTL 30 天/容量 1GB 可配 + 周期清理）；**显式白名单复用 + 静态资产 M2**（取代指纹 hash 推断）。
+④认证方案 A（auth_sessions 表 0002 + opaque token cookie，Secure 可配默认 true，SameSite=Lax + 自定义头 CSRF，
+登录限流内存计数，首用户事务锁，argon2id，管理员重置 token 化）。⑤全量 summarize（Summarizer role + 失败回退 truncate + mock）。
+⑥outbox（kernel 生命周期事件 module_id 哨兵 `kernel`）+ call_log（adapter_id 取 trait id()）+ dispatcher 骨架（M2 消费）。
 
-**待定点**（实现决策，重大者交用户）：
-- argon2 crate（`argon2` + `password-hash`）；cookie/CSRF 方案（axum-extra cookie / tower-sessions / 自建）；认证中间件形态。
-- AudioCache 文件系统布局 + 缓存命中回放；summarize 淘汰的 LLM 调用路径。
-- outbox 异步提取机制（tokio task；评估模块 M2 消费 progress_events）。
-- **尽量不改 kernel-api 契约**（AuthProvider trait 已存在）；若契约变更走全量审查。
-- schema 表 M1b 已全建（users/local_credentials/oidc_identities/tokens/invites 等），M1c 填逻辑。
+**执行 phase**（单 PR 多 commit，持续维护本文件）：
+1. DB `SessionRepo`（sessions/messages 表 M1b 已建，增读 on_disconnect/params/module_id；seq 单活跃锁内
+   COALESCE(MAX(seq),0)+1 i32）+ 文件系统 `FsAudio`（`/data/cache/<id>.pcm` + sidecar，原子写，TTL+容量有界）
+   替换内存生产默认（新鲜合成随机 AudioId）；内存 impl 仅留测试。双后端测试（backends() 夹具）。
+2. 上下文装配/预算/淘汰（truncate 默认 / summarize opt-in）+ 淘汰前 span 入 outbox（SessionEvicted）
+   + call_log 计量（所有上游调用）+ dispatcher 骨架。
+3. on_disconnect continue（task + mpsc 执行/投递分离，detach 上限）+ cancel 非回归。
+4. 新 crate `auth-local`：argon2id + users/local_credentials/invites/tokens/auth_sessions 逻辑 + invite 注册
+   （首用户事务锁成管理员）+ cookie/CSRF/登录限流 + 管理员重置 token 化。schema 0002 增 auth_sessions。
+5. godoword 认证中间件（替换 `user_access` 门，per-request AuthUser extractor）+ auth/admin REST
+   + **删除 dev-bypass（T1）** + 适配器转非 optional + 用户级 REST release 开放（未认证 401）。
+6. 冒烟 auth 流 curl（503→401 + 注册首用户→登录→CRUD→会话）+ 会话持久化 + 文档/history。
+
+**已定案不重议**：契约姿态/continue/音频白名单/认证 A/全量 summarize/outbox 边界（history 0329）。
+角色扮演分层（横切基础设施 + 内核角色音色档案实体 M2 + 克隆 provider 侧/独立模块产 TTS API）M2 方向，
+M1c 音频机制无关其形态、零返工。schema 0001 不动（checksum 防漂移），0002 增 auth_sessions；角色音色档案实体 M2（0003+）。
 
 **验收**：CI auth 流 + 会话持久化双后端 + 淘汰/outbox（workspace storage required check）+ 冒烟 auth 流 curl；
-本地真 key 完整对话 + 淘汰 + 进度脚本；**无人工视觉**（M1d）。人工残留按清单纪律（完整命令+通过标准+清理）。
+本地真 key 完整对话（走真认证 register→provider/binding→回合）+ 淘汰 + 进度脚本；**无人工视觉**（M1d）。
+人工残留按清单纪律（完整命令+通过标准+清理）。
 
 ## M1b 已定案决策（已落地，详见 history 2206，不重议）
 
@@ -94,7 +103,12 @@
 
 - 存储：共享 SQL 守双兼容 SQL 子集；`query!` 仅驱动专属，共享用运行时 query_as + 薄分发宏（execute_both! 等）。
   **双兼容类型映射**：PG INTEGER↔i32（非 i64）；COUNT(*)↔i64；SQLite VACUUM INTO 须 raw_sql + 字面量文件名（详见 kernel/docs/storage.md）。
-- 契约级变更（trait/Store/协议类型/speak 规格）强制全量 docs+wiki 语义审查 + 核对矩阵。
+- 全量语义审查触发：契约级变更（trait/Store/协议类型/speak 规格）**或 supersede 蓝图/architecture 假设的设计方向变更**
+  （history 0329 触发规则）+ 核对矩阵；设计方向级须趁上下文二审复核。
+- **M1c 设计已定案**（history 0329 三条目，不重议）：不改契约 + continue（task+mpsc，detach 上限）+ 音频默认新鲜合成
+  + 文件系统回放存储 + 缓存有界（**显式白名单复用 + 静态资产 M2，取代指纹 hash**）+ 认证 A（auth_sessions 0002）
+  + 全量 summarize + outbox（module_id 哨兵 `kernel`）/call_log。**角色扮演**横切声音基础设施（地基原语 + 模块编排，
+  内核角色音色档案实体 M2，克隆 provider 侧），M1c 音频机制无关其形态、零返工。
 - kernel 内部接缝（SessionRepo/BindingResolver/AudioCache）已立（M1a）；**M1b BindingResolver 转 DB**；
   SessionRepo/AudioCache DB/文件系统 impl M1c，回合循环不重写。
 - kernel M1b 模块：storage（pool+ping）/migrate（runner）/crypto（MasterKey）/repo（providers/bindings CRUD）/binding（DbBindingResolver）/config。
