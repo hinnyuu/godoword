@@ -26,6 +26,8 @@
 - anthropic 兼容适配器（llm-anthropic）
 - STT 适配器与听说互动（网关已有 qwen-audio-3.0-asr-flash / realtime-plus）
 - MySQL 存储驱动（当前 SQLite + PostgreSQL）
+- sqlx 支持 patched SQLite（libsqlite3-sys 0.39+ / SQLite 3.54）后升级，移除 cargo-deny
+  对 RUSTSEC-2026-0459 的忽略（当前 sqlx 0.8/0.9 均 pin <0.38，无上游修复路径）
 - 更多教学模块（卡片闯关、LLM 考官考试等）与失败模块退役
 - PWA / 移动端增强
 - E2E 自动化测试（当前单测 + fixture + 人工验收）

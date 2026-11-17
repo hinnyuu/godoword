@@ -603,5 +603,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-1305-sqlite-cve-risk-accept.md",
+    "title": "SQLite CVE 风险接受（RUSTSEC-2026-0459）",
+    "date": "2026-11-17T13:05+08:00",
+    "keywords": [
+      "security",
+      "sqlite",
+      "cve",
+      "rustsec",
+      "cargo-deny",
+      "risk-acceptance",
+      "libsqlite3-sys"
+    ],
+    "scope": [
+      "project",
+      "kernel"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "2"
   }
 ]

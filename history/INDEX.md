@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 28 条。
+共 29 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -32,3 +32,4 @@
 - [M0 验收通过](2026-11-16-2350-m0-accepted.md) — 2026-11-16T23:50+08:00 · change · accepted · scope: project · keywords: m0, acceptance, docker, selinux, quadlet, milestone
 - [存储契约修订：sqlx Any 证伪 → C 方案双具体驱动](2026-11-17-1231-storage-contract-c.md) — 2026-11-17T12:31+08:00 · decision · accepted · scope: project, kernel, kernel-api · keywords: sqlx, any, storage, contract, sqlite, postgresql, dual-backend, audit, spike
 - [存储契约变更全量语义审查（制度化首次执行）](2026-11-17-1240-full-audit-storage.md) — 2026-11-17T12:40+08:00 · change · accepted · scope: project · keywords: audit, full-review, storage, contract, drift, matrix
+- [SQLite CVE 风险接受（RUSTSEC-2026-0459）](2026-11-17-1305-sqlite-cve-risk-accept.md) — 2026-11-17T13:05+08:00 · decision · accepted · scope: project, kernel · keywords: security, sqlite, cve, rustsec, cargo-deny, risk-acceptance, libsqlite3-sys
