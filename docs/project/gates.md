@@ -28,7 +28,9 @@
 10. **Rust**：fmt / clippy / check / test。**前端**：lint / build（M1 起）。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
 12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
-    （healthz/meta/静态/会话 CRUD/双栈/优雅退出/uid 卷矩阵/删容器重建/bind 属主），资源隔离 + 自动清理。
+    （healthz/readyz/meta/config/openapi/静态、双栈、优雅退出、用户级 REST release 把守 503、
+    /data 初始化断言 db/master.key 0600/backups、完整 uid/卷矩阵 rootless named/bind 非 1000 uid +
+    rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用），资源隔离 + 自动清理。
 13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 跑 **workspace 级**
     `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；
     **main 分支保护 required check**，方言漂移双向捕获。含共享 SQL 的 crate 须走 `backends()` 夹具。
@@ -50,6 +52,8 @@
 6. 跑 `gate.py --local` 预检。
 7. 确认无密钥、无禁入文件。
 8. commit message 合规（type/scope 英文 + subject 中文）。
+9. 有人工残留项时：PR 清单逐项含完整命令（具体镜像 tag）+ 通过标准 + 清理命令，覆盖全部残留项
+   （[人工残留清单纪律](conventions.md#验收拆分自动化冒烟--人工残留)）。
 
 ## 豁免流程
 

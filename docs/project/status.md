@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T20:20+08:00
-- 当前里程碑: **M1a 已合并（20efa24）→ M1b 待启动（交接新 agent）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ **M1a（20efa24）**
+- verified: 2026-11-17T22:30+08:00
+- 当前里程碑: **M1b CI 全绿（PR #7），待 SELinux 人工残留 sign-off + merge**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ 交接（8b5c1a4）→ **M1b（待合并）**
 
 ## done
 
@@ -22,23 +22,59 @@
   本地真 key 全链路实证：回合 stop 零 error + 2 次 speak 出声 + 词级时间戳 + 回放 + 转录。修 tool_calls 回喂归一化 bug。
 - M1a 依赖合规（history 1844）：CDLA-Permissive-2.0 白名单（webpki-roots CA 数据）+ chrono unmaintained
   （RUSTSEC-2026-0543）书面风险接受（用户认可，roadmap 跟踪）。
+- **M1b 存储基底 + 部署初始化（history 2206，分支 feat/m1b-storage-substrate 待合并）**：完整 kernel schema（11 表）
+  + 自定义双后端迁移 runner（版本表/checksum/迁移前备份）+ 主密钥 AES-256-GCM + DbBindingResolver（5 级 fallback + 解密）
+  + providers/bindings 仓储 CRUD + 配置（env>file>默认 + 预设 + 脱敏）+ 自适应降权 + 幂等 entrypoint
+  + provider/binding/config REST + models/voices 测试端点 + utoipa OpenAPI + 冒烟完整 uid/卷矩阵。
+  不改 kernel-api 契约。本地真 key 全链路 + entrypoint 幂等实证。dev-debt **T3 回归**（降权上线）、T2 绑定部分回归（DB）。
 
 ## in-flight
 
-- 本交接 docs PR（分支 docs/m1a-accepted-m1b-handoff）：status 更新到 M1a 已合并 + M1b 启动规划。
-  合并后新 agent 从 main 接续 M1b。
+- M1b（分支 feat/m1b-storage-substrate，单 PR 多 commit）：kernel 存储基底 + 部署初始化。
+  本会话已完整探索项目 + 与用户对齐全部 M1b 设计决策（见下「M1b 决策定案」），按 6 phase 推进。
+  已完成 phase 1（schema + 双后端迁移 runner + 备份）+ phase 2（主密钥 + AES-256-GCM）
+  + phase 3（DbBindingResolver 5 级 fallback + 解密 + providers/bindings 仓储 CRUD）
+  + phase 4（配置 env>file>默认 + 预设 + 脱敏视图）+ phase 5（自适应降权 + 幂等 entrypoint）
+  + phase 6（provider/binding CRUD REST + models/voices 测试端点 + utoipa OpenAPI + dev env 幂等种入 DB
+  + release 用户级 REST 把守 + 冒烟 uid/卷矩阵扩展）。本地真 key 全链路实证：dev 种入加密 → DB 绑定解析解密
+  → 回合 finish=stop 零 error + speak 出声 + 词级时间戳 + 音频回放 + 转录 + models 端点 + provider/binding CRUD。
+  phase 7 文档/history 已同步（history 2206 + kernel/docs/storage.md + architecture/roadmap/wiki/deploy）。
+  workspace fmt/clippy/test 双后端全绿。**CI 7 checks 全绿（PR #7，含 storage 双后端 + 完整 uid/卷冒烟 PASS=29 FAIL=0）**。
+  待 SELinux 人工残留 sign-off（Fedora 主机）→ squash merge → main release 重测冒烟。
 
 ## blocked / 待拍板决策
 
-- 无当前阻塞。M1 全部设计决策已定案。
+- 无当前阻塞。M1b 全部设计决策已与用户定案（见下）。
 - 远期留 M2 拍板：无模块默认教师模式是否作永久"自由聊天"产品态（dev-debt T4）。
 
-## 下一动作（新 agent 接续 M1b）
+## M1b 决策定案（2026-11-17 与用户对齐，不重议）
 
-1. 读 AGENTS.md → 本文件 → roadmap M1 蓝图 → architecture → kernel-api 契约 → kernel/docs（M1a 事实）。
-   交叉验证 git log（M1a=20efa24）+ history INDEX（1720 蓝图/1828 M1a/1844 合规）。
-2. 建分支 feat/m1b-storage-substrate，按下方 phase 推进，单 PR 多 commit，持续维护本文件。
-3. M1b 完成 → CI 绿（含 storage 双后端 + 完整 uid/卷冒烟）→ SELinux 人工残留 sign-off → merge。
+1. **生产接线/dev-bypass 边界**：DbBindingResolver 为唯一生产绑定路径（dev/release 共用）；适配器转非 optional。
+   dev-bypass feature 保留至 M1c，职责收窄为固定 dev user + 启动时 GODOWORD_DEV_* 幂等种入 DB（加密），
+   替代 M1a EnvResolver 直读 env。release M1b 跑完整 entrypoint + healthz/meta/config 只读/静态；
+   用户级 REST（sessions/providers/bindings/回合）由 dev-bypass 把守至 M1c 认证。T1 完整保留到 M1c。
+2. **迁移备份（方案 a）**：SQLite `VACUUM INTO '/data/backups/…'` 自动备份；PG 无 pg_dump 跳过+告警日志，
+   文档说明 PG 自备外部备份。版本表 `_schema_migrations(version PK,name,checksum,applied_at)`；
+   迁移 SQL `include_str!` 编译期内嵌；runner 接受有序 (module,migrations) 供 M2 扩展；checksum 校验防漂移。
+3. **自适应降权算法**：读 /proc/self/uid_map 判 rootless（容器 0→宿主非 0）/rootful（0→0）。
+   rootless 保持 uid 0（文件归宿主调用者，无 subuid 残留）；rootful euid=0 时 stat /data 属主→降到属主 uid/gid，
+   属主 0 则先 chown -R /data 到 1000（PUID/PGID 覆盖）再降权；setgroups([])→setgid→setuid（nix）；
+   M1a→M1b 升级 chown -R 旧 root 文件；/data EACCES→SELinux :Z 提示。冒烟实证 uid/卷矩阵。
+4. **实现选型**：主密钥文件 raw 32 字节 0600 / env hex 64 字符 fail-fast（rand OsRng 生成）；
+   crate aes-gcm+rand（加密）/ nix features user,fs（降权）/ toml+serde（配置）/ utoipa（OpenAPI，axum 0.8 兼容）；
+   M1b 一次性建全部 11 表（M1c/M4 逻辑后续填）。
+5. **架构姿态**：M1b 不改 kernel-api 契约（Store 已存在直接复用；DTO/config/加密/迁移服务放 kernel 内部 + godoword），
+   不触发契约级全量审查，仅常规 docs/wiki/history 同步。kernel 内新增 storage/migrate/crypto/config/binding 模块，
+   godoword 新增 init 模块，不新增 crate。SessionRepo/AudioCache DB/文件系统 impl 属 M1c（M1b 不动回合循环）。
+
+## 下一动作（M1b 收尾 → M1c）
+
+1. push 分支 feat/m1b-storage-substrate → 开 PR → CI 7 checks 绿（docs-gate/commitlint/secrets/rust/storage 双后端/image/smoke 完整 uid/卷矩阵）。
+2. **人工残留 sign-off：SELinux :Z（Fedora 主机）**——bind mount :Z 标签下 /data 可写、降权后文件属主正确、无 EACCES。
+   本机无 SELinux（Debian 12），须 Fedora/RHEL 主机补测（runbook 见 PR 残留清单）。
+3. sign-off 通过 → squash merge → main release 重跑冒烟（R4 same-tree）→ M1b 完成。
+4. M1c 接续：会话/音频 DB/文件系统 impl（T2 余部）+ auth-local（argon2 + invite/首用户管理员 + cookie/CSRF/限流）
+   + 管理员重置 + 认证中间件（替换 user_access 门）+ 删除 dev-bypass（T1）+ call_log 计量 + 上下文预算/淘汰/outbox。
 
 ## M1b 启动规划（交接棒）
 
@@ -53,12 +89,8 @@
 5. 自适应降权（stat /data 属主 + /proc/self/uid_map → setgid/setgroups/setuid）+ 幂等 entrypoint（建目录→主密钥→迁移→启动）。
 6. provider/binding CRUD REST + 配置只读（脱敏）+ models/voices 测试端点（utoipa）；冒烟扩完整 uid/卷矩阵 + /data 断言；文档/history。
 
-**待定点（实现决策，重大者交用户）**：
-- 迁移 runner：sqlx `migrate!` 宏单驱动 pin，双后端需**自定义迁移 runner**（Store 薄分发跑 DDL + 版本表 + 备份）。
-- 加密 crate：`aes-gcm` + `rand`（nonce）；主密钥 32 字节编码（env hex/base64 / 文件 raw）待定。
-- 降权 crate：`nix`（setuid/setgid/setgroups）+ uid_map 解析；Rust 进程内无 shell（distroless 兼容）。
-- 配置 crate：`toml` + serde。
-- schema 列细节入 `kernel/docs/storage.md`；key_enc BYTEA；JSON 整取回 Rust；uuid 主键应用生成、时间戳应用侧。
+**待定点**：已全部定案，见上「M1b 决策定案」（迁移 runner / 加密 crate / 降权 crate / 配置 crate / 主密钥编码 / schema）。
+schema 列细节入 `kernel/docs/storage.md`；key_enc BYTEA；JSON 整取回 Rust；uuid 主键应用生成、时间戳应用侧。
 - 完整表：users/local_credentials/oidc_identities/providers/bindings/sessions/messages/call_log/progress_events/tokens/invites。
 
 **验收**：CI 双后端迁移幂等/CRUD/加密/绑定/配置（workspace storage required check）+ 冒烟完整 uid/卷矩阵

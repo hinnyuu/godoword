@@ -1,7 +1,8 @@
 # 部署快速开始
 
-> 面向部署者。M1a 镜像含会话 REST/SSE（开发态切片，回合需 dev-bypass 开发模式）。
-> 完整部署形态（自适应降权、卷初始化、主密钥、迁移）随 M1b 落地，见 [架构](../../docs/project/architecture.md)。
+> 面向部署者。M1b 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
+> + provider/binding/config REST。对话需 dev-bypass 开发模式（release 不含）；账户与配置界面随 M1c–M1d 落地。
+> 架构见 [架构](../../docs/project/architecture.md)。
 
 ## 前置
 
@@ -79,9 +80,54 @@ curl http://127.0.0.1:8080/healthz
 quadlet 双栈发布用单条不带 IP 的 `PublishPort=8080:8080`（pasta 默认双栈）；显式 `[::]` 仅 IPv6，
 两条同端口会冲突。详见 [deploy/README](../../deploy/README.md)。
 
+## 数据持久化与主密钥（M1b）
+
+一切持久状态入 `/data`，镜像无状态，容器误删重建零丢失：
+
+```
+/data
+├── db/godoword.sqlite        # 默认 SQLite（WAL）；外接 PostgreSQL 时不用此文件
+├── keys/master.key           # 主密钥（raw 32 字节，0600），加密用户 API key
+├── cache/                    # 音频缓存（可再生可丢弃）
+└── backups/                  # 迁移前自动备份（SQLite VACUUM INTO 一致快照）
+```
+
+- **主密钥**：首次启动自动生成 `/data/keys/master.key`（0600）；可用 env `GODOWORD_MASTER_KEY`
+  （64 位 hex = 32 字节）覆盖。**备份卷=备份一切含密钥；丢卷=用户 key 永久不可解**（请妥善备份 /data）。
+- **自适应降权**：rootless 保持容器 uid 0（文件归宿主调用者，无 subuid 残留）；rootful 以 /data 属主运行
+  （属主 root 时 chown 到 1000，`PUID`/`PGID` 可覆盖）。bind 目录文件永远归宿主用户。
+- **迁移备份**：每次有待应用迁移前，SQLite 自动 `VACUUM INTO /data/backups/`；PostgreSQL 镜像无 pg_dump，
+  跳过自动备份（请自备外部备份，如 `pg_dump` 定时任务）。
+
+### 备份与恢复
+
+- SQLite：备份 `/data` 整卷即可（含 db + keys）。恢复=还原卷后重启容器（主密钥须与加密数据匹配）。
+  迁移前快照在 `/data/backups/godoword-<时间戳>.sqlite`，可用于回滚到迁移前状态。
+- PostgreSQL：用外部 `pg_dump`/`pg_restore` 备份数据库；主密钥仍在 `/data/keys`（或 env），须一并保管。
+
+## 配置（M1b）
+
+来源轴 env > 配置文件 > 默认。配置文件 `/data/config.toml`（`GODOWORD_CONFIG` 可改路径）：
+
+```toml
+listen = "[::]:8080"
+registration_mode = "invite"   # invite/open/disabled
+# database_url = "postgres://user:pass@host:5432/godoword"  # 设则外接 PG
+
+[[provider_presets]]            # 设置页一键模板（不含 key，key 仍用户自填）
+id = "qwen-llm"
+adapter_id = "llm-openai"
+label = "Qwen LLM"
+base_url = "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1"
+suggested_models = ["qwen4-max-preview"]
+```
+
+env 覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`/
+`GODOWORD_MASTER_KEY`。`GET /api/v1/config` 只读展示生效值（脱敏，不含连接串凭据）。file/env 变更需重启。
+
 ## 说明
 
-- M1a 镜像含健康检查、会话 REST/SSE 与静态占位页；回合对话需 dev-bypass 开发模式（release 镜像不含）。
-- 数据持久化、主密钥自动生成、数据库迁移、自适应降权等完整初始化逻辑 M1b 落地。
-- 生产部署（quadlet systemd 单元、反向代理 + TLS、备份恢复）文档 M1b 补全。
-- SELinux 主机 bind mount 需 `:Z` 标签；quadlet 需 podman≥4.4。
+- M1b 镜像含健康/就绪检查、会话 REST/SSE、provider/binding/config REST、OpenAPI（`/api/v1/openapi.json`）与静态占位页。
+- 回合对话与用户级 REST 需 dev-bypass 开发模式（release 镜像不含，用户级端点返回 503）；账户/认证 M1c、配置界面 M1d。
+- 生产部署 quadlet systemd 单元 + 反向代理 TLS 见 [deploy/README](../../deploy/README.md)。
+- SELinux 主机 bind mount 需 `:Z` 标签（容器内无法自动修复，权限拒绝时日志会提示）；quadlet 需 podman≥4.4。

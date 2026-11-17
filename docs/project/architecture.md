@@ -70,7 +70,7 @@ bindings(user_id, module_id, capability, role, provider_id, model, params_json)
 
 解析顺序：`(user,module,cap,role) → (user,module,cap,default) → (user,*,cap,role)
 → (user,*,cap,default) → 未配置`（`*` 为全模块默认哨兵，取代 NULL——使 UNIQUE(user,module,cap,role)
-在两后端皆正常约束，M1b 落地）。role ∈ default/summarizer/extractor/assessor，
+在两后端皆正常约束，M1b 已落地）。role ∈ default/summarizer/extractor/assessor，
 支持教师用强模型、提取/评估用便宜模型。所有上游调用经 kernel 记入 call_log（用量看板、预算警告）。
 TTS 缓存 key = hash(model+voice+text+params)，缓存音频 + 时间戳，回放不重复付费。
 
@@ -113,12 +113,15 @@ bind 目录文件永远归宿主用户。默认双栈监听 `[::]:8080`（兼容
 podman bind mount 源目录须自建（与 docker 不同，podman 不自动创建）。
 生产文档给 quadlet（podman≥4.4）+ 反代 TLS；快速上手给 podman run + docker-compose。
 
-## 当前状态与 roadmap 差异（M1a）
+## 当前状态与 roadmap 差异（M1b）
 
-- 已落地：文档体系、关系图谱门禁、CI 流水线、kernel-api 契约 trait（含 M1a speak 工具契约）、
-  kernel 最小回合循环（内部接缝 + 内存 impl + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、
-  组合根会话 REST + SSE、容器化。M1a 垂直切片经本地真 key 全链路验证（LLM 教师 + speak 出声 + 回喂循环）。
-- 未实现：存储持久化/加密/迁移/自适应降权（M1b）、认证/会话持久化/用量计量落地（M1c）、
-  Svelte 前端（M1d）、教学模块（M2+）。M1a 为内存态 + dev-bypass 开发旁路（release 不含）。
+- 已落地：文档体系、关系图谱门禁、CI 流水线、kernel-api 契约 trait（含 speak 工具契约）、
+  kernel 回合循环（内部接缝 + 内存会话/音频 impl + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、
+  组合根会话 REST + SSE。**M1b 存储基底**：Store pool 初始化（SQLite WAL+外键 / PG 外接）、自定义双后端迁移 runner
+  （版本表 + checksum + 迁移前备份）、完整 kernel schema（11 表）、主密钥 AES-256-GCM 加密、DbBindingResolver
+  （5 级 fallback + 解密，生产路径）、配置加载（env>file>默认 + 预设 + 脱敏视图）、自适应降权 + 幂等 entrypoint。
+  M1a 垂直切片经本地真 key 全链路验证；M1b entrypoint 经本地实证（rootful 降权 + 幂等重启 + 密钥复用 + 备份）。
+- 未实现：会话/音频持久化（DB/文件系统 impl，M1c）、认证/用量计量落地（M1c）、provider/binding CRUD REST（M1b phase 6）、
+  Svelte 前端（M1d）、教学模块（M2+）。会话/音频仍内存态 + dev-bypass 开发旁路（release 不含，用户级 REST 待 M1c 认证）。
 - 已知简化：token 估算用字符启发式（roadmap 换 tokenizer）；web 为静态占位（M1d 起 Svelte）；
   上下文当前全量历史（预算/淘汰 M1c）；on_disconnect 当前仅 cancel（continue M1c）。

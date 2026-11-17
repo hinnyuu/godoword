@@ -26,11 +26,53 @@
   + 永久测试替身；M1c DB impl。
 - `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统 `/data/cache`。
 
+## 存储基底（M1b）
+
+`src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接）+ `src/migrate.rs`（自定义双后端迁移 runner：
+版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（全部 11 表）。
+schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
+
+## 加密（M1b）
+
+`src/crypto.rs` `MasterKey`：主密钥静态加密用户 API key（BYOK）。威胁模型防静态泄露（DB 备份/卷快照外流），
+不防运行中服务器被攻破（history 0500）。
+
+- 加载：env `GODOWORD_MASTER_KEY`（hex 64 字符，长度/格式错误 fail-fast）覆盖优先；否则读
+  `/data/keys/master.key`（raw 32 字节），缺失则 `rand` OsRng 自动生成（unix `create_new` + mode 0600，
+  避免世界可读窗口）。幂等：再加载读同一文件。Debug 脱敏。
+- AES-256-GCM（`aes-gcm`），**每记录独立随机 nonce**。密文 blob = `nonce(12) + 密文 + tag(16)`。
+  解密 GCM 认证失败（密钥错/篡改）→ 错误。providers.key_enc BYTEA 存此 blob。
+- 丢卷=密钥永久不可解；备份卷=备份一切含密钥（wiki/deploy 须明示）。信封加密/轮换留远期。
+- 测试：`src/crypto.rs` 单元（round-trip/nonce 唯一/篡改/错密钥/hex 解析）+ `tests/crypto.rs`（文件生成 0600/幂等/坏长度）。
+
+## 绑定解析与仓储（M1b）
+
+`src/binding.rs` `DbBindingResolver`（实现 `BindingResolver` 接缝，**M1b 生产路径**，替换 M1a env 旁路）：
+5 级 fallback `(user,module,cap,role) → (user,module,cap,default) → (user,*,cap,role) → (user,*,cap,default)
+→ 未配置`；module 为 None（M1 无模块）时直接从 `*` 级起；哨兵 `*` 表全模块默认。命中后读 provider 密文
+→ `MasterKey` 解密 → `ProviderConn{base_url, api_key:SecretString, extra}` + model + params。注入 `Arc<Store>` + `Arc<MasterKey>`。
+
+`src/repo.rs` providers/bindings 仓储 CRUD（供 REST）：`Provider`/`Binding` 域类型（sqlx::FromRow + Serialize，
+**不含 key**——key 经 MasterKey 加密存 key_enc BYTEA，绝不以明文返回）。所有查询按 user_id scoped（多用户隔离）。
+create/list/get/update/delete provider（update 可重加密 key）+ binding；delete provider 级联删 bindings（外键 CASCADE）。
+capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5 级 fallback + 解密 + 未配置 + CRUD + 用户隔离 + 级联）。
+
+## 配置加载（M1b）
+
+`src/config.rs` `Config`（来源轴：env > 配置文件 > 内置默认，history 0530）。配置文件 `/data/config.toml`
+（`GODOWORD_CONFIG` 可改路径），TOML + serde。字段：listen（默认 `[::]:8080`）、data_dir（默认 `/data`）、
+database_url（设则 PG，否则 SQLite `data_dir/db/godoword.sqlite`）、registration_mode（invite/open/disabled，默认 invite）、
+provider_presets（预设：端点+适配器+建议模型，**不含 key**）。env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/
+`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`。`EnvSource` trait 抽象 env 访问（无全局竞态单元测试）。
+`view()` 脱敏只读视图（GET /config）：仅暴露 database_backend 类型，**不暴露连接串凭据**。
+用户级配置（providers/bindings）仅 DB，与本轴正交；webui 不回写部署配置。单元测试 5（默认/env 覆盖/坏模式/TOML 预设/env>file）。
+
 ## M1 简化与 roadmap 差异
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
-- 无持久化/加密/认证：M1b 存储基底 + M1c 认证落地。
+- 存储基底（pool/迁移/schema）+ 加密 + 绑定 DB impl M1b 落地；配置/降权 M1b、认证 M1c。
+  会话/音频仍内存（`SessionRepo`/`AudioCache` DB/文件系统 impl M1c，dev-debt T2 余部）。
 - 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前进度提取 M1c。
 - on_disconnect 当前仅 cancel（drop 即取消）；continue + detach 上限 M1c。
 - 用量计量当前仅发 Usage 事件；call_log 持久化 M1c。

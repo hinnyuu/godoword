@@ -729,5 +729,58 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-2206-m1b-storage-substrate.md",
+    "title": "M1b 存储基底 + 部署初始化实现（schema/迁移/加密/绑定/配置/降权/REST）",
+    "date": "2026-11-17T22:06+08:00",
+    "keywords": [
+      "m1b",
+      "storage",
+      "migration",
+      "encryption",
+      "master-key",
+      "binding",
+      "config",
+      "privilege-drop",
+      "entrypoint",
+      "dual-backend",
+      "rest",
+      "utoipa",
+      "dev-debt"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-17-2302-human-residual-checklist-discipline.md",
+    "title": "人工残留验收清单纪律化（M1b 验收批评触发）",
+    "date": "2026-11-17T23:02+08:00",
+    "keywords": [
+      "acceptance",
+      "human-residual",
+      "checklist",
+      "discipline",
+      "selinux",
+      "quadlet",
+      "runbook",
+      "pr"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "7"
   }
 ]

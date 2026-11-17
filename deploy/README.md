@@ -1,7 +1,7 @@
 # 部署
 
-> M0 阶段为最小 hello 服务。完整部署形态（自适应降权、卷初始化、主密钥、备份恢复、
-> 反向代理 + TLS）随 M1 落地。快速开始见 [wiki/deploy/quickstart](../wiki/deploy/quickstart.md)。
+> M1b 含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ REST/SSE。
+> 反向代理 + TLS 生产形态见下；数据/主密钥/备份恢复详见 [wiki/deploy/quickstart](../wiki/deploy/quickstart.md)。
 
 ## quadlet（rootless 推荐）
 
@@ -41,7 +41,8 @@ systemctl --user start godoword.service
 **bind mount 须先自建源目录**：podman 与 docker 不同，不会自动创建缺失的 bind 源目录
 （刻意设计，避免意外建目录与属主错乱），缺失时直接报 `statfs ...: no such file or directory`。
 故 bind mount 前先 `mkdir -p` 并保证属主为调用者；SELinux 主机加 `:Z` 标签。
-rootless 非登录用户需 `loginctl enable-linger <user>`。自适应降权 M1 落地后自动适应宿主 uid。
+rootless 非登录用户需 `loginctl enable-linger <user>`。自适应降权 M1b 已落地：rootless 保持容器 uid 0
+（文件归宿主调用者），rootful 以 /data 属主运行（属主 root 时 chown 到 1000，PUID/PGID 可覆盖）。
 
 ## 监听
 
