@@ -76,3 +76,12 @@ terms:
   - canonical: 人工残留验收
     banned: [人工冒烟]
     definition: 自动化覆盖不到、需人类判断或访问权的验收项
+  - canonical: 存储分发
+    banned: [存储抽象]
+    definition: Store enum 双具体驱动薄分发，不隐藏方言
+  - canonical: 双兼容 SQL 子集
+    banned: [双兼容SQL子集, 通用SQL子集, 双兼容子集]
+    definition: SQLite 与 PostgreSQL 双兼容的 SQL 约定子集
+  - canonical: 双后端测试
+    banned: [双数据库测试]
+    definition: CI 对 SQLite + PostgreSQL 真测（storage required check）

@@ -4,7 +4,7 @@
 LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-one，podman 优先、兼容 docker。
 
 - 许可证：AGPL-3.0（见 [LICENSE](LICENSE)）
-- 状态：M0 脚手架阶段（详见 [roadmap](docs/project/roadmap.md)）
+- 状态：M0 完成，M1 前置契约修订中（详见 [roadmap](docs/project/roadmap.md)）
 
 ## 文档入口
 

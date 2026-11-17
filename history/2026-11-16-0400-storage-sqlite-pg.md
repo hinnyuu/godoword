@@ -5,7 +5,7 @@ scope: [project, kernel]
 type: decision
 status: accepted
 supersedes: []
-superseded_by: []
+superseded_by: [2026-11-17-1231-storage-contract-c.md]
 pr: ""
 ---
 

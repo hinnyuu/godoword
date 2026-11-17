@@ -10,6 +10,7 @@ pub mod llm;
 pub mod plan;
 pub mod progress;
 pub mod session;
+pub mod store;
 pub mod teaching;
 pub mod tts;
 pub mod types;
@@ -20,6 +21,7 @@ pub use llm::{ChatChunk, ChatStream, FinishReason, LlmFeatures, LlmProvider};
 pub use plan::{LearningPlan, PlanProvider, PlanStructured};
 pub use progress::{EventKind, Outcome, PersistedEvent, ProgressEvent, ProgressInput};
 pub use session::SessionEvent;
+pub use store::Store;
 pub use teaching::{ModuleContext, ModuleStore, TeachingModule};
 pub use tts::{AudioEvent, AudioStream, TtsProvider};
 pub use types::{

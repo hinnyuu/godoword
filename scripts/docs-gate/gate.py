@@ -119,22 +119,49 @@ def check_omission(chg, mods, proj, waiver, fails):
                 fails.append("[漏改] 改动要求 history 条目，但本 PR 未新增 history/20*.md")
 
 
+def _slug(text):
+    """GitHub 风格锚点近似：小写，保留字母数字/CJK/-/_，空白转 -，去其余标点。"""
+    res = []
+    for ch in text.lower().strip():
+        if ch.isalnum() or ch in "-_":
+            res.append(ch)
+        elif ch.isspace():
+            res.append("-")
+    return "".join(res)
+
+
 def check_links(fails):
     for md in md_files():
         text = (ROOT / md).read_text(encoding="utf-8")
         for link in LINK.findall(text):
-            link = link.split("#")[0].strip()
-            if not link or link.startswith(("http://", "https://", "mailto:")):
+            if link.startswith(("http://", "https://", "mailto:")):
                 continue
-            target = (md.parent / link).resolve()
-            if not target.exists():
-                fails.append(f"[链接] {md} 断链 -> {link}")
+            path, _, anchor = link.partition("#")
+            path = path.strip()
+            if path:
+                target = (md.parent / path).resolve()
+                if not target.exists():
+                    fails.append(f"[链接] {md} 断链 -> {link}")
+                    continue
+            else:
+                target = (ROOT / md).resolve()
+            if anchor and target.is_file() and target.suffix == ".md":
+                headings = [
+                    _slug(l.lstrip("#").strip())
+                    for l in target.read_text(encoding="utf-8").splitlines()
+                    if l.startswith("#")
+                ]
+                if _slug(anchor) not in headings:
+                    fails.append(f"[链接] {md} 锚点失效 -> {link}")
 
 
 def check_glossary(fails):
     terms = load_yaml("docs/project/glossary.yaml").get("terms", [])
     banned = [(t["canonical"], b) for t in terms for b in t.get("banned", [])]
     for md in md_files():
+        # 历史正文不可变（append-only），术语检查豁免；写入时用词合规由当时门禁保证
+        if "history" in md.parts:
+            continue
         for i, line in enumerate((ROOT / md).read_text(encoding="utf-8").splitlines(), 1):
             for canonical, b in banned:
                 if b in line:

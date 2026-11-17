@@ -69,7 +69,8 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 - **人工残留验收**：仅自动化覆盖不到的项。agent 须在 PR 列出残留清单（具体命令/步骤/通过标准），
   人工 sign-off。webui 时代视觉交互、TTS 音质等必须人工。
 - **merge 前置 = 自动化冒烟绿 + 人工对残留 sign-off**。人工介入仍强制，但聚焦于真正需要人的部分。
-- 验收对象与合并对象须为同一镜像 digest。
+- 验收与合并须为**同一 tree 内容**（squash merge 保持 tree 不变）；**merge 后 CI 对 main 镜像重跑冒烟**
+  （release.yaml smoke job）。不要求同一镜像 digest（重建必生新 digest），以 same-tree + main 重测保证一致。
 
 ## agent 提交前自查
 
@@ -80,3 +81,27 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 
 重构建一律走 CI（GitHub runner）；本机 `cargo check` 为主、`CARGO_BUILD_JOBS≤2` 防 OOM。
 本机环境事实见 `devenv.md`（不入仓库）；agent 会话开始读取，环境变化时维护。
+本机双后端存储测试需 PG 容器（podman postgres:16，设 `TEST_PG_URL`）；CI storage job 自带 service。
+
+## 存储双兼容 SQL 子集（纪律➁）
+
+模块共享查询须落在 SQLite 与 PostgreSQL 双兼容 SQL 子集内，把方言点设计掉：
+
+- **uuid 主键**，应用生成 id——不用 AUTOINCREMENT/IDENTITY（灭自增方言）。
+- **时间戳应用侧生成**（`Utc::now()` 插入）——不用 DB 默认值 `now()`/`CURRENT_TIMESTAMP`（灭默认值方言）。
+- **JSON 整取回 Rust 处理**——不在 SQL 里按子字段过滤/查询（灭 `->>` vs `json_extract` 分裂）。
+- 占位符 `$1,$2…`（SQLite 由驱动翻译为 `?`）；不用 `::cast`（SQLite 把 `$1::uuid` 静默解析为命名参数）。
+- 单一 PG 风格类型名迁移集（UUID/TIMESTAMPTZ/JSONB/BOOLEAN）靠 SQLite 类型亲和性双后端通用。
+
+残余真方言点收口 kernel helper。共享代码用运行时 `query_as` + 薄分发宏；`query!` 仅驱动专属。
+**CI 真测双后端**（纪律➀，storage required check）兜底：违反子集 → 某一后端测试红，双向捕获。
+
+## 契约级变更全量审查（制度化）
+
+凡 **kernel-api 契约级变更**（trait 签名、Store 形态、协议类型、耦合版本），除机械门禁外
+**强制全量 docs+wiki 语义审查**：
+
+- 附**核对矩阵**（行=所有 docs/wiki 文件，列=本次变更事实），逐格核对"需改/已改/一致"。
+- agent 全量读所有 docs/wiki，核对每个论断符合新现实，搜剿旧表述残留（如废弃契约名、旧规则），
+  交叉核对文档间一致性，修不一致。非抽查，是全量。
+- 审查结论记一条 history。机械门禁防漏改，全量审查防**语义漂移**——两者互补。

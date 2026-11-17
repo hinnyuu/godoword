@@ -3,15 +3,16 @@ title = "godoword gitleaks"
 [extend]
 useDefault = true
 
+# 收窄豁免：保留 docs/wiki/history 目录扫描（防真实密钥误入文档），
+# 仅豁免已知占位符与 CI 测试凭据（非秘密）。
 [allowlist]
-description = "文档中的示例与占位（非真实密钥）"
+description = "占位符与 CI 测试凭据（非真实密钥）"
 paths = [
-  '''docs/''',
-  '''wiki/''',
-  '''history/''',
   '''Cargo.lock''',
 ]
 regexes = [
   '''gho_\*+''',
   '''GODOWORD_MASTER_KEY''',
+  '''postgres://postgres:postgres@''',
+  '''POSTGRES_PASSWORD: postgres''',
 ]

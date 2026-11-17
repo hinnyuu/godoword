@@ -15,12 +15,15 @@
 1. 在 `crates/` 建 crate，依赖 `kernel-api`，实现 `TeachingModule` trait。
 2. 写 `module.yaml`（id/kind/requires/session_params/frontend/impact/cross_module）。
 3. 建 `docs/`（agent 向：接口契约、内部设计）与 `wiki/`（人类向：模块是什么、怎么用）。
-4. 自有迁移放 `migrations/`，表用 `mod_<id>_*` 前缀。
+4. 自有迁移放 `migrations/`，表用 `mod_<id>_*` 前缀。SQL 须守**双兼容 SQL 子集**
+   （uuid 主键、应用侧时间戳、JSON 整取回 Rust 不在 SQL 过滤），用 `Store` 薄分发宏 +
+   运行时 `query_as`；CI 双后端测试（SQLite + PostgreSQL）兜底，违反子集某后端即红。
 5. 前端放 `web/modules/<id>/`，领域逻辑进 `web/core`（框架无关）。
 6. 在组合根 `godoword` 以 feature 注册。
 7. 登记 impact 规则（覆盖率门禁强制），过 docs-gate。
 
 模块互不 import，跨模块只经持久事件与契约接口。失败模块可整 crate 移除，不影响整体。
+改动 kernel-api 契约（trait/Store/协议类型）须走**契约级全量 docs+wiki 语义审查**（见 conventions）。
 
 ## 开发环境
 
