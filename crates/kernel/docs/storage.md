@@ -1,0 +1,73 @@
+# kernel 存储
+
+> 存储分发契约（Store enum + 薄分发宏）见 [kernel-api contract](../../kernel-api/docs/contract.md)；
+> 双兼容 SQL 子集纪律见 [conventions](../../../docs/project/conventions.md)。本文记 kernel 存储基底的当前事实（M1b）。
+
+## pool 初始化（`src/storage.rs`）
+
+- `open_sqlite(db_path)`：SQLite 文件库，**WAL 日志模式 + 外键约束启用**（`foreign_keys(true)`），
+  文件缺失自动建（`create_if_missing`），父目录自动创建，池上限 5 连接。默认路径 `/data/db/godoword.sqlite`。
+- `open_pg(url)`：PostgreSQL 外接连接串，`PgPool::connect`。
+- 两者皆包进 `kernel_api::Store` 供薄分发宏（`execute_both!` 等）跑双兼容子集。
+
+## 迁移编排（`src/migrate.rs`）
+
+sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义 runner**：
+
+- 迁移 SQL 编译期 `include_str!` 内嵌（`migrations/0001_init.sql`），单二进制、distroless 友好。
+  `KERNEL_MIGRATIONS` 为有序 `Migration{version,name,sql}` 列表；M2 教学模块迁移按注册序追加于其后。
+- 版本表 `_schema_migrations(version TEXT PK, name, checksum, applied_at TIMESTAMPTZ)`。
+- 流程：建版本表 → 读已应用 → **checksum 校验**（已应用迁移 SQL 被改 → 报错拒绝，防漂移；
+  演进须新增迁移而非改旧）→ 有待应用则**先备份** → 逐条按 `;` 切分单语句执行（DDL 幂等 IF NOT EXISTS）
+  → 记录版本 + checksum（sha256 hex）+ 应用侧时间戳。重跑无待应用则零操作（幂等）。
+- `run_migrations(store, migrations, backup_dir: Option<&Path>) -> 本次应用数`。
+
+### 迁移前备份（后端真方言点，收口备份 helper）
+
+- **SQLite**：`VACUUM INTO '/data/backups/godoword-<时间戳>.sqlite'`——WAL 下一致快照，单文件。
+  VACUUM 属管理语句，须 `sqlx::raw_sql`（exec 式）而非 `query().execute()`；文件名须字面量
+  （不接受绑定参数），路径完全受控（时间戳目录）单引号转义后内联。
+- **PostgreSQL**：运行时镜像（debian-slim）无 pg_dump，**跳过 + 告警日志**，PG 部署自备外部备份
+  （见 [wiki/deploy](../../../wiki/deploy/quickstart.md)）。
+
+## schema（`migrations/0001_init.sql`，M1b 一次性建全部表）
+
+双兼容子集：uuid 主键应用生成、时间戳应用侧（`Utc::now()`）、JSON 整取回 Rust、`$1` 占位、
+单一 PG 风格类型名（UUID/TIMESTAMPTZ/JSONB/BOOLEAN/BYTEA/TEXT/INTEGER）靠 SQLite 类型亲和性双后端通用。
+外键 `REFERENCES … ON DELETE CASCADE`（SQLite 须 pool 启用 foreign_keys，PG 默认强制）。
+M1c/M4 逻辑后续填表（前瞻），M1b 仅建表 + providers/bindings  CRUD。
+
+| 表 | 列 | 约束/说明 |
+|---|---|---|
+| users | id UUID PK, email TEXT?, display_name TEXT?, is_admin BOOL, status TEXT, created_at/updated_at TS | email 可空前瞻 M4；status active/disabled |
+| local_credentials | user_id UUID PK→users, password_hash TEXT, created_at/updated_at TS | M1c argon2；一用户一凭据 |
+| oidc_identities | id UUID PK, user_id→users, issuer TEXT, subject TEXT, created_at TS | M4 前瞻；UNIQUE(issuer,subject) |
+| providers | id UUID PK, user_id→users, adapter_id TEXT, label TEXT, base_url TEXT, **key_enc BYTEA**, extra_json JSONB?, created_at/updated_at TS | 一实例一 key；key_enc=nonce+密文+tag |
+| bindings | id UUID PK, user_id→users, **module_id TEXT（哨兵 `*`）**, capability TEXT, role TEXT, provider_id→providers, model TEXT, params_json JSONB, created_at/updated_at TS | UNIQUE(user_id,module_id,capability,role)；`*`=全模块默认 |
+| sessions | id UUID PK, user_id→users, module_id TEXT?, plan_version TEXT?, on_disconnect TEXT, params_json JSONB?, created_at/updated_at TS | module_id/plan_version 可空（M1 无模块）；on_disconnect cancel/continue |
+| messages | id UUID PK, session_id→sessions, seq INTEGER, role TEXT, content TEXT, reasoning TEXT?, tool_calls JSONB?, tool_call_id TEXT?, audio_refs JSONB?, created_at TS | UNIQUE(session_id,seq)；JSON 整取 |
+| call_log | id UUID PK, user_id→users, session_id UUID?, run_id UUID?, capability TEXT, adapter_id TEXT, model TEXT, prompt/completion/reasoning/total_tokens INTEGER?, characters INTEGER?, latency_ms INTEGER?, status TEXT, error_code TEXT?, created_at TS | M1c 计量落地 |
+| progress_events | id UUID PK, user_id→users, session_id UUID?, module_id TEXT, kind TEXT, skill_tags JSONB?, detail JSONB?, created_at TS, processed_at TS? | outbox；processed_at 空=未处理 |
+| tokens | id UUID PK, user_id UUID?→users, purpose TEXT, token_hash TEXT, expires_at TS, used_at TS?, created_at TS | 前瞻；单次（used_at） |
+| invites | id UUID PK, code_hash TEXT, max_uses INTEGER, used_count INTEGER, created_by UUID?→users(SET NULL), expires_at TS?, created_at TS | 邀请码注册 |
+
+索引：providers(user_id)、bindings(user_id)、sessions(user_id)、call_log(user_id,created_at)、
+progress_events(user_id,processed_at)、tokens(token_hash)、invites(code_hash)。
+
+**bindings 哨兵 `*`**：取代 NULL 表全模块默认——两后端 NULL 皆互不相等致 UNIQUE 失效，
+哨兵使 UNIQUE(user,module,cap,role) 正常约束、5 级 fallback 解析一致（见 [architecture](../../../docs/project/architecture.md)）。
+
+**双兼容类型映射**（双后端测试实证）：`INTEGER` ↔ Rust **i32**（PG INT4；SQLite INTEGER 亲和性可解码 i32，
+勿用 i64——PG 报 INT4/INT8 不匹配）；`COUNT(*)` ↔ i64（PG BIGINT）；`DOUBLE PRECISION` ↔ f64；
+`BOOLEAN` ↔ bool；`UUID` ↔ uuid::Uuid；`TIMESTAMPTZ` ↔ chrono::DateTime<Utc>（跨后端精度差毫秒级比较）；
+`JSONB` ↔ serde_json::Value（整取）；`BYTEA` ↔ Vec<u8>；可空列 ↔ Option<T>。
+
+## 双后端测试（`tests/storage.rs`，纪律➀）
+
+`backends()` 夹具（SQLite 恒跑 + `TEST_PG_URL` 驱动 PG，未设显式 skip）。schema 表名固定，
+故 CRUD 集中于单测试函数内顺序遍历两后端避并行竞态：
+
+- `migrations_and_schema_crud`：迁移幂等（首次 1/重跑 0）+ 版本表 + users/providers/bindings/sessions/messages
+  CRUD round-trip（uuid/bool/json/bytea/可空/timestamp）+ bindings 哨兵 `*` UNIQUE 拒绝重复。
+- `sqlite_backup_creates_file`：生产路径 `open_sqlite`（文件库）触发 VACUUM INTO 备份，断言备份文件含版本表。
+- `checksum_drift_rejected`：已应用迁移改 SQL → 拒绝（runner 逻辑，独立内存库）。

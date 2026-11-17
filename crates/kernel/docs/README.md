@@ -26,11 +26,18 @@
   + 永久测试替身；M1c DB impl。
 - `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统 `/data/cache`。
 
+## 存储基底（M1b）
+
+`src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接）+ `src/migrate.rs`（自定义双后端迁移 runner：
+版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（全部 11 表）。
+schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
+
 ## M1 简化与 roadmap 差异
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
-- 无持久化/加密/认证：M1b 存储基底 + M1c 认证落地。
+- 存储基底 M1b 落地（pool/迁移/schema）；加密 M1b、绑定 DB impl M1b、认证 M1c。
+  会话/音频仍内存（`SessionRepo`/`AudioCache` DB/文件系统 impl M1c，dev-debt T2 余部）。
 - 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前进度提取 M1c。
 - on_disconnect 当前仅 cancel（drop 即取消）；continue + detach 上限 M1c。
 - 用量计量当前仅发 Usage 事件；call_log 持久化 M1c。
