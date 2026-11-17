@@ -2,10 +2,21 @@
 
 > 适配器契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1a 骨架）
+## 当前事实（M1a-2 已实现）
 
 实现 [`kernel_api::LlmProvider`]，目标上游为 OpenAI 兼容 `/compatible-mode/v1`。
-当前为骨架 + 脱敏 fixtures，适配器实现 M1a-2 落地。
+`OpenAiProvider`（共享 reqwest 连接池，rustls-tls）：
+
+- `id()` = "llm-openai"；`features()` = tool_calling/reasoning/streaming 皆 true。
+- `list_models`：`GET {base_url}/models` → `ModelInfo`。
+- `chat_stream`：`POST {base_url}/chat/completions`（stream=true）→ SSE 归一化为 `ChatChunk` 流
+  （`src/sse.rs`：reasoning_content/content 增量、tool_calls 按 index 组装完整后一次性发、usage、finish）。
+- 错误归一化（`map_error`）：401/403→Auth、402→Quota、429→RateLimit(retry_after)、404→ModelUnavailable、
+  400 context_length→ContextLength、5xx→Network(retryable)、其余→Internal。
+- `base_url` 为 v1 根（如 `https://host/compatible-mode/v1`），适配器追加 `/models`、`/chat/completions`。
+
+测试：`src/sse.rs` 单元测试用 fixture 黄金锚定归一化（单块 + 7 字节切片跨块缓冲，83 块精确断言）；
+`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
 
 ## 脱敏 fixtures（tests/fixtures/）
 
@@ -30,5 +41,5 @@
 
 ## roadmap 差异
 
-- list_models / chat_stream / features 实现 M1a-2。
 - token 估算当前字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
+- anthropic 兼容另立 llm-anthropic 适配器（roadmap 远期）。
