@@ -119,6 +119,8 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - MySQL 存储驱动（当前 SQLite + PostgreSQL）
 - sqlx 支持 patched SQLite（libsqlite3-sys 0.39+ / SQLite 3.54）后升级，移除 cargo-deny
   对 RUSTSEC-2026-0459 的忽略（当前 sqlx 0.8/0.9 均 pin <0.38，无上游修复路径）
+- chrono unmaintained（RUSTSEC-2026-0543）风险接受跟踪：监控社区 fork/复活或 sqlx 切换
+  jiff/time，届时迁移并移除 cargo-deny 忽略（当前 sqlx 传递依赖 + 契约类型用 chrono，替换不可行）
 - 更多教学模块（卡片闯关、LLM 考官考试等）与失败模块退役
 - PWA / 移动端增强
 - E2E 自动化测试（当前单测 + fixture + 人工验收）

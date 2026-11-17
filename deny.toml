@@ -17,6 +17,9 @@ allow = [
   "BSL-1.0",
   "CC0-1.0",
   "AGPL-3.0-only",
+  # CDLA-Permissive-2.0：宽松数据许可证（无 copyleft，AGPL 兼容）。webpki-roots（reqwest
+  # rustls-tls 引入的 Mozilla CA 根证书数据包，纯数据）用此证。个案审通过（M1a）。
+  "CDLA-Permissive-2.0",
 ]
 
 [advisories]
@@ -28,6 +31,12 @@ ignore = [
   # 外部 DB 文件，攻击前提不成立。sqlx 0.8/0.9 均 pin libsqlite3-sys <0.38（无 patched 0.39）；
   # 上游支持后升级并移除此忽略（见 roadmap 远期）。风险接受决策见 history。
   "RUSTSEC-2026-0459",
+  # RUSTSEC-2026-0543：chrono 宣布 unmaintained（维护状态告警，非安全漏洞）。所有版本受影响，
+  # 无安全升级路径（官方建议 jiff/time）。sqlx-core 传递依赖 chrono，kernel-api 契约类型直接用
+  # chrono::DateTime——即便换直接 usage，sqlx 仍带 chrono 入树，替换不可行（需 sqlx 上游切换）。
+  # chrono 0.4 成熟稳定、生态海量使用；风险为未来修复可能不及时。监控社区 fork/复活，
+  # sqlx 切换或 maintained fork 出现时重审并移除此忽略（见 roadmap 远期）。风险接受决策见 history。
+  "RUSTSEC-2026-0543",
 ]
 
 [bans]

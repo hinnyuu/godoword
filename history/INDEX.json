@@ -706,5 +706,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-1844-cargo-deny-m1a-deps.md",
+    "title": "M1a 依赖合规：CDLA-Permissive-2.0 白名单 + chrono unmaintained 风险接受",
+    "date": "2026-11-17T18:44+08:00",
+    "keywords": [
+      "cargo-deny",
+      "chrono",
+      "rustsec",
+      "license",
+      "webpki-roots",
+      "cdla",
+      "risk-acceptance",
+      "m1a"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
