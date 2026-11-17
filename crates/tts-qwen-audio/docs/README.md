@@ -2,11 +2,25 @@
 
 > 适配器契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1a 骨架）
+## 当前事实（M1a-3 已实现）
 
 实现 [`kernel_api::TtsProvider`]，目标上游为 DashScope 原生
 `/api/v1/services/audio/tts/SpeechSynthesizer`（**不走 OpenAI 兼容**）。
-当前为骨架 + 脱敏 fixtures，适配器实现 M1a-3 落地。
+`QwenTtsProvider`（共享 reqwest 连接池，rustls-tls）：
+
+- `id()` = "tts-qwen-audio"；`models()` 静态目录（qwen-audio-3.0-tts-plus）。
+- `list_voices`：本网关无音色 API，返回实测可用系统音色静态目录（longanlingxin 女 / longanlufeng 男，
+  instruction/ssml/timestamps 皆支持，languages zh/en/ja）。
+- `synthesize_stream`：`POST {base_url}/api/v1/services/audio/tts/SpeechSynthesizer`
+  （`X-DashScope-SSE: enable`）→ SSE 归一化为 `AudioEvent` 流（`src/sse.rs`：Start → Words 跨帧去重 →
+  Chunk 裸 PCM → Usage → End complete 拼接）。content-type 非 event-stream 时走 URL 模式
+  （单响应 audio.url 内部下载 → `normalize_url` 合成流）。
+- 错误归一化（`map_error`）：401/403→Auth、429→RateLimit、404→ModelUnavailable、
+  InvalidApiKey/AccessDenied→Auth、Throttling/quota→Quota、5xx→Network(retryable)、其余→Internal。
+- `base_url` 为 host 根（如 `https://host`），适配器追加 DashScope 路径。
+
+测试：`src/sse.rs` 单元测试用 fixture 黄金锚定（流式单块 + 13 字节切片，7 事件精确断言含 complete=52800 字节；
+URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
 
 ## 脱敏 fixtures（tests/fixtures/）
 
@@ -33,5 +47,5 @@
 
 ## roadmap 差异
 
-- models / list_voices / synthesize_stream 实现 M1a-3。
 - 3.1 系列日语专用音色本网关不存在（roadmap 未来网关扩展）。
+- 音色目录当前静态（本网关无音色 API）；未来网关若提供 API 可改动态拉取。
