@@ -75,6 +75,6 @@ provider_presets（预设：端点+适配器+建议模型，**不含 key**）。
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
 - 存储基底（pool/迁移/schema）+ 加密 + 绑定 DB impl M1b 落地；配置/降权 M1b、认证 M1c。
   会话/音频仍内存（`SessionRepo`/`AudioCache` DB/文件系统 impl M1c，dev-debt T2 余部）。
-- 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前进度提取 M1c。
+- 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前 span 入 outbox M1c（LLM 提取报告 M2）。
 - on_disconnect 当前仅 cancel（drop 即取消）；continue + detach 上限 M1c。
 - 用量计量当前仅发 Usage 事件；call_log 持久化 M1c。

@@ -15,7 +15,7 @@ pr: ""
 
 M1c 设计决策定案（history 0329 三条目）后，音频方向 supersede 蓝图指纹 hash 假设 + 精化 0100 角色扮演分类，
 跨多文档制造真实分歧。按新触发规则（history 0329 触发规则条目，设计方向级）执行全量 docs+wiki 语义审查。
-本条目记一审结论；二审趁上下文复核（提交后）。
+本条目记一审 + 二审结论（二审趁上下文复核，提交后）。
 
 ## 决策
 
@@ -66,4 +66,9 @@ outbox kernel 哨兵/call_log）；F4 全量审查触发规则扩展（契约级
 
 仓库 docs/wiki 与 M1c 定案一致，hash-cache 旧假设残留清零，既存适配器 wiki 漂移一并修复。
 impact-map 无需改（auth-local crate M1c 实现时登记 impact 规则）。kernel-api 契约未变（contract.md 核对一致）。
-二审趁上下文复核一审盲点（提交后），结论补记。详见 [gates](../docs/project/gates.md)、[conventions](../docs/project/conventions.md)。
+
+**二审复核**（趁上下文，抓一审盲点）：发现 roadmap M1c 行 + kernel/docs 差异节"淘汰前进度提取 M1c"措辞模糊，
+可能误导 M1c agent 建 LLM 提取逻辑（实属 M2 评估模块）→ 精化为"淘汰前 span 入 outbox M1c（LLM 提取 M2）"。
+全文"提取"表述核对一致（architecture/roadmap 黄金路径皆归评估模块）。缓存默认值（TTL 30 天/容量 1GB）、
+detach 上限（4）、cookie 属性跨文档一致；核对矩阵 21 文件完整；history 链接/锚点 gate 验证通过。二审无其他分歧。
+详见 [gates](../docs/project/gates.md)、[conventions](../docs/project/conventions.md)。
