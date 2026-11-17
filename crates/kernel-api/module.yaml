@@ -8,4 +8,7 @@ impact:
   - match: "src/**"
     docs: [docs/, wiki/]
     history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
 cross_module: []

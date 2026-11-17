@@ -85,3 +85,9 @@ terms:
   - canonical: 双后端测试
     banned: [双数据库测试]
     definition: CI 对 SQLite + PostgreSQL 真测（storage required check）
+  - canonical: 入门指南
+    banned: []
+    definition: AGENTS.md，无上下文 agent 的入口地图与接续协议
+  - canonical: 交接状态
+    banned: []
+    definition: docs/project/status.md，live 工作状态（committed，随仓库走）
