@@ -57,6 +57,16 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 create/list/get/update/delete provider（update 可重加密 key）+ binding；delete provider 级联删 bindings（外键 CASCADE）。
 capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5 级 fallback + 解密 + 未配置 + CRUD + 用户隔离 + 级联）。
 
+## 配置加载（M1b）
+
+`src/config.rs` `Config`（来源轴：env > 配置文件 > 内置默认，history 0530）。配置文件 `/data/config.toml`
+（`GODOWORD_CONFIG` 可改路径），TOML + serde。字段：listen（默认 `[::]:8080`）、data_dir（默认 `/data`）、
+database_url（设则 PG，否则 SQLite `data_dir/db/godoword.sqlite`）、registration_mode（invite/open/disabled，默认 invite）、
+provider_presets（预设：端点+适配器+建议模型，**不含 key**）。env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/
+`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`。`EnvSource` trait 抽象 env 访问（无全局竞态单元测试）。
+`view()` 脱敏只读视图（GET /config）：仅暴露 database_backend 类型，**不暴露连接串凭据**。
+用户级配置（providers/bindings）仅 DB，与本轴正交；webui 不回写部署配置。单元测试 5（默认/env 覆盖/坏模式/TOML 预设/env>file）。
+
 ## M1 简化与 roadmap 差异
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；

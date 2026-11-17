@@ -4,6 +4,7 @@
 //! M1b：存储基底（pool 初始化 + 双后端迁移编排）。
 
 mod binding;
+mod config;
 mod crypto;
 mod memory;
 mod migrate;
@@ -15,6 +16,7 @@ mod speak;
 mod storage;
 
 pub use binding::DbBindingResolver;
+pub use config::{Config, ConfigView, ProviderPreset, RegistrationMode};
 pub use crypto::MasterKey;
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
