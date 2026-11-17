@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 31 条。
+共 32 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -35,3 +35,4 @@
 - [SQLite CVE 风险接受（RUSTSEC-2026-0459）](2026-11-17-1305-sqlite-cve-risk-accept.md) — 2026-11-17T13:05+08:00 · decision · accepted · scope: project, kernel · keywords: security, sqlite, cve, rustsec, cargo-deny, risk-acceptance, libsqlite3-sys
 - [M1 前置小 PR：CI 缺口闭合 + agent 交接基础设施](2026-11-17-1450-ci-gaps-handoff.md) — 2026-11-17T14:50+08:00 · decision · accepted · scope: project, kernel-api · keywords: ci, dual-backend, workspace, gitleaks, checksum, tests-coverage, handoff, agents, status
 - [M1 拆分蓝图：四子里程碑 + speak 契约落点 + 开发态回归机制](2026-11-17-1720-m1-blueprint.md) — 2026-11-17T17:20+08:00 · decision · accepted · scope: project, kernel, kernel-api · keywords: m1, milestone, split, vertical-slice, speak, contract, dev-debt, seam, acceptance
+- [M1a 垂直切片实现 + speak 契约落地 + 全量语义审查](2026-11-17-1828-m1a-vertical-slice.md) — 2026-11-17T18:28+08:00 · change · accepted · scope: project, kernel, kernel-api, llm-openai, tts-qwen-audio, godoword · keywords: m1a, vertical-slice, speak, contract, adapter, sse, audit, dev-bypass, tool-calls

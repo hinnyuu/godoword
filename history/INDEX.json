@@ -677,5 +677,34 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-1828-m1a-vertical-slice.md",
+    "title": "M1a 垂直切片实现 + speak 契约落地 + 全量语义审查",
+    "date": "2026-11-17T18:28+08:00",
+    "keywords": [
+      "m1a",
+      "vertical-slice",
+      "speak",
+      "contract",
+      "adapter",
+      "sse",
+      "audit",
+      "dev-bypass",
+      "tool-calls"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "llm-openai",
+      "tts-qwen-audio",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
