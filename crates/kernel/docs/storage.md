@@ -57,6 +57,10 @@ progress_events(user_id,processed_at)、tokens(token_hash)、invites(code_hash)�
 **bindings 哨兵 `*`**：取代 NULL 表全模块默认——两后端 NULL 皆互不相等致 UNIQUE 失效，
 哨兵使 UNIQUE(user,module,cap,role) 正常约束、5 级 fallback 解析一致（见 [architecture](../../../docs/project/architecture.md)）。
 
+**progress_events kernel 哨兵**（M1c）：kernel 生命周期事件（SessionEvicted/SessionEnded）的 module_id NOT NULL，
+而 M1 默认教师无模块（sessions.module_id 可空）→ 填 session.module_id 有则用之、无则哨兵 `kernel`
+（区别 bindings 的 `*` 全模块默认语义，表内核生命周期事件非模块归属）。见 history M1c 设计决策条目。
+
 **双兼容类型映射**（双后端测试实证）：`INTEGER` ↔ Rust **i32**（PG INT4；SQLite INTEGER 亲和性可解码 i32，
 勿用 i64——PG 报 INT4/INT8 不匹配）；`COUNT(*)` ↔ i64（PG BIGINT）；`DOUBLE PRECISION` ↔ f64；
 `BOOLEAN` ↔ bool；`UUID` ↔ uuid::Uuid；`TIMESTAMPTZ` ↔ chrono::DateTime<Utc>（跨后端精度差毫秒级比较）；

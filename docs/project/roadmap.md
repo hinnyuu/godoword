@@ -44,7 +44,7 @@
 |---|---|---|---|
 | M1a | 适配器 + 回合循环 + SSE 出声（垂直切片，无持久化/无认证/无 UI）：新 crate `llm-openai`（LlmProvider 全实现）、`tts-qwen-audio`（TtsProvider 全实现，DashScope 原生协议）、`kernel` 最小回合循环（内部接缝 + speak 规格执行 + 基础守护 + SSE）；godoword feature 注册 + 会话 REST + dev 旁路 | CI fixture 黄金 + 回合循环 mock + 守护；本地真 key 出声脚本；冒烟结构性；**无人工视觉** | 完成 |
 | M1b | kernel 存储基底 + 部署初始化（无 UI）：Store pool 初始化 + 迁移编排（自动备份）+ 完整 kernel schema + 加密（主密钥 AES-256-GCM）+ 绑定解析 DB impl + 配置加载（env>file>默认 + 预设）+ **自适应降权 + 幂等 entrypoint** + provider/binding REST + schema 前瞻 | CI 双后端迁移/CRUD/加密/绑定/配置；冒烟完整 uid/卷矩阵；人工残留 SELinux(Fedora)；**无人工视觉** | 完成（待合并） |
-| M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存 + 上下文装配/淘汰/淘汰前进度提取/outbox + call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2 + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置；godoword 认证中间件 + auth/admin REST | CI auth 流 + 会话持久化双后端 + 淘汰/outbox；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 未开始 |
+| M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存（音频默认新鲜合成 + 文件系统回放 + 缓存有界）+ 上下文装配/淘汰/淘汰前 span 入 outbox（LLM 提取 M2）+ call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2id + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置；godoword 认证中间件 + auth/admin REST | CI auth 流 + 会话持久化双后端 + 淘汰/outbox；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 未开始 |
 | M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 未开始 |
 
 依赖链 M1a → M1b → M1c → M1d（线性，每段把前段接入）。
@@ -99,7 +99,9 @@ providers（key_enc BYTEA：nonce+密文+tag）、bindings（module_id 哨兵 `*
 sessions（module_id/plan_version 可空/on_disconnect）、messages（tool_calls/audio_refs JSONB 整取/reasoning 可空）、
 call_log（tokens/characters 可空/latency_ms/status）、progress_events（skill_tags/detail JSONB 整取）、
 tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/max_uses/used_count）。
-音频缓存走文件系统 `/data/cache`（key=hash(model+voice+text+params)）+ sidecar 时间戳 JSON，可再生可丢弃不入库。
+音频缓存走文件系统 `/data/cache`（随机 AudioId + sidecar 时间戳 JSON，可再生可丢弃不入库，TTL+容量上限有界）。
+**默认新鲜合成**（每次新合成存供回放）；复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断——
+不靠指纹推断同一性，由模块权威声明）+ 静态资产（M2 模块入仓库 canonical 音频，零 TTS）。见 history 音频白名单条目。
 双兼容 SQL 子集：uuid 主键应用生成、时间戳应用侧、JSON 整取回 Rust、占位符 `$1`、key_enc BYTEA 亲和。
 
 ### REST / SSE 面（按阶段）
@@ -122,6 +124,8 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - chrono unmaintained（RUSTSEC-2026-0543）风险接受跟踪：监控社区 fork/复活或 sqlx 切换
   jiff/time，届时迁移并移除 cargo-deny 忽略（当前 sqlx 传递依赖 + 契约类型用 chrono，替换不可行）
 - 更多教学模块（卡片闯关、LLM 考官考试等）与失败模块退役
+- 角色扮演横切声音基础设施（地基 persona/binding/voice 原语 + 模块编排 + 内核角色音色档案实体；
+  音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）——M2+ 方向，见 history 角色扮演条目
 - PWA / 移动端增强
 - E2E 自动化测试（当前单测 + fixture + 人工验收）
 - mid-run 回放缓冲（若需求出现）

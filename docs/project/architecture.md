@@ -72,7 +72,10 @@ bindings(user_id, module_id, capability, role, provider_id, model, params_json)
 → (user,*,cap,default) → 未配置`（`*` 为全模块默认哨兵，取代 NULL——使 UNIQUE(user,module,cap,role)
 在两后端皆正常约束，M1b 已落地）。role ∈ default/summarizer/extractor/assessor，
 支持教师用强模型、提取/评估用便宜模型。所有上游调用经 kernel 记入 call_log（用量看板、预算警告）。
-TTS 缓存 key = hash(model+voice+text+params)，缓存音频 + 时间戳，回放不重复付费。
+音频**默认新鲜合成**（每次新合成，随机 AudioId 存供回放，缓存 TTL+容量上限有界）；复用由模块**显式白名单**
+声明稳定 key（M2，取代指纹 hash 推断——同一性由模块权威声明而非指纹推断）+ 静态资产（M2 模块入仓库）。
+角色扮演为**横切声音基础设施**（地基 persona/binding/voice 原语 + 模块编排；M2 内核角色音色档案实体；
+音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）。见 history 音频白名单/角色扮演条目。
 
 ## 数据与存储
 

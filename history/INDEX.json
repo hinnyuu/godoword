@@ -782,5 +782,143 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "7"
+  },
+  {
+    "file": "2026-11-18-0329-audio-whitelist-cache.md",
+    "title": "音频复用：显式白名单取代指纹 hash 去重",
+    "date": "2026-11-18T03:29+08:00",
+    "keywords": [
+      "audio",
+      "cache",
+      "whitelist",
+      "tts",
+      "fresh",
+      "replay",
+      "static-asset",
+      "role-play",
+      "byok",
+      "voice-cloning",
+      "eviction"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-18-0329-full-audit-trigger-rule.md",
+    "title": "全量语义审查触发规则扩展（契约级 + 设计方向级）",
+    "date": "2026-11-18T03:29+08:00",
+    "keywords": [
+      "governance",
+      "full-audit",
+      "trigger",
+      "design-direction",
+      "supersede",
+      "drift",
+      "second-review",
+      "gates",
+      "conventions"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-18-0329-m1c-design-decisions.md",
+    "title": "M1c 设计决策（会话运行时接基底 + 认证 + 管理）",
+    "date": "2026-11-18T03:29+08:00",
+    "keywords": [
+      "m1c",
+      "session",
+      "auth",
+      "runtime",
+      "continue",
+      "detach",
+      "eviction",
+      "summarize",
+      "outbox",
+      "call_log",
+      "cookie",
+      "csrf",
+      "argon2",
+      "dev-debt",
+      "dual-backend"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-18-0329-roleplay-layer.md",
+    "title": "角色扮演分层精化（横切声音基础设施）",
+    "date": "2026-11-18T03:29+08:00",
+    "keywords": [
+      "role-play",
+      "persona",
+      "voice",
+      "character",
+      "byok",
+      "voice-cloning",
+      "foundation",
+      "module",
+      "adapter"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-18-0340-m1c-design-full-audit.md",
+    "title": "M1c 设计落档全量语义审查（一审）",
+    "date": "2026-11-18T03:40+08:00",
+    "keywords": [
+      "full-audit",
+      "m1c",
+      "design-direction",
+      "reconciliation",
+      "matrix",
+      "drift",
+      "second-review"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "kernel-api",
+      "llm-openai",
+      "tts-qwen-audio"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
