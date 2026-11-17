@@ -32,6 +32,15 @@ fail() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 assert_eq() { if [ "$2" = "$3" ]; then pass "$1"; else fail "$1（期望 '$2'，实得 '$3'）"; fi; }
 assert_contains() { if echo "$2" | grep -q "$3"; then pass "$1"; else fail "$1（输出未含 '$3'）"; fi; }
 http_code() { curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$@"; }
+# 等待容器就绪（M1b 启动含迁移+备份，需充分等待；轮询 readyz 至多 30s）。
+wait_ready() {
+  local url="$1" i
+  for i in $(seq 1 30); do
+    if curl -s --max-time 2 "$url" >/dev/null 2>&1; then return 0; fi
+    sleep 1
+  done
+  return 1
+}
 
 cleanup() {
   echo "== 清理自有资源（前缀 ${TAG}）=="
@@ -62,7 +71,8 @@ sudo podman pull "$IMAGE" >/dev/null 2>&1
 
 echo "== T1 rootless + named volume（双栈/healthz/readyz/meta/config/静态//data/把守/优雅退出）=="
 as_user podman run -d --name "${TAG}-named" -p 18080:8080 -v "${TAG}-named:/data:Z" "$IMAGE" >/dev/null
-assert_eq "healthz(127.0.0.1)" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18080/healthz)"
+wait_ready http://127.0.0.1:18080/readyz
+assert_eq "healthz(127.0.0.1)" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/healthz)"
 assert_eq "healthz(localhost 双栈)" '{"status":"ok"}' "$(curl -s --max-time 8 http://localhost:18080/healthz)"
 assert_eq "readyz（存储探活）" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/readyz)"
 assert_contains "meta milestone=M1b" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/meta)" '"milestone":"M1b"'
@@ -79,13 +89,16 @@ assert_eq "sessions release 把守 503" "503" "$(http_code -X POST http://127.0.
 assert_eq "providers release 把守 503" "503" "$(http_code http://127.0.0.1:18080/api/v1/providers)"
 assert_contains "启动日志双栈 [::]" "$(as_user podman logs "${TAG}-named" 2>&1)" '[::]'
 assert_contains "启动日志降权/保持" "$(as_user podman logs "${TAG}-named" 2>&1)" 'uid 0'
+# 趁容器运行 capturing 主密钥 mtime（T4 重建复用断言用；停止后 podman exec 不可用）。
+KEY_BEFORE=$(as_user podman exec "${TAG}-named" stat -c %Y /data/keys/master.key 2>/dev/null)
 as_user podman stop "${TAG}-named" >/dev/null 2>&1
 assert_contains "优雅退出日志" "$(as_user podman logs "${TAG}-named" 2>&1)" '优雅关闭'
 
 echo "== T2 rootless + bind mount（非 1000 uid，文件归宿主调用者）=="
 as_user mkdir -p "$BIND_USER"
 as_user podman run -d --name "${TAG}-bind" -p 18081:8080 -v "${BIND_USER}:/data:Z" "$IMAGE" >/dev/null
-assert_eq "bind healthz" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18081/healthz)"
+wait_ready http://127.0.0.1:18081/readyz
+assert_eq "bind healthz" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18081/healthz)"
 assert_eq "bind 目录属主=临时用户 uid" "$SMOKE_UID" "$(stat -c %u "$BIND_USER")"
 assert_eq "bind db 文件属主=临时用户 uid（无 subuid 残留）" "$SMOKE_UID" "$(stat -c %u "$BIND_USER/db/godoword.sqlite" 2>/dev/null)"
 assert_eq "bind master.key 属主=临时用户 uid" "$SMOKE_UID" "$(stat -c %u "$BIND_USER/keys/master.key" 2>/dev/null)"
@@ -93,21 +106,23 @@ assert_eq "bind master.key 属主=临时用户 uid" "$SMOKE_UID" "$(stat -c %u "
 echo "== T3 rootful + bind mount（属主 root → chown 1000 + 降权）=="
 sudo mkdir -p "$BIND_ROOT"
 sudo podman run -d --name "${TAG}-rootful" -p 18082:8080 -v "${BIND_ROOT}:/data:Z" "$IMAGE" >/dev/null
-assert_eq "rootful healthz" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18082/healthz)"
+wait_ready http://127.0.0.1:18082/readyz
+assert_eq "rootful healthz" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18082/healthz)"
 assert_eq "rootful bind 降权后属主=1000" "1000" "$(stat -c %u "$BIND_ROOT/db/godoword.sqlite" 2>/dev/null)"
 assert_contains "rootful 降权日志" "$(sudo podman logs "${TAG}-rootful" 2>&1)" '降权 → uid 1000'
 
 echo "== T3b rootful + named volume（属主 root → chown 1000 + 降权）=="
 sudo podman run -d --name "${TAG}-rootnamed" -p 18083:8080 -v "${TAG}-rootnamed:/data:Z" "$IMAGE" >/dev/null
-assert_eq "rootful named healthz" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18083/healthz)"
+wait_ready http://127.0.0.1:18083/readyz
+assert_eq "rootful named healthz" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18083/healthz)"
 assert_eq "rootful named master.key 属主=1000" "1000" "$(sudo podman exec "${TAG}-rootnamed" stat -c %u /data/keys/master.key 2>/dev/null)"
 
 echo "== T4 删容器重建（named volume 数据存活，主密钥复用）=="
-KEY_BEFORE=$(as_user podman exec "${TAG}-named" stat -c %Y /data/keys/master.key 2>/dev/null)
 as_user podman rm -f "${TAG}-named" >/dev/null 2>&1
 as_user podman run -d --name "${TAG}-named" -p 18080:8080 -v "${TAG}-named:/data:Z" "$IMAGE" >/dev/null
-assert_eq "重建后 healthz" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18080/healthz)"
-assert_eq "重建后 readyz（数据存活）" '{"status":"ok"}' "$(curl -s --max-time 8 --retry 5 --retry-delay 1 --retry-connrefused http://127.0.0.1:18080/readyz)"
+wait_ready http://127.0.0.1:18080/readyz
+assert_eq "重建后 healthz" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/healthz)"
+assert_eq "重建后 readyz（数据存活）" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/readyz)"
 KEY_AFTER=$(as_user podman exec "${TAG}-named" stat -c %Y /data/keys/master.key 2>/dev/null)
 assert_eq "重建后主密钥复用（mtime 不变）" "$KEY_BEFORE" "$KEY_AFTER"
 assert_contains "重建后 0 迁移（幂等）" "$(as_user podman logs "${TAG}-named" 2>&1)" '本次应用迁移 0 条'
