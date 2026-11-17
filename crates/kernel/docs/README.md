@@ -45,11 +45,23 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 - 丢卷=密钥永久不可解；备份卷=备份一切含密钥（wiki/deploy 须明示）。信封加密/轮换留远期。
 - 测试：`src/crypto.rs` 单元（round-trip/nonce 唯一/篡改/错密钥/hex 解析）+ `tests/crypto.rs`（文件生成 0600/幂等/坏长度）。
 
+## 绑定解析与仓储（M1b）
+
+`src/binding.rs` `DbBindingResolver`（实现 `BindingResolver` 接缝，**M1b 生产路径**，替换 M1a env 旁路）：
+5 级 fallback `(user,module,cap,role) → (user,module,cap,default) → (user,*,cap,role) → (user,*,cap,default)
+→ 未配置`；module 为 None（M1 无模块）时直接从 `*` 级起；哨兵 `*` 表全模块默认。命中后读 provider 密文
+→ `MasterKey` 解密 → `ProviderConn{base_url, api_key:SecretString, extra}` + model + params。注入 `Arc<Store>` + `Arc<MasterKey>`。
+
+`src/repo.rs` providers/bindings 仓储 CRUD（供 REST）：`Provider`/`Binding` 域类型（sqlx::FromRow + Serialize，
+**不含 key**——key 经 MasterKey 加密存 key_enc BYTEA，绝不以明文返回）。所有查询按 user_id scoped（多用户隔离）。
+create/list/get/update/delete provider（update 可重加密 key）+ binding；delete provider 级联删 bindings（外键 CASCADE）。
+capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5 级 fallback + 解密 + 未配置 + CRUD + 用户隔离 + 级联）。
+
 ## M1 简化与 roadmap 差异
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
-- 存储基底 M1b 落地（pool/迁移/schema）；加密 M1b、绑定 DB impl M1b、认证 M1c。
+- 存储基底（pool/迁移/schema）+ 加密 + 绑定 DB impl M1b 落地；配置/降权 M1b、认证 M1c。
   会话/音频仍内存（`SessionRepo`/`AudioCache` DB/文件系统 impl M1c，dev-debt T2 余部）。
 - 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前进度提取 M1c。
 - on_disconnect 当前仅 cancel（drop 即取消）；continue + detach 上限 M1c。
