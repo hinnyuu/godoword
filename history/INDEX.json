@@ -651,5 +651,31 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-17-1720-m1-blueprint.md",
+    "title": "M1 拆分蓝图：四子里程碑 + speak 契约落点 + 开发态回归机制",
+    "date": "2026-11-17T17:20+08:00",
+    "keywords": [
+      "m1",
+      "milestone",
+      "split",
+      "vertical-slice",
+      "speak",
+      "contract",
+      "dev-debt",
+      "seam",
+      "acceptance"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
