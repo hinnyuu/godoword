@@ -80,7 +80,9 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 ## 开发环境
 
 重构建一律走 CI（GitHub runner）；本机 `cargo check` 为主、`CARGO_BUILD_JOBS≤2` 防 OOM。
-本机环境事实见 `devenv.md`（不入仓库）；agent 会话开始读取，环境变化时维护。
+本机环境事实见 `devenv.md`（不入仓库，gitignored）。**不存在时**（新机器 clone）agent 探测本机环境
+（硬件/OS/安全模块/容器运行时/工具链/网络可达性/资源约束）并创建；**存在时**会话开始读取、环境变化时维护、
+每次核验更新 verified 时间戳。严禁写入密钥值（只记路径），严禁提交。
 本机双后端存储测试需 PG 容器（podman postgres:16，设 `TEST_PG_URL`）；CI storage job 自带 service。
 
 ## 存储双兼容 SQL 子集（纪律➁）

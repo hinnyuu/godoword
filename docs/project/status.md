@@ -3,7 +3,7 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-17T14:47+08:00
+- verified: 2026-11-17T16:12+08:00
 - 当前里程碑: M1 前置小 PR（CI 缺口闭合 + agent 交接基础设施）
 - 主线: M0 完成（51d16c3）→ M1 前置存储契约 C 完成（bf952a3）→ 本小 PR 进行中
 
@@ -18,8 +18,10 @@
 
 ## in-flight
 
-- 本小 PR：§1 双后端兜底扩 workspace 级 + §2 gate 纳入 tests/ + §3 gitleaks 校验和
-  + agent 交接基础设施（AGENTS.md + status.md + gate 新鲜度）。
+- 本小 PR（PR #3）：§1 双后端 workspace 级 + §2 gate 纳入 tests/ + §3 gitleaks 校验和
+  + agent 交接基础设施（AGENTS.md + status.md + gate 新鲜度）。CI 七项全绿，**待用户 sign-off → merge**。
+- 已修 CI 暴露的两真问题：gate 模块 docs crate 相对解析 bug（§2 暴露）+ gitleaks 校验和文件名；
+  AGENTS.md 补 devenv.md 缺失时探测创建规则（新机器 clone 场景）。
 
 ## blocked / 待拍板决策
 
