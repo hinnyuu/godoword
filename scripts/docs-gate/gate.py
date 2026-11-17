@@ -92,19 +92,25 @@ def check_omission(chg, mods, proj, waiver, fails):
     required_targets = set()
     history_required = False
     for f in chg:
-        matched = []
+        # 项目规则：docs 目标为项目根相对
         if f.startswith(PROJECT_PREFIXES):
-            matched += [r for r in proj if fnmatch.fnmatch(f, r["match"])]
+            for r in proj:
+                if fnmatch.fnmatch(f, r["match"]):
+                    for d in r.get("docs", []):
+                        required_targets.add(d)
+                    if r.get("history") == "required":
+                        history_required = True
+        # 模块规则：docs 目标为 crate 相对（crates/<name>/docs/、wiki/）
         m = re.match(r"crates/([^/]+)/(src|tests)/", f)
         if m and m.group(1) in mods:
             crate = m.group(1)
             rel = f[len(f"crates/{crate}/"):]
-            matched += [r for r in mods[crate] if fnmatch.fnmatch(rel, r["match"])]
-        for r in matched:
-            for d in r.get("docs", []):
-                required_targets.add(d)
-            if r.get("history") == "required":
-                history_required = True
+            for r in mods[crate]:
+                if fnmatch.fnmatch(rel, r["match"]):
+                    for d in r.get("docs", []):
+                        required_targets.add(f"crates/{crate}/{d}")
+                    if r.get("history") == "required":
+                        history_required = True
     for t in sorted(required_targets):
         if not target_satisfied(t, changed_set):
             if waiver:

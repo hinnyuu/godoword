@@ -9,6 +9,6 @@ impact:
     docs: [docs/, wiki/]
     history: required
   - match: "tests/**"
-    docs: [docs/, wiki/]
+    docs: [docs/]
     history: required
 cross_module: []

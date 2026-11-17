@@ -25,7 +25,9 @@
   表前缀约定 `mod_<id>_*`。薄分发宏 `execute_both!` / `fetch_one_both!` / `fetch_optional_both!` /
   `fetch_all_both!` + 运行时 `query_as` 跑双兼容 SQL 子集；`query!` 仅驱动专属代码。
 - **双兼容 SQL 子集**：uuid 主键、应用侧时间戳、JSON 整取回 Rust（不在 SQL 过滤）；
-  单一 PG 风格迁移集靠 SQLite 亲和性双后端通用。CI `storage` job 真测双后端（required check）。
+  单一 PG 风格迁移集靠 SQLite 亲和性双后端通用。CI `storage` job 跑 **workspace 级**
+  `cargo test --workspace`（设 `TEST_PG_URL`）真测双后端（required check）；含共享 SQL 的 crate
+  走 `backends()` 夹具（SQLite 恒跑 + PG 由 `TEST_PG_URL` 驱动，未设时显式 skip）。
 - `SessionEvent` 为后端→前端 SSE 协议（tag=event, content=data），回合内全序。
 - `ProgressEvent` 为持久 outbox 信封；SessionEvicted 的 span 存于 detail。
 - `speak` 工具规格由 kernel 定义并经 TtsProvider 执行，教学模块不实现 speak。
