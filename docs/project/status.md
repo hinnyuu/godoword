@@ -27,7 +27,8 @@
 
 - M1b（分支 feat/m1b-storage-substrate，单 PR 多 commit）：kernel 存储基底 + 部署初始化。
   本会话已完整探索项目 + 与用户对齐全部 M1b 设计决策（见下「M1b 决策定案」），按 6 phase 推进。
-  当前 phase 1：kernel schema + 自定义双后端迁移 runner + 双后端测试。
+  已完成 phase 1（schema + 双后端迁移 runner + 备份，双后端测试绿）+ phase 2（主密钥 + AES-256-GCM，测试绿）。
+  当前 phase 3：绑定解析 DB impl + 解密。
 
 ## blocked / 待拍板决策
 

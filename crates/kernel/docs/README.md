@@ -32,6 +32,19 @@
 版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（全部 11 表）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
 
+## 加密（M1b）
+
+`src/crypto.rs` `MasterKey`：主密钥静态加密用户 API key（BYOK）。威胁模型防静态泄露（DB 备份/卷快照外流），
+不防运行中服务器被攻破（history 0500）。
+
+- 加载：env `GODOWORD_MASTER_KEY`（hex 64 字符，长度/格式错误 fail-fast）覆盖优先；否则读
+  `/data/keys/master.key`（raw 32 字节），缺失则 `rand` OsRng 自动生成（unix `create_new` + mode 0600，
+  避免世界可读窗口）。幂等：再加载读同一文件。Debug 脱敏。
+- AES-256-GCM（`aes-gcm`），**每记录独立随机 nonce**。密文 blob = `nonce(12) + 密文 + tag(16)`。
+  解密 GCM 认证失败（密钥错/篡改）→ 错误。providers.key_enc BYTEA 存此 blob。
+- 丢卷=密钥永久不可解；备份卷=备份一切含密钥（wiki/deploy 须明示）。信封加密/轮换留远期。
+- 测试：`src/crypto.rs` 单元（round-trip/nonce 唯一/篡改/错密钥/hex 解析）+ `tests/crypto.rs`（文件生成 0600/幂等/坏长度）。
+
 ## M1 简化与 roadmap 差异
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；

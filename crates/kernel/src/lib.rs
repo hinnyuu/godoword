@@ -3,6 +3,7 @@
 //! M1a：最小回合循环 + 内部接缝内存 impl + 默认教师 persona（无教学模块）。
 //! M1b：存储基底（pool 初始化 + 双后端迁移编排）。
 
+mod crypto;
 mod memory;
 mod migrate;
 mod persona;
@@ -11,6 +12,7 @@ mod seam;
 mod speak;
 mod storage;
 
+pub use crypto::MasterKey;
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
 pub use persona::DEFAULT_TEACHER_PERSONA;
