@@ -1,0 +1,14 @@
+id: kernel
+name: 内核
+version: 0.0.0
+kind: kernel
+description: 回合循环、会话、绑定解析、speak 执行、加密、存储编排、事件 outbox、用量计量
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
+cross_module:
+  - kernel-api

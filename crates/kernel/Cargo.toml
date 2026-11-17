@@ -1,0 +1,24 @@
+[package]
+name = "kernel"
+description = "godoword 内核实现：回合循环、会话、绑定解析、speak 执行、事件 outbox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kernel-api.workspace = true
+async-stream.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+bytes.workspace = true
+futures-core.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+secrecy.workspace = true
