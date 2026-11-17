@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 35 条。
+共 40 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -39,3 +39,8 @@
 - [M1a 依赖合规：CDLA-Permissive-2.0 白名单 + chrono unmaintained 风险接受](2026-11-17-1844-cargo-deny-m1a-deps.md) — 2026-11-17T18:44+08:00 · decision · accepted · scope: project · keywords: cargo-deny, chrono, rustsec, license, webpki-roots, cdla, risk-acceptance, m1a
 - [M1b 存储基底 + 部署初始化实现（schema/迁移/加密/绑定/配置/降权/REST）](2026-11-17-2206-m1b-storage-substrate.md) — 2026-11-17T22:06+08:00 · change · accepted · scope: project, kernel, godoword · keywords: m1b, storage, migration, encryption, master-key, binding, config, privilege-drop, entrypoint, dual-backend, rest, utoipa, dev-debt
 - [人工残留验收清单纪律化（M1b 验收批评触发）](2026-11-17-2302-human-residual-checklist-discipline.md) — 2026-11-17T23:02+08:00 · decision · accepted · scope: project · keywords: acceptance, human-residual, checklist, discipline, selinux, quadlet, runbook, pr
+- [音频复用：显式白名单取代指纹 hash 去重](2026-11-18-0329-audio-whitelist-cache.md) — 2026-11-18T03:29+08:00 · decision · accepted · scope: project, kernel, kernel-api · keywords: audio, cache, whitelist, tts, fresh, replay, static-asset, role-play, byok, voice-cloning, eviction
+- [全量语义审查触发规则扩展（契约级 + 设计方向级）](2026-11-18-0329-full-audit-trigger-rule.md) — 2026-11-18T03:29+08:00 · decision · accepted · scope: project · keywords: governance, full-audit, trigger, design-direction, supersede, drift, second-review, gates, conventions
+- [M1c 设计决策（会话运行时接基底 + 认证 + 管理）](2026-11-18-0329-m1c-design-decisions.md) — 2026-11-18T03:29+08:00 · decision · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, session, auth, runtime, continue, detach, eviction, summarize, outbox, call_log, cookie, csrf, argon2, dev-debt, dual-backend
+- [角色扮演分层精化（横切声音基础设施）](2026-11-18-0329-roleplay-layer.md) — 2026-11-18T03:29+08:00 · decision · accepted · scope: project, kernel, kernel-api · keywords: role-play, persona, voice, character, byok, voice-cloning, foundation, module, adapter
+- [M1c 设计落档全量语义审查（一审）](2026-11-18-0340-m1c-design-full-audit.md) — 2026-11-18T03:40+08:00 · change · accepted · scope: project, kernel, godoword, kernel-api, llm-openai, tts-qwen-audio · keywords: full-audit, m1c, design-direction, reconciliation, matrix, drift, second-review
