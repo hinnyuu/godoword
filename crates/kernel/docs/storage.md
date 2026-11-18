@@ -30,12 +30,12 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 - **PostgreSQL**：运行时镜像（debian-slim）无 pg_dump，**跳过 + 告警日志**，PG 部署自备外部备份
   （见 [wiki/deploy](../../../wiki/deploy/quickstart.md)）。
 
-## schema（`migrations/0001_init.sql` + `0002_auth.sql`）
+## schema（`migrations/0001_init.sql` + `0002_auth.sql` + `0003_eviction_watermark.sql`）
 
 双兼容子集：uuid 主键应用生成、时间戳应用侧（`Utc::now()`）、JSON 整取回 Rust、`$1` 占位、
 单一 PG 风格类型名（UUID/TIMESTAMPTZ/JSONB/BOOLEAN/BYTEA/TEXT/INTEGER）靠 SQLite 类型亲和性双后端通用。
 外键 `REFERENCES … ON DELETE CASCADE`（SQLite 须 pool 启用 foreign_keys，PG 默认强制）。
-0001（M1b）建 11 表；0002（M1c）增 users.username + auth_sessions。M4 oidc 前瞻。
+0001（M1b）建 11 表；0002（M1c）增 users.username + auth_sessions；0003（M1c-hardening C7）增 sessions.summary + evicted_up_to。M4 oidc 前瞻。
 
 | 表 | 列 | 约束/说明 |
 |---|---|---|
@@ -44,11 +44,11 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 | oidc_identities | id UUID PK, user_id→users, issuer TEXT, subject TEXT, created_at TS | M4 前瞻；UNIQUE(issuer,subject) |
 | providers | id UUID PK, user_id→users, adapter_id TEXT, label TEXT, base_url TEXT, **key_enc BYTEA**, extra_json JSONB?, created_at/updated_at TS | 一实例一 key；key_enc=nonce+密文+tag |
 | bindings | id UUID PK, user_id→users, **module_id TEXT（哨兵 `*`）**, capability TEXT, role TEXT, provider_id→providers, model TEXT, params_json JSONB, created_at/updated_at TS | UNIQUE(user_id,module_id,capability,role)；`*`=全模块默认 |
-| sessions | id UUID PK, user_id→users, module_id TEXT?, plan_version TEXT?, on_disconnect TEXT, params_json JSONB?, created_at/updated_at TS | module_id/plan_version 可空（M1 无模块）；on_disconnect cancel/continue |
+| sessions | id UUID PK, user_id→users, module_id TEXT?, plan_version TEXT?, on_disconnect TEXT, params_json JSONB?, **summary TEXT?（0003）**, **evicted_up_to INTEGER?（0003）**, created_at/updated_at TS | module_id/plan_version 可空；on_disconnect cancel/continue；**summary 滚动摘要 + evicted_up_to 淘汰水位（C7）** |
 | messages | id UUID PK, session_id→sessions, seq INTEGER, role TEXT, content TEXT, reasoning TEXT?, tool_calls JSONB?, tool_call_id TEXT?, audio_refs JSONB?, created_at TS | UNIQUE(session_id,seq)；JSON 整取 |
 | call_log | id UUID PK, user_id→users, session_id UUID?, run_id UUID?, capability TEXT, adapter_id TEXT, model TEXT, prompt/completion/reasoning/total_tokens INTEGER?, characters INTEGER?, latency_ms INTEGER?, status TEXT, error_code TEXT?, created_at TS | M1c 计量落地 |
 | progress_events | id UUID PK, user_id→users, session_id UUID?, module_id TEXT, kind TEXT, skill_tags JSONB?, detail JSONB?, created_at TS, processed_at TS? | outbox；processed_at 空=未处理 |
-| tokens | id UUID PK, user_id UUID?→users, purpose TEXT, token_hash TEXT, expires_at TS, used_at TS?, created_at TS | 前瞻；单次（used_at） |
+| tokens | id UUID PK, user_id UUID?→users, purpose TEXT, token_hash TEXT, expires_at TS, used_at TS?, created_at TS | 单次（used_at）；**M1c-hardening C8 密码重置 purpose=password_reset** |
 | invites | id UUID PK, code_hash TEXT, max_uses INTEGER, used_count INTEGER, created_by UUID?→users(SET NULL), expires_at TS?, created_at TS | 邀请码注册 |
 | auth_sessions | id UUID PK, user_id→users CASCADE, token_hash TEXT, expires_at TS, created_at TS | **0002（M1c）** cookie 会话令牌（opaque token sha256，可撤销），与单次 tokens 分离 |
 

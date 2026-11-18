@@ -1,7 +1,7 @@
 //! godoword 内核实现。回合循环、会话、绑定解析、speak 执行。
 //! 适配器与教学模块只依赖 kernel-api；本 crate 实现内核服务（依赖倒置）。
-//! M1a：最小回合循环 + 内部接缝内存 impl + 默认教师 persona（无教学模块）。
-//! M1b：存储基底（pool 初始化 + 双后端迁移编排）。
+//! M1a：最小回合循环 + 内部接缝 + 默认教师 persona。M1b：存储基底（pool + 双后端迁移）。
+//! M1c：会话/音频持久化 + 上下文淘汰 + outbox/call_log + continue。M1c-hardening：对象级授权 + 失败关闭 + 硬边界 + 水位制。
 
 mod audio;
 mod binding;
@@ -41,4 +41,4 @@ pub use seam::{
     SessionRepo, StoredMessage,
 };
 pub use session::DbSessions;
-pub use storage::{open_pg, open_sqlite, ping};
+pub use storage::{checkpoint, open_pg, open_sqlite, ping};

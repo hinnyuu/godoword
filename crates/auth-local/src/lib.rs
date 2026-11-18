@@ -10,8 +10,8 @@ use argon2::Argon2;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use kernel_api::{
-    execute_both, fetch_all_both, fetch_optional_both, AuthError, AuthKind, AuthOutcome,
-    AuthProvider, AuthRequest, Store, UserId,
+    execute_both, fetch_all_both, fetch_one_both, fetch_optional_both, AuthError, AuthKind,
+    AuthOutcome, AuthProvider, AuthRequest, Store, UserId,
 };
 use secrecy::ExposeSecret;
 use sha2::{Digest, Sha256};
@@ -304,18 +304,30 @@ pub async fn create_session(
     Ok(token)
 }
 
-/// 校验会话令牌（未过期 → user_id；否则 None）。
+/// 校验会话令牌（未过期 **且账户 active** → user_id；否则 None。审计 C3：禁用账户旧 cookie 失效）。
 pub async fn validate_session(store: &Store, token: &str) -> Result<Option<UserId>, AuthError> {
     let now = Utc::now();
     let row: Option<(Uuid,)> = fetch_optional_both!(
         store,
-        "SELECT user_id FROM auth_sessions WHERE token_hash = $1 AND expires_at > $2",
+        "SELECT s.user_id FROM auth_sessions s JOIN users u ON s.user_id = u.id
+         WHERE s.token_hash = $1 AND s.expires_at > $2 AND u.status = 'active'",
         (Uuid,),
         token_hash(token),
         now
     )
     .map_err(internal)?;
     Ok(row.map(|(id,)| UserId(id)))
+}
+
+/// 撤销用户全部会话（禁用/重置密码时用，审计 C3）。
+pub async fn revoke_user_sessions(store: &Store, user: UserId) -> Result<(), AuthError> {
+    execute_both!(
+        store,
+        "DELETE FROM auth_sessions WHERE user_id = $1",
+        user.0
+    )
+    .map_err(internal)?;
+    Ok(())
 }
 
 /// 删除会话令牌（登出）。
@@ -386,7 +398,7 @@ pub async fn get_user(store: &Store, user: UserId) -> Result<Option<UserInfo>, A
     .map_err(internal)
 }
 
-/// 设用户状态（active/disabled，管理员用）。
+/// 设用户状态（active/disabled，管理员用）。禁用时撤销全部会话（审计 C3）。
 pub async fn set_user_status(store: &Store, user: UserId, status: &str) -> Result<bool, AuthError> {
     let n = execute_both!(
         store,
@@ -396,14 +408,17 @@ pub async fn set_user_status(store: &Store, user: UserId, status: &str) -> Resul
         user.0
     )
     .map_err(internal)?;
+    if n > 0 && status != "active" {
+        revoke_user_sessions(store, user).await?;
+    }
     Ok(n > 0)
 }
 
-/// 是否管理员。
+/// 是否管理员（须 active；禁用管理员旧 cookie 不通过 AdminUser，审计 C3）。
 pub async fn is_admin(store: &Store, user: UserId) -> Result<bool, AuthError> {
     let row: Option<(bool,)> = fetch_optional_both!(
         store,
-        "SELECT is_admin FROM users WHERE id = $1",
+        "SELECT is_admin FROM users WHERE id = $1 AND status = 'active'",
         (bool,),
         user.0
     )
@@ -411,7 +426,19 @@ pub async fn is_admin(store: &Store, user: UserId) -> Result<bool, AuthError> {
     Ok(row.map(|(a,)| a).unwrap_or(false))
 }
 
-/// 管理员重置用户密码（直接设新密码哈希；管理员权限由组合根校验）。
+/// 活跃管理员数量（防禁用最后一个管理员致系统失管，审计 C3）。
+pub async fn active_admin_count(store: &Store) -> Result<i64, AuthError> {
+    let row: (i64,) = fetch_one_both!(
+        store,
+        "SELECT COUNT(*) FROM users WHERE is_admin = $1 AND status = 'active'",
+        (i64,),
+        true
+    )
+    .map_err(internal)?;
+    Ok(row.0)
+}
+
+/// 管理员重置用户密码（设新密码哈希 + 撤销旧会话；管理员权限由组合根校验。token 化见 C8/H2）。
 pub async fn admin_reset_password(
     store: &Store,
     target: UserId,
@@ -427,7 +454,64 @@ pub async fn admin_reset_password(
         target.0
     )
     .map_err(internal)?;
+    if n > 0 {
+        revoke_user_sessions(store, target).await?;
+    }
     Ok(n > 0)
+}
+
+/// 管理员生成密码重置令牌（tokens 表 purpose=password_reset，单次，1h 过期；审计 C8 token 化）。
+/// 管理员不直接知晓用户新密码——用户持令牌自行重置。
+pub async fn create_reset_token(store: &Store, target: UserId) -> Result<String, AuthError> {
+    let token = generate_token();
+    let now = Utc::now();
+    let expires = now + Duration::hours(1);
+    execute_both!(
+        store,
+        "INSERT INTO tokens (id, user_id, purpose, token_hash, expires_at, used_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        Uuid::new_v4(),
+        target.0,
+        "password_reset",
+        token_hash(&token),
+        expires,
+        Option::<DateTime<Utc>>::None,
+        now
+    )
+    .map_err(internal)?;
+    Ok(token)
+}
+
+/// 用户持重置令牌设新密码（校验单次/过期 → 设密码 + 撤销旧会话 + 标记令牌已用）。
+pub async fn reset_with_token(
+    store: &Store,
+    token: &str,
+    new_password: &str,
+) -> Result<bool, AuthError> {
+    let now = Utc::now();
+    let row: Option<(Uuid, Uuid)> = fetch_optional_both!(
+        store,
+        "SELECT id, user_id FROM tokens WHERE token_hash = $1 AND purpose = 'password_reset'
+         AND used_at IS NULL AND expires_at > $2",
+        (Uuid, Uuid),
+        token_hash(token),
+        now
+    )
+    .map_err(internal)?;
+    let Some((token_id, user_id)) = row else {
+        return Ok(false);
+    };
+    if !admin_reset_password(store, UserId(user_id), new_password).await? {
+        return Ok(false);
+    }
+    execute_both!(
+        store,
+        "UPDATE tokens SET used_at = $1 WHERE id = $2",
+        now,
+        token_id
+    )
+    .map_err(internal)?;
+    Ok(true)
 }
 
 #[async_trait]

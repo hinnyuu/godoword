@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::extract::{FromRequestParts, State};
+use axum::extract::{ConnectInfo, FromRequestParts, Path, State};
 use axum::http::{header, request::Parts, HeaderMap, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -156,10 +156,16 @@ pub struct LoginReq {
     pub password: String,
 }
 
-/// 管理员重置密码请求。
+/// 管理员发起密码重置请求（生成重置令牌，审计 C8 token 化）。
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct ResetReq {
     pub user_id: Uuid,
+}
+
+/// 用户持令牌重置密码请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct ResetPasswordReq {
+    pub token: String,
     pub new_password: String,
 }
 
@@ -196,9 +202,12 @@ async fn user_info(store: &Store, user: UserId) -> Result<Value, StatusCode> {
     responses((status = 200, body = Value), (status = 400), (status = 403), (status = 429)))]
 pub async fn register(
     State(st): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
     Json(req): Json<RegisterReq>,
 ) -> Result<Response, StatusCode> {
-    if !st.rate_limiter.check(&format!("reg:{}", req.username)) {
+    if !st.rate_limiter.check(&format!("reg:{}", req.username))
+        || !st.rate_limiter.check(&format!("reg-ip:{}", addr.ip()))
+    {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let require_invite = match st.cfg.registration_mode {
@@ -236,9 +245,12 @@ pub async fn register(
     responses((status = 200, body = Value), (status = 401), (status = 403), (status = 429)))]
 pub async fn login(
     State(st): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
     Json(req): Json<LoginReq>,
 ) -> Result<Response, StatusCode> {
-    if !st.rate_limiter.check(&format!("login:{}", req.username)) {
+    if !st.rate_limiter.check(&format!("login:{}", req.username))
+        || !st.rate_limiter.check(&format!("login-ip:{}", addr.ip()))
+    {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
     let user = auth_local::verify_login(&st.store, &req.username, &req.password)
@@ -292,13 +304,35 @@ pub async fn admin_reset(
     AdminUser(_admin): AdminUser,
     Json(req): Json<ResetReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    let ok = auth_local::admin_reset_password(&st.store, UserId(req.user_id), &req.new_password)
+    let target = UserId(req.user_id);
+    if auth_local::get_user(&st.store, target)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .is_none()
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    // token 化（审计 C8）：管理员生成重置令牌，用户持令牌自行设新密码。
+    let token = auth_local::create_reset_token(&st.store, target)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(json!({ "reset_token": token })))
+}
+
+/// 用户持重置令牌设新密码（单次/过期校验；无需登录，令牌即凭据）。
+#[utoipa::path(post, path = "/api/v1/auth/reset-password", request_body = ResetPasswordReq, tag = "auth",
+    responses((status = 200, body = Value), (status = 400)))]
+pub async fn reset_password(
+    State(st): State<Arc<AppState>>,
+    Json(req): Json<ResetPasswordReq>,
+) -> Result<Json<Value>, StatusCode> {
+    let ok = auth_local::reset_with_token(&st.store, &req.token, &req.new_password)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if ok {
         Ok(Json(json!({ "ok": true })))
     } else {
-        Err(StatusCode::NOT_FOUND)
+        Err(StatusCode::BAD_REQUEST)
     }
 }
 
@@ -327,4 +361,51 @@ pub async fn admin_users(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(users).unwrap_or(json!([]))))
+}
+
+/// 设用户状态请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct StatusReq {
+    /// active / disabled。
+    pub status: String,
+}
+
+/// 管理员设用户状态（禁用撤销会话；防自禁/防禁最后一个管理员，审计 C3）。
+#[utoipa::path(post, path = "/api/v1/admin/users/{id}/status", request_body = StatusReq, tag = "admin",
+    params(("id" = Uuid, Path, description = "用户 id")),
+    responses((status = 200, body = Value), (status = 400), (status = 401), (status = 403), (status = 404)))]
+pub async fn admin_set_status(
+    State(st): State<Arc<AppState>>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<StatusReq>,
+) -> Result<Json<Value>, StatusCode> {
+    if req.status != "active" && req.status != "disabled" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let target = UserId(id);
+    if req.status == "disabled" {
+        if id == admin.0 {
+            return Err(StatusCode::BAD_REQUEST); // 不可禁用自己
+        }
+        if auth_local::is_admin(&st.store, target)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        {
+            let n = auth_local::active_admin_count(&st.store)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            if n <= 1 {
+                return Err(StatusCode::BAD_REQUEST); // 不可禁用最后一个活跃管理员
+            }
+        }
+    }
+    let ok = auth_local::set_user_status(&st.store, target, &req.status)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if ok {
+        Ok(Json(json!({ "ok": true })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }

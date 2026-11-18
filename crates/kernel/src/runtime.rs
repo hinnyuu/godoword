@@ -1,6 +1,6 @@
 //! 内核回合循环：解析绑定 → 装配提示词 → 流式 LLM → 发 delta → 执行 speak → 回喂 → 循环至 stop/守护上限。
 //! M1a 无教学模块：用默认教师 persona，无 plan.teacher_prompt。依赖内部接缝（零返工）。
-//! speak 音频迭代内联于循环，live 发 audio 事件（断开即取消，drop 流中止上游）。
+//! speak 音频迭代内联于循环，live 发 audio 事件。执行/投递分离（task + mpsc），断开按 on_disconnect 决策 cancel/continue。
 
 use base64::Engine;
 use bytes::Bytes;
@@ -174,7 +174,7 @@ async fn summarize_span(
     session: SessionId,
     run_id: RunId,
     evicted: &[StoredMessage],
-) -> Option<ChatMessage> {
+) -> Option<String> {
     let binding = bindings
         .resolve(user, None, Capability::Llm, Role::Summarizer)
         .await
@@ -258,9 +258,7 @@ async fn summarize_span(
     if summary.is_empty() {
         return None;
     }
-    Some(system_message(&format!(
-        " earlier conversation summary: {summary}"
-    )))
+    Some(summary)
 }
 
 fn system_message(content: &str) -> ChatMessage {
@@ -281,15 +279,15 @@ pub struct Runtime {
     sessions: Arc<dyn SessionRepo>,
     audio: Arc<dyn AudioCache>,
     store: Arc<Store>,
-    tool_cap: u32,
     turn_timeout: Duration,
     active: Arc<Mutex<HashSet<SessionId>>>,
     cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
     detach: Arc<tokio::sync::Semaphore>,
+    tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
 }
 
 impl Runtime {
-    /// 新建运行时（默认守护：工具上限 8、回合超时 120s）。store 供 call_log/outbox 计量。
+    /// 新建运行时（默认守护：回合超时 120s；工具上限取每会话 meta.params）。store 供 call_log/outbox 计量。
     pub fn new(
         llm: Arc<dyn LlmProvider>,
         tts: Arc<dyn TtsProvider>,
@@ -305,18 +303,12 @@ impl Runtime {
             sessions,
             audio,
             store,
-            tool_cap: 8,
             turn_timeout: Duration::from_secs(120),
             active: Arc::new(Mutex::new(HashSet::new())),
             cancels: Arc::new(Mutex::new(HashMap::new())),
             detach: Arc::new(tokio::sync::Semaphore::new(4)),
+            tasks: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-
-    /// 应用默认会话参数（工具上限 fallback；每会话 meta.params 优先）。
-    pub fn with_params(mut self, params: kernel_api::SessionParams) -> Self {
-        self.tool_cap = params.tool_iteration_cap;
-        self
     }
 
     /// 设置 detach 并发上限（on_disconnect=continue 断开后服务端跑完的回合数上限）。
@@ -331,6 +323,23 @@ impl Runtime {
     pub fn cancel_all(&self) {
         for flag in self.cancels.lock().unwrap().values() {
             flag.store(true, Ordering::Relaxed);
+        }
+    }
+
+    /// 优雅退出屏障（审计 C6）：置取消标志 → 有界等待 detached 任务落盘 → abort 超时者。
+    /// 调用方随后做 WAL checkpoint（SQLite）确保持久化屏障。
+    pub async fn shutdown(&self, grace: Duration) {
+        self.cancel_all();
+        let handles: Vec<tokio::task::JoinHandle<()>> =
+            std::mem::take(&mut *self.tasks.lock().unwrap());
+        let join_all = async {
+            for h in handles {
+                let _ = h.await;
+            }
+        };
+        if tokio::time::timeout(grace, join_all).await.is_err() {
+            // 超时者已在 grace 内未落盘完毕；handles 已 move，超时即放弃等待（进程随后退出）。
+            tracing::warn!("优雅退出等待 detached 任务超时（{grace:?}）");
         }
     }
 
@@ -361,42 +370,70 @@ impl Runtime {
         user_text: String,
     ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<SessionEvent>(256);
-        let exec = self.run_turn_stream(user, session, user_text);
+        let run_id = RunId::new();
+        let exec = self.run_turn_stream(user, session, user_text, run_id);
         let sessions = self.sessions.clone();
         let cancels = self.cancels.clone();
         let detach = self.detach.clone();
+        let turn_timeout = self.turn_timeout;
+        let tasks = self.tasks.clone();
 
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let mut exec = Box::pin(exec);
             let mut decided = false;
             let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
-            while let Some(ev) = exec.next().await {
-                if tx.send(ev).await.is_err() && !decided {
-                    // 客户端断开：决策一次（cancel / continue）。
-                    decided = true;
-                    let on_disc = sessions
-                        .meta(session)
-                        .await
-                        .ok()
-                        .flatten()
-                        .map(|m| m.on_disconnect)
-                        .unwrap_or_default();
-                    let mut cancel = true;
-                    if on_disc == crate::seam::OnDisconnect::Continue {
-                        if let Ok(p) = detach.clone().try_acquire_owned() {
-                            _detach_permit = Some(p);
-                            cancel = false; // continue：排空跑完
+            let poll = async {
+                while let Some(ev) = exec.next().await {
+                    if tx.send(ev).await.is_err() && !decided {
+                        // 客户端断开：决策一次（cancel / continue）。
+                        decided = true;
+                        let on_disc = sessions
+                            .meta(user, session)
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|m| m.on_disconnect)
+                            .unwrap_or_default();
+                        let mut cancel = true;
+                        if on_disc == crate::seam::OnDisconnect::Continue {
+                            if let Ok(p) = detach.clone().try_acquire_owned() {
+                                _detach_permit = Some(p);
+                                cancel = false; // continue：排空跑完
+                            }
                         }
-                    }
-                    if cancel {
-                        if let Some(flag) = cancels.lock().unwrap().get(&session) {
-                            flag.store(true, Ordering::Relaxed);
+                        if cancel {
+                            if let Some(flag) = cancels.lock().unwrap().get(&session) {
+                                flag.store(true, Ordering::Relaxed);
+                            }
                         }
                     }
                 }
+            };
+            // 硬超时（审计 C6）：超时则 exec drop 中止上游，发 timeout + RunEnd。
+            if tokio::time::timeout(turn_timeout, poll).await.is_err() {
+                let _ = tx
+                    .send(SessionEvent::Error {
+                        code: "timeout".to_string(),
+                        message: "回合硬超时".to_string(),
+                        retryable: false,
+                        action: None,
+                    })
+                    .await;
+                let _ = tx
+                    .send(SessionEvent::RunEnd {
+                        run_id,
+                        finish_reason: FinishReason::Error,
+                    })
+                    .await;
             }
             // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
         });
+        // 注册任务供退出屏障（审计 C6）；清理已完成 handle 防累积。
+        {
+            let mut g = tasks.lock().unwrap();
+            g.retain(|h| !h.is_finished());
+            g.push(handle);
+        }
 
         async_stream::stream! {
             while let Some(ev) = rx.recv().await {
@@ -411,6 +448,7 @@ impl Runtime {
         user: UserId,
         session: SessionId,
         user_text: String,
+        run_id: RunId,
     ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let llm = self.llm.clone();
         let tts = self.tts.clone();
@@ -418,13 +456,11 @@ impl Runtime {
         let sessions = self.sessions.clone();
         let audio = self.audio.clone();
         let store = self.store.clone();
-        let default_tool_cap = self.tool_cap;
         let turn_timeout = self.turn_timeout;
         let active = self.active.clone();
         let cancels = self.cancels.clone();
 
         async_stream::stream! {
-            let run_id = RunId::new();
             if !try_acquire(&active, session) {
                 yield SessionEvent::Error {
                     code: "busy".to_string(),
@@ -455,13 +491,45 @@ impl Runtime {
             };
             yield SessionEvent::RunStart { run_id, plan_version: None, model: binding.model.clone() };
 
-            let meta = sessions.meta(session).await.ok().flatten();
-            let params = meta.as_ref().map(|m| m.params.clone()).unwrap_or_default();
-            let tool_cap = meta
-                .as_ref()
-                .map(|m| m.params.tool_iteration_cap)
-                .unwrap_or(default_tool_cap);
-            let history = sessions.history_with_ids(session).await.unwrap_or_default();
+            // 归属 + 失败关闭（审计 C1/C4）：会话不存在/非本用户/DB 错误 → 中止，不调计费上游。
+            let meta = match sessions.meta(user, session).await {
+                Ok(Some(m)) => m,
+                Ok(None) => {
+                    yield SessionEvent::Error {
+                        code: "session_not_found".to_string(),
+                        message: "会话不存在或无权访问".to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+                Err(e) => {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+            };
+            let params = meta.params.clone();
+            let tool_cap = meta.params.tool_iteration_cap;
+            let history = match sessions.history_with_ids(user, session).await {
+                Ok(h) => h,
+                Err(e) => {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+            };
             let user_msg = ChatMessage {
                 role: "user".to_string(),
                 content: user_text,
@@ -469,28 +537,55 @@ impl Runtime {
                 tool_calls: None,
                 tool_call_id: None,
             };
-            let _ = sessions.append(session, user_msg.clone()).await;
-            let system = system_message(DEFAULT_TEACHER_PERSONA);
+            if let Err(e) = sessions.append(user, session, user_msg.clone()).await {
+                yield SessionEvent::Error {
+                    code: "storage".to_string(),
+                    message: e.to_string(),
+                    retryable: false,
+                    action: None,
+                };
+                yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                return;
+            }
+            // C7 水位制：仅处理 seq > evicted_up_to 的新历史；滚动摘要前置入系统提示词（杜绝重复摘要/outbox）。
+            let new_history: Vec<StoredMessage> = history
+                .into_iter()
+                .filter(|m| m.seq > meta.evicted_up_to)
+                .collect();
+            let system_content = match &meta.summary {
+                Some(s) => format!("{DEFAULT_TEACHER_PERSONA}\n\n先前对话摘要：{s}"),
+                None => DEFAULT_TEACHER_PERSONA.to_string(),
+            };
             let mut assembled = assemble_truncate(
-                system,
-                history,
+                system_message(&system_content),
+                new_history,
                 user_msg,
                 params.context_budget_tokens,
             );
-            // summarize 淘汰（opt-in）：压缩 evicted span 为摘要置历史前端，失败回退 truncate。
-            if params.eviction == kernel_api::Eviction::Summarize && !assembled.evicted.is_empty() {
-                if let Some(summary_msg) =
-                    summarize_span(&llm, &bindings, &store, user, session, run_id, &assembled.evicted)
-                        .await
-                {
-                    assembled.messages.insert(1, summary_msg);
-                }
-            }
-            // 淘汰 span 入 outbox（SessionEvicted；module_id 有则用之、无则哨兵 kernel）。
             if !assembled.evicted.is_empty() {
+                let mut rolling = meta.summary.clone();
+                // summarize 淘汰（opt-in）：压缩 evicted span 并入滚动摘要，失败回退 truncate。
+                if params.eviction == kernel_api::Eviction::Summarize {
+                    if let Some(fragment) =
+                        summarize_span(&llm, &bindings, &store, user, session, run_id, &assembled.evicted)
+                            .await
+                    {
+                        rolling = Some(match rolling {
+                            Some(old) => format!("{old}\n{fragment}"),
+                            None => fragment,
+                        });
+                    }
+                }
+                let new_watermark = assembled
+                    .evicted
+                    .iter()
+                    .map(|m| m.seq)
+                    .max()
+                    .unwrap_or(meta.evicted_up_to);
+                // 淘汰 span 入 outbox 一次（水位推进后下一回合不再重复，审计 C7）。
                 let module_id = meta
+                    .module_id
                     .as_ref()
-                    .and_then(|m| m.module_id.as_ref())
                     .map(|m| m.0.clone())
                     .unwrap_or_else(|| "kernel".to_string());
                 let ids: Vec<String> =
@@ -505,13 +600,31 @@ impl Runtime {
                     json!({ "message_ids": ids }),
                 )
                 .await;
+                if let Err(e) = sessions
+                    .update_eviction(user, session, rolling.clone(), new_watermark)
+                    .await
+                {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+                // 当前回合即用更新后的滚动摘要。
+                if let Some(s) = rolling {
+                    assembled.messages[0] =
+                        system_message(&format!("{DEFAULT_TEACHER_PERSONA}\n\n先前对话摘要：{s}"));
+                }
             }
             let mut convo = assembled.messages;
 
             let tools = vec![speak_tool_spec()];
             let mut iterations: u32 = 0;
 
-            let finish = loop {
+            let finish = 'turn: loop {
                 if cancel_flag.load(Ordering::Relaxed) {
                     break FinishReason::Cancelled;
                 }
@@ -544,16 +657,30 @@ impl Runtime {
                     extra: json!({}),
                 };
                 let llm_start = Instant::now();
-                let mut stream = match llm.chat_stream(&binding.conn, req).await {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let _ = record_call(
-                            &store,
-                            llm_call_record(user, session, run_id, &binding.model, llm.id(), llm_start, None, "error", Some(provider_error_code(&e).to_string())),
-                        )
-                        .await;
-                        yield provider_error_event(e);
-                        break FinishReason::Error;
+                // 上游重试（审计 C8）：可重试错误（限流/网络）退避重试至多 2 次。
+                let mut stream = {
+                    let mut attempt = 0u32;
+                    loop {
+                        match llm.chat_stream(&binding.conn, req.clone()).await {
+                            Ok(s) => break s,
+                            Err(e) => {
+                                let retryable = e.retryable();
+                                let will_retry =
+                                    retryable && attempt < 2 && !cancel_flag.load(Ordering::Relaxed);
+                                let _ = record_call(
+                                    &store,
+                                    llm_call_record(user, session, run_id, &binding.model, llm.id(), llm_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
+                                )
+                                .await;
+                                if will_retry {
+                                    attempt += 1;
+                                    tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
+                                    continue;
+                                }
+                                yield provider_error_event(e);
+                                break 'turn FinishReason::Error;
+                            }
+                        }
                     }
                 };
 
@@ -627,7 +754,15 @@ impl Runtime {
                     tool_call_id: None,
                 };
                 convo.push(assistant_msg.clone());
-                let _ = sessions.append(session, assistant_msg).await;
+                if let Err(e) = sessions.append(user, session, assistant_msg).await {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    break 'turn FinishReason::Error;
+                }
 
                 if chunk_finish == FinishReason::ToolCalls && !pending.is_empty() {
                     for tc in pending {
@@ -645,13 +780,31 @@ impl Runtime {
                                     let text = tts_req.text.clone();
                                     yield SessionEvent::AudioStart { audio_id, format, sample_rate };
                                     let tts_start = Instant::now();
-                                    match tts.synthesize_stream(&tts_binding.conn, tts_req).await {
+                                    // 上游重试（审计 C8）：可重试错误退避重试至多 2 次。
+                                    let tts_result = {
+                                        let mut attempt = 0u32;
+                                        loop {
+                                            match tts.synthesize_stream(&tts_binding.conn, tts_req.clone()).await {
+                                                Ok(s) => break Ok(s),
+                                                Err(e) => {
+                                                    let will_retry = e.retryable() && attempt < 2 && !cancel_flag.load(Ordering::Relaxed);
+                                                    let _ = record_call(
+                                                        &store,
+                                                        tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
+                                                    )
+                                                    .await;
+                                                    if will_retry {
+                                                        attempt += 1;
+                                                        tokio::time::sleep(Duration::from_millis(500 * attempt as u64)).await;
+                                                        continue;
+                                                    }
+                                                    break Err(e);
+                                                }
+                                            }
+                                        }
+                                    };
+                                    match tts_result {
                                         Err(e) => {
-                                            let _ = record_call(
-                                                &store,
-                                                tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, None, "error", Some(provider_error_code(&e).to_string())),
-                                            )
-                                            .await;
                                             let msg = e.to_string();
                                             yield provider_error_event(e);
                                             ToolResult {
@@ -668,6 +821,12 @@ impl Runtime {
                                             let mut tts_usage: Option<TtsUsage> = None;
                                             let mut tts_err: Option<String> = None;
                                             while let Some(item) = astream.next().await {
+                                                // TTS 流期间响应 cancel（审计 C6）。
+                                                if cancel_flag.load(Ordering::Relaxed) {
+                                                    ok = false;
+                                                    err = "cancelled".to_string();
+                                                    break;
+                                                }
                                                 let ev = match item {
                                                     Ok(e) => e,
                                                     Err(e) => {
@@ -707,6 +866,7 @@ impl Runtime {
                                                             words: words_acc.clone(),
                                                             format,
                                                             sample_rate,
+                                                            owner: user,
                                                         }).await;
                                                         yield SessionEvent::AudioEnd {
                                                             audio_id,
@@ -750,7 +910,15 @@ impl Runtime {
                             tool_call_id: Some(tc.id.clone()),
                         };
                         convo.push(tool_msg.clone());
-                        let _ = sessions.append(session, tool_msg).await;
+                        if let Err(e) = sessions.append(user, session, tool_msg).await {
+                            yield SessionEvent::Error {
+                                code: "storage".to_string(),
+                                message: e.to_string(),
+                                retryable: false,
+                                action: None,
+                            };
+                            break 'turn FinishReason::Error;
+                        }
                     }
                     continue;
                 }

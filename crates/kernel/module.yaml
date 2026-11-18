@@ -10,5 +10,8 @@ impact:
   - match: "tests/**"
     docs: [docs/]
     history: required
+  - match: "migrations/**"
+    docs: [docs/]
+    history: required
 cross_module:
   - kernel-api

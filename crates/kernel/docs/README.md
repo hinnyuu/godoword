@@ -2,19 +2,21 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1c 会话运行时接基底）
+## 当前事实（M1c + M1c-hardening 加固）
 
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
 - `Runtime`（`src/runtime.rs`）：回合循环。解析绑定 → 读会话 meta.params → 上下文装配（token 预算 + truncate/summarize 淘汰，
-  淘汰 span 入 outbox）→ 流式 LLM → 发 delta → 内联执行 speak → 回喂 → 循环至 stop/守护上限 → 持久化消息 + call_log 计量 → run-end。
+  **水位制**：仅处理 seq>evicted_up_to 新历史，滚动摘要前置，淘汰 span 入 outbox 一次）→ 流式 LLM → 发 delta → 内联执行 speak
+  → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量 → run-end。
   **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
-  （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。
-- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、回合超时（默认 120s）、
-  每会话单活跃回合锁（`ActiveGuard` 归执行体，task 结束释放）；detach semaphore 默认 4（`Config.max_detached_turns`）；`cancel_all` 优雅退出。
+  （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。**对象级授权**：sessions 全路径携带 user_id（审计 C1）。
+- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，默认 120s，审计 C6）、
+  每会话单活跃回合锁（`ActiveGuard` 归执行体）；detach semaphore 默认 4；**上游退避重试**（LLM/TTS 可重试错误 bounded 2，审计 C8）；
+  TTS 流响应 cancel；`shutdown` 退出屏障（cancel + 有界等待 detached 落盘）+ `checkpoint`（SQLite WAL，审计 C6）。
 - speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
   （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定）；音频流迭代内联于循环，
-  live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成）。
+  live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退）；
   call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
 - 错误归一化：`ProviderError` → `SessionEvent::Error`（auth/quota→action:settings、rate_limit/network 可重试等）。
@@ -25,17 +27,19 @@
 
 - `BindingResolver`：解析 (user,module,cap,role) → `ResolvedBinding{conn,model,params}`。M1a env impl 在
   godoword（dev-bypass feature）；M1b/c DB 5 级 fallback + 解密。
-- `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete。
-  **M1c `DbSessions` 生产默认**（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；`MemSessions` 降测试替身（dev-debt T2 回归）。
-  `SessionMeta{module_id,on_disconnect,params}`、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`（淘汰 span 引用消息 ID）。
-- `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统
-  `/data/cache/<id>.pcm` + sidecar（原子写，TTL+容量上限有界）。**默认新鲜合成**（随机 AudioId 存供回放）；
-  复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断）+ 静态资产（M2 模块入仓库）。见 history 音频白名单条目。
+- `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete/update_eviction，
+  **全路径携带 user_id 对象级授权**（审计 C1）+ append 失败关闭（审计 C4）。`DbSessions` 生产默认（双兼容 SQL，seq 单活跃锁内分配，级联删）；
+  `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**）、
+  `OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
+- `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
+  `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，TTL+容量有界）；`MemAudio` 测试替身。**默认新鲜合成**；
+  复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash）+ 静态资产（M2）。见 history 音频白名单条目。
 
 ## 存储基底（M1b）
 
-`src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接）+ `src/migrate.rs`（自定义双后端迁移 runner：
-版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（11 表）+ `0002_auth.sql`（users.username + auth_sessions）。
+`src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接 + `checkpoint` 退出 WAL 屏障）+ `src/migrate.rs`（自定义双后端迁移 runner：
+版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（11 表）+ `0002_auth.sql`（users.username + auth_sessions）
++ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
 
 ## 加密（M1b）
@@ -60,8 +64,9 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 
 `src/repo.rs` providers/bindings 仓储 CRUD（供 REST）：`Provider`/`Binding` 域类型（sqlx::FromRow + Serialize，
 **不含 key**——key 经 MasterKey 加密存 key_enc BYTEA，绝不以明文返回）。所有查询按 user_id scoped（多用户隔离）。
+**binding 强制 provider 同主**（create/update 入口校验 + get_provider_secret 带 user_id 解密条件，审计 C2）。
 create/list/get/update/delete provider（update 可重加密 key）+ binding；delete provider 级联删 bindings（外键 CASCADE）。
-capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5 级 fallback + 解密 + 未配置 + CRUD + 用户隔离 + 级联）。
+capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5 级 fallback + 解密 + 未配置 + CRUD + 用户隔离 + 级联 + 跨用户 provider 负例）。
 
 ## 配置加载（M1b）
 

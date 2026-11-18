@@ -2,7 +2,7 @@ id: godoword
 name: 组合根
 version: 0.0.0
 kind: root
-description: 注册模块并启动服务；M0 为最小 hello 服务
+description: 注册模块并启动服务；M1c 组合根（认证中间件 + 会话/provider/binding/auth/admin REST + SSE + 幂等 entrypoint）
 
 impact:
   - match: "src/**"

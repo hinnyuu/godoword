@@ -49,6 +49,8 @@ struct SessionRow {
     module_id: Option<String>,
     on_disconnect: String,
     params_json: Option<Value>,
+    summary: Option<String>,
+    evicted_up_to: Option<i32>,
 }
 
 /// messages 行含 id/seq（淘汰 span 引用消息 ID 用）。
@@ -77,14 +79,16 @@ impl SessionRepo for DbSessions {
             .map_err(|e| KernelError::Internal(format!("会话参数序列化失败：{e}")))?;
         execute_both!(
             &*self.store,
-            "INSERT INTO sessions (id, user_id, module_id, plan_version, on_disconnect, params_json, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            "INSERT INTO sessions (id, user_id, module_id, plan_version, on_disconnect, params_json, summary, evicted_up_to, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
             id.0,
             user.0,
             module_id,
             Option::<String>::None,
             meta.on_disconnect.as_str(),
             &params,
+            meta.summary,
+            meta.evicted_up_to,
             now,
             now
         )
@@ -92,12 +96,13 @@ impl SessionRepo for DbSessions {
         Ok(())
     }
 
-    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
+    async fn meta(&self, user: UserId, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
         let row: Option<SessionRow> = fetch_optional_both!(
             &*self.store,
-            "SELECT module_id, on_disconnect, params_json FROM sessions WHERE id = $1",
+            "SELECT module_id, on_disconnect, params_json, summary, evicted_up_to FROM sessions WHERE id = $1 AND user_id = $2",
             SessionRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(row.map(|r| SessionMeta {
@@ -107,26 +112,31 @@ impl SessionRepo for DbSessions {
                 .params_json
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default(),
+            summary: r.summary,
+            evicted_up_to: r.evicted_up_to.unwrap_or(0),
         }))
     }
 
-    async fn exists(&self, id: SessionId) -> Result<bool, KernelError> {
+    async fn exists(&self, user: UserId, id: SessionId) -> Result<bool, KernelError> {
         let row: Option<(Uuid,)> = fetch_optional_both!(
             &*self.store,
-            "SELECT id FROM sessions WHERE id = $1",
+            "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
             (Uuid,),
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(row.is_some())
     }
 
-    async fn history(&self, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
+    async fn history(&self, user: UserId, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
         let rows: Vec<MessageRow> = fetch_all_both!(
             &*self.store,
-            "SELECT role, content, reasoning, tool_calls, tool_call_id FROM messages WHERE session_id = $1 ORDER BY seq",
+            "SELECT role, content, reasoning, tool_calls, tool_call_id FROM messages
+             WHERE session_id = $1 AND session_id IN (SELECT id FROM sessions WHERE user_id = $2) ORDER BY seq",
             MessageRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(rows
@@ -141,12 +151,18 @@ impl SessionRepo for DbSessions {
             .collect())
     }
 
-    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+    async fn history_with_ids(
+        &self,
+        user: UserId,
+        id: SessionId,
+    ) -> Result<Vec<StoredMessage>, KernelError> {
         let rows: Vec<MessageIdRow> = fetch_all_both!(
             &*self.store,
-            "SELECT id, seq, role, content, reasoning, tool_calls, tool_call_id FROM messages WHERE session_id = $1 ORDER BY seq",
+            "SELECT id, seq, role, content, reasoning, tool_calls, tool_call_id FROM messages
+             WHERE session_id = $1 AND session_id IN (SELECT id FROM sessions WHERE user_id = $2) ORDER BY seq",
             MessageIdRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(rows
@@ -165,7 +181,24 @@ impl SessionRepo for DbSessions {
             .collect())
     }
 
-    async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError> {
+    async fn append(
+        &self,
+        user: UserId,
+        id: SessionId,
+        msg: ChatMessage,
+    ) -> Result<(), KernelError> {
+        // 归属校验（失败关闭，审计 C1/C4）：会话不存在或非本用户 → 错误，不写入。
+        let owned: Option<(Uuid,)> = fetch_optional_both!(
+            &*self.store,
+            "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+            (Uuid,),
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
+        if owned.is_none() {
+            return Err(KernelError::Storage(format!("会话不存在或非本用户：{id}")));
+        }
         // seq 分配：单活跃回合锁内串行，COALESCE(MAX(seq),0)+1（PG INTEGER↔i32）。
         let next: (i32,) = fetch_one_both!(
             &*self.store,
@@ -205,10 +238,35 @@ impl SessionRepo for DbSessions {
         Ok(rows.into_iter().map(|(id,)| SessionId(id)).collect())
     }
 
-    async fn delete(&self, id: SessionId) -> Result<(), KernelError> {
-        // messages 经外键 ON DELETE CASCADE 级联删。
-        execute_both!(&*self.store, "DELETE FROM sessions WHERE id = $1", id.0)
-            .map_err(storage_err)?;
+    async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError> {
+        // messages 经外键 ON DELETE CASCADE 级联删；限本用户（审计 C1）。
+        execute_both!(
+            &*self.store,
+            "DELETE FROM sessions WHERE id = $1 AND user_id = $2",
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
+        Ok(())
+    }
+
+    async fn update_eviction(
+        &self,
+        user: UserId,
+        id: SessionId,
+        summary: Option<String>,
+        evicted_up_to: i32,
+    ) -> Result<(), KernelError> {
+        execute_both!(
+            &*self.store,
+            "UPDATE sessions SET summary = $1, evicted_up_to = $2, updated_at = $3 WHERE id = $4 AND user_id = $5",
+            summary,
+            evicted_up_to,
+            Utc::now(),
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
         Ok(())
     }
 }

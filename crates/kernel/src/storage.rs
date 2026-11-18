@@ -40,3 +40,17 @@ pub async fn open_pg(url: &str) -> Result<Store, KernelError> {
         .map_err(|e| KernelError::Storage(format!("连接 PostgreSQL 失败：{e}")))?;
     Ok(Store::Pg(pool))
 }
+
+/// 优雅退出持久化屏障（审计 C6）：SQLite WAL checkpoint（TRUNCATE）确保落盘；PG 自管 WAL，无操作。
+pub async fn checkpoint(store: &Store) -> Result<(), KernelError> {
+    match store {
+        Store::Sqlite(pool) => {
+            sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+                .execute(pool)
+                .await
+                .map_err(|e| KernelError::Storage(format!("WAL checkpoint 失败：{e}")))?;
+        }
+        Store::Pg(_) => {}
+    }
+    Ok(())
+}

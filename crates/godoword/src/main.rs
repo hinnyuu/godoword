@@ -99,7 +99,8 @@ async fn main() {
         .with_detach_cap(cfg.max_detached_turns as usize),
     );
 
-    let shutdown_rt = Some(runtime.clone());
+    let shutdown_rt = runtime.clone();
+    let shutdown_store = store.clone();
     let state = Arc::new(AppState {
         sessions,
         audio,
@@ -121,10 +122,15 @@ async fn main() {
         .route("/api/v1/auth/register", post(auth::register))
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
+        .route("/api/v1/auth/reset-password", post(auth::reset_password))
         .route("/api/v1/auth/me", get(auth::me))
         .route("/api/v1/admin/reset", post(auth::admin_reset))
         .route("/api/v1/admin/invites", post(auth::admin_invite))
         .route("/api/v1/admin/users", get(auth::admin_users))
+        .route(
+            "/api/v1/admin/users/{id}/status",
+            post(auth::admin_set_status),
+        )
         .route(
             "/api/v1/sessions",
             post(rest::create_session).get(rest::list_sessions),
@@ -186,13 +192,16 @@ async fn main() {
     let local = listener.local_addr().expect("读取本地地址");
     tracing::info!("godoword M1c 监听 {local}");
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal(shutdown_rt))
-        .await
-        .expect("服务运行失败");
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal(shutdown_rt, shutdown_store))
+    .await
+    .expect("服务运行失败");
 }
 
-async fn shutdown_signal(runtime: Option<Arc<Runtime>>) {
+async fn shutdown_signal(runtime: Arc<Runtime>, store: Arc<kernel_api::Store>) {
     let ctrl_c = async {
         tokio::signal::ctrl_c().await.expect("安装 Ctrl-C 处理失败");
     };
@@ -211,7 +220,9 @@ async fn shutdown_signal(runtime: Option<Arc<Runtime>>) {
         _ = terminate => {},
     }
     tracing::info!("收到退出信号，优雅关闭");
-    if let Some(rt) = runtime {
-        rt.cancel_all();
+    // 退出屏障（审计 C6）：cancel + 有界等待 detached 落盘 + WAL checkpoint。
+    runtime.shutdown(std::time::Duration::from_secs(5)).await;
+    if let Err(e) = kernel::checkpoint(&store).await {
+        tracing::warn!("退出 WAL checkpoint 失败：{e}");
     }
 }

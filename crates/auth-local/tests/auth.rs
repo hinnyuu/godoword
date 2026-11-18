@@ -5,9 +5,9 @@
 use std::sync::Arc;
 
 use auth_local::{
-    admin_reset_password, create_invite, create_session, delete_session, hash_password, is_admin,
-    list_users, register, set_user_status, validate_session, verify_login, verify_password,
-    LocalAuth,
+    admin_reset_password, create_invite, create_reset_token, create_session, delete_session,
+    hash_password, is_admin, list_users, register, reset_with_token, set_user_status,
+    validate_session, verify_login, verify_password, LocalAuth,
 };
 use chrono::{Duration, Utc};
 use kernel::{run_migrations, KERNEL_MIGRATIONS};
@@ -146,7 +146,15 @@ async fn run_test(store: Arc<Store>) {
         "{b} 过期会话 None"
     );
 
-    // 禁用账户 → 登录 Disabled。
+    // 禁用账户 → 登录 Disabled + 旧 cookie 失效（审计 C3）。
+    let user4_token = create_session(&store, user4, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        validate_session(&store, &user4_token).await.unwrap(),
+        Some(user4),
+        "{b} 禁用前会话有效"
+    );
     assert!(
         set_user_status(&store, user4, "disabled").await.unwrap(),
         "{b} 设状态"
@@ -157,13 +165,31 @@ async fn run_test(store: Arc<Store>) {
             .is_err(),
         "{b} 禁用登录拒绝"
     );
+    assert_eq!(
+        validate_session(&store, &user4_token).await.unwrap(),
+        None,
+        "{b} 禁用后旧 cookie 失效"
+    );
 
-    // 管理员重置密码。
+    // 管理员重置密码 → 旧会话撤销（审计 C3）。
+    let user1_token = create_session(&store, user1, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        validate_session(&store, &user1_token).await.unwrap(),
+        Some(user1),
+        "{b} 重置前会话有效"
+    );
     assert!(
         admin_reset_password(&store, user1, "new-pass-12345")
             .await
             .unwrap(),
         "{b} 重置"
+    );
+    assert_eq!(
+        validate_session(&store, &user1_token).await.unwrap(),
+        None,
+        "{b} 重置后旧会话撤销"
     );
     assert!(
         verify_login(&store, "user1", "new-pass-12345")
@@ -176,6 +202,41 @@ async fn run_test(store: Arc<Store>) {
             .await
             .is_err(),
         "{b} 旧密码失效"
+    );
+
+    // 重置令牌 token 化（审计 C8）：单次使用 + 撤销旧会话。
+    let rt_token = create_reset_token(&store, user1).await.unwrap();
+    let u1_sess = create_session(&store, user1, Duration::hours(1))
+        .await
+        .unwrap();
+    assert!(
+        reset_with_token(&store, &rt_token, "token-pass-123")
+            .await
+            .unwrap(),
+        "{b} 令牌重置成功"
+    );
+    assert!(
+        verify_login(&store, "user1", "token-pass-123")
+            .await
+            .is_ok(),
+        "{b} 令牌新密码登录"
+    );
+    assert_eq!(
+        validate_session(&store, &u1_sess).await.unwrap(),
+        None,
+        "{b} 令牌重置撤销旧会话"
+    );
+    assert!(
+        !reset_with_token(&store, &rt_token, "again-pass-123")
+            .await
+            .unwrap(),
+        "{b} 令牌单次使用"
+    );
+    assert!(
+        !reset_with_token(&store, "bogus-token", "x-pass-12345")
+            .await
+            .unwrap(),
+        "{b} 无效令牌拒绝"
     );
 
     // 用户列表。
