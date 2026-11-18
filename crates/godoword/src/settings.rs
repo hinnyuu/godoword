@@ -1,8 +1,8 @@
-//! 设置 REST（M1b）：providers/bindings CRUD + models/voices 测试端点（utoipa 标注，M1d 生成 TS）。
+//! 设置 REST（M1c）：providers/bindings CRUD + models/voices 测试端点（utoipa 标注，M1d 生成 TS）。
 //!
-//! 用户级 REST 在 release M1b 由 dev-bypass 把守（无认证，返回 503）；M1c 真认证中间件落地后开放。
-//! provider key 经 MasterKey 加密存储，响应绝不返回明文/密文 key。models/voices 测试端点解密 key
-//! 构造 ProviderConn 调适配器 list_models/list_voices（设置页“测试连接”按钮）。
+//! 用户级 REST 经 AuthUser 认证（未认证 401）；变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。
+//! binding 强制 provider 同主（审计 C2）。provider key 经 MasterKey 加密存储，响应绝不返回明文/密文 key。
+//! models/voices 测试端点解密 key 调适配器 list_models/list_voices（设置页“测试连接”），并经 call_log 计量（审计 C9）。
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -90,7 +90,7 @@ fn map_storage_err(e: kernel_api::KernelError) -> StatusCode {
     responses(
         (status = 201, description = "已创建", body = Provider),
         (status = 400, description = "请求无效"),
-        (status = 503, description = "需 dev-bypass（M1c 认证后开放）")
+        (status = 401, description = "未认证")
     )
 )]
 pub async fn create_provider(
@@ -116,7 +116,7 @@ pub async fn create_provider(
 /// 列出用户 providers。
 #[utoipa::path(
     get, path = "/api/v1/providers", tag = "providers",
-    responses((status = 200, description = "provider 列表", body = Vec<Provider>), (status = 503))
+    responses((status = 200, description = "provider 列表", body = Vec<Provider>), (status = 401))
 )]
 pub async fn list_providers(
     State(st): State<Arc<AppState>>,
@@ -132,7 +132,7 @@ pub async fn list_providers(
 #[utoipa::path(
     get, path = "/api/v1/providers/{id}", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 200, body = Provider), (status = 404), (status = 503))
+    responses((status = 200, body = Provider), (status = 404), (status = 401))
 )]
 pub async fn get_provider(
     State(st): State<Arc<AppState>>,
@@ -150,7 +150,7 @@ pub async fn get_provider(
 #[utoipa::path(
     put, path = "/api/v1/providers/{id}", request_body = UpdateProviderReq, tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 200, body = Provider), (status = 404), (status = 503))
+    responses((status = 200, body = Provider), (status = 404), (status = 401))
 )]
 pub async fn update_provider(
     State(st): State<Arc<AppState>>,
@@ -178,7 +178,7 @@ pub async fn update_provider(
 #[utoipa::path(
     delete, path = "/api/v1/providers/{id}", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 204, description = "已删除"), (status = 404), (status = 503))
+    responses((status = 204, description = "已删除"), (status = 404), (status = 401))
 )]
 pub async fn delete_provider(
     State(st): State<Arc<AppState>>,
@@ -199,7 +199,7 @@ pub async fn delete_provider(
 #[utoipa::path(
     get, path = "/api/v1/providers/{id}/models", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 200, description = "模型列表", body = Value), (status = 404), (status = 502, description = "上游错误"), (status = 503))
+    responses((status = 200, description = "模型列表", body = Value), (status = 404), (status = 502, description = "上游错误"), (status = 401))
 )]
 pub async fn provider_models(
     State(st): State<Arc<AppState>>,
@@ -225,7 +225,7 @@ pub async fn provider_models(
 #[utoipa::path(
     get, path = "/api/v1/providers/{id}/voices", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id"), ("model" = Option<String>, Query, description = "模型 id（省略取适配器首个）")),
-    responses((status = 200, description = "音色列表", body = Value), (status = 404), (status = 502), (status = 503))
+    responses((status = 200, description = "音色列表", body = Value), (status = 404), (status = 502), (status = 401))
 )]
 pub async fn provider_voices(
     State(st): State<Arc<AppState>>,
@@ -300,7 +300,7 @@ fn upstream_status(e: &ProviderError) -> StatusCode {
 /// 新建 binding。
 #[utoipa::path(
     post, path = "/api/v1/bindings", request_body = CreateBindingReq, tag = "bindings",
-    responses((status = 201, body = Binding), (status = 400, description = "请求无效或 UNIQUE 冲突"), (status = 503))
+    responses((status = 201, body = Binding), (status = 400, description = "请求无效或 UNIQUE 冲突"), (status = 401))
 )]
 pub async fn create_binding(
     State(st): State<Arc<AppState>>,
@@ -325,7 +325,7 @@ pub async fn create_binding(
 /// 列出用户 bindings。
 #[utoipa::path(
     get, path = "/api/v1/bindings", tag = "bindings",
-    responses((status = 200, body = Vec<Binding>), (status = 503))
+    responses((status = 200, body = Vec<Binding>), (status = 401))
 )]
 pub async fn list_bindings(
     State(st): State<Arc<AppState>>,
@@ -341,7 +341,7 @@ pub async fn list_bindings(
 #[utoipa::path(
     get, path = "/api/v1/bindings/{id}", tag = "bindings",
     params(("id" = Uuid, Path, description = "binding id")),
-    responses((status = 200, body = Binding), (status = 404), (status = 503))
+    responses((status = 200, body = Binding), (status = 404), (status = 401))
 )]
 pub async fn get_binding(
     State(st): State<Arc<AppState>>,
@@ -359,7 +359,7 @@ pub async fn get_binding(
 #[utoipa::path(
     put, path = "/api/v1/bindings/{id}", request_body = UpdateBindingReq, tag = "bindings",
     params(("id" = Uuid, Path, description = "binding id")),
-    responses((status = 200, body = Binding), (status = 404), (status = 503))
+    responses((status = 200, body = Binding), (status = 404), (status = 401))
 )]
 pub async fn update_binding(
     State(st): State<Arc<AppState>>,
@@ -385,7 +385,7 @@ pub async fn update_binding(
 #[utoipa::path(
     delete, path = "/api/v1/bindings/{id}", tag = "bindings",
     params(("id" = Uuid, Path, description = "binding id")),
-    responses((status = 204), (status = 404), (status = 503))
+    responses((status = 204), (status = 404), (status = 401))
 )]
 pub async fn delete_binding(
     State(st): State<Arc<AppState>>,

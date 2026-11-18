@@ -1,6 +1,6 @@
 //! 会话 REST + SSE 传输 + 系统端点（healthz/readyz/meta/config）。
-//! POST /messages 响应即该回合 SessionEvent 流（SSE 不入 OpenAPI，单独协议文档）。
-//! 用户级端点经 AuthUser extractor 认证（cookie → 会话令牌，M1c）；未认证 401。
+//! POST /messages 响应即该回合 SessionEvent 流（SSE path 入 OpenAPI，SessionEvent 事件 schema 单独协议文档）。
+//! 用户级端点经 AuthUser extractor 认证（cookie → 会话令牌）+ 对象级归属校验（审计 C1，越权 404）；未认证 401。
 
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};

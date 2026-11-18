@@ -1,6 +1,6 @@
-//! OpenAPI 文档聚合（utoipa）。M1b 落 REST 标注，M1d 由此生成 TS 客户端。
-//! SSE（/messages）不入 OpenAPI schema（单独协议文档）；models/voices 响应暂以通用 object 标注
-//! （ModelInfo/VoiceInfo 为 kernel-api 契约类型，精确 schema 待契约演进时补，避免 M1b 契约变更）。
+//! OpenAPI 文档聚合（utoipa）。M1c 落 REST 标注，M1d 由此生成 TS 客户端。
+//! SSE 精确表述（审计 D4）：`/messages` **path 入** OpenAPI，`SessionEvent` **事件 schema 不入**（单独协议文档维护）。
+//! models/voices 响应暂以通用 object 标注（ModelInfo/VoiceInfo 为 kernel-api 契约类型，精确 schema 待契约演进补）。
 
 use axum::Json;
 use serde_json::{json, Value};
@@ -12,7 +12,8 @@ use utoipa::OpenApi;
     info(
         title = "godoword API",
         version = "0.0.0",
-        description = "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local）；变更请求须带 CSRF 自定义头。"
+        description = "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；\
+        变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。"
     ),
     paths(
         crate::rest::healthz,
