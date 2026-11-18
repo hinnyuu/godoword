@@ -116,7 +116,7 @@ bind 目录文件永远归宿主用户。默认双栈监听 `[::]:8080`（兼容
 podman bind mount 源目录须自建（与 docker 不同，podman 不自动创建）。
 生产文档给 quadlet（podman≥4.4）+ 反代 TLS；快速上手给 podman run + docker-compose。
 
-## 当前状态与 roadmap 差异（M1c + M1c-hardening）
+## 当前状态与 roadmap 差异（M1c + M1c-hardening + 二审收尾加固）
 
 - 已落地：文档体系、关系图谱门禁、CI 流水线、kernel-api 契约 trait（含 speak 工具契约）、
   kernel 回合循环（内部接缝 + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、组合根会话 REST + SSE。
@@ -129,8 +129,10 @@ podman bind mount 源目录须自建（与 docker 不同，podman 不自动创�
   **M1c-hardening（第三方审计加固）**：对象级授权（session/audio/binding 全路径校验归属，越权 404）、消息持久化失败关闭、
   binding/provider 同主、禁用/重置撤销会话 + 重置 token 化、淘汰水位制（正常路径不重复）、硬超时 + TTS cancel + 退出等待（WAL checkpoint）、
   上游退避重试、IP 限流、测试端点计量；门禁 D6/D7 修复（项目规则可达 + migrations/web 纳入）+ 合成回归测试。
-  **可靠性边界（二审遗留待加固，见 status 清单/history 2127）**：音频写失败/outbox 与水位原子性/退出 abort/满 mpsc 背压/重置令牌并发/管理员互禁
-  的失败与并发路径尚未闭环，"失败关闭/原子/单次/硬边界"目前仅覆盖正常路径，须二审收尾补齐负例后方可绝对化。
+  **二审收尾加固（R1–R9，history 2241）**：重置令牌事务条件认领单次 + 统一密码策略（8–128 字符必含字母与数字）、
+  音频写失败关闭（无假成功）、退出真 abort+join + 硬超时 try_send 背压硬边界、淘汰 outbox+水位同事务 + summarize 计费幂等
+  （summary_spans 0004）、SessionEnded 删除原子、管理员禁用串行化（防并发互禁失锁）、OpenAPI 完整性（cookieAuth/CSRF/$ref 全解析）、
+  test_gate 接 CI、旧 sidecar 兼容 404 可再生 + 限流器过期清理/容量上限 + 可信代理 XFF 最右不可信跳。各配失败/并发负例测试（双后端）。
 - 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、Svelte 前端（M1d）、教学模块（M2+）。
 - 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 静态占位（M1d 起 Svelte）；
   outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T22:41+08:00
-- 当前里程碑: **M1c 二审收尾加固实现中（设计分歧已定案 history 2241；M1d 延后至加固复核完成）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审收尾加固（feat/m1c-second-hardening 实现中）**
+- verified: 2026-11-19T00:03+08:00
+- 当前里程碑: **M1c 二审收尾加固代码完成（R1–R9 + A2/A3，history 2241/0003），待验收复核（M1d 延后至复核完成）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审收尾加固（feat/m1c-second-hardening 代码完成待验收）**
 
 ## done
 
@@ -42,13 +42,13 @@
 
 ## in-flight
 
-- **feat/m1c-second-hardening 实现中**：全量审计核实 R1–R9 属实 + 独立发现 A1–A6；设计分歧已定案（history 2241）。
-  按 P0→P2 修复，每项配失败/并发负例测试。基线全绿（gate/test_gate 6-6/cargo check/kernel+auth-local 测试）。
+- **feat/m1c-second-hardening：R1–R9 + A2/A3 代码修复完成**（10 commit，各配失败/并发负例，双后端绿，fmt/clippy 净）。
+  待验收闭环：CI 全绿（含 test_gate + 新负例）+ R4 same-tree/main 重测 + 人工残留 sign-off + 二审复核无新回归。
 
 ## blocked / 待拍板决策
 
-- **M1c 二审遗留（核实属实，待修复，详见 history 2127 + 下方紧凑清单）**：首轮加固 happy-path 导向，
-  失败/并发/原子性未系统覆盖。**修复完成 + 并发/失败测试 + CI 接入 + 复核前，不恢复"无阻塞/后端已就绪"声明**。
+- **M1c 二审收尾代码修复完成（R1–R9，history 2241），待验收复核**：验收闭环（CI + R4 重测 + 人工 sign-off + 二审复核）前，
+  **不恢复"无阻塞/后端已就绪"声明**。
 - M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
 
@@ -95,9 +95,9 @@ OpenAPI 修正 + 全状态面 reconcile + 门禁 D6/D7 修复（test_gate.py 回
 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ 设置 UI（BYOK provider/binding
 + 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）+ Dockerfile node 构建阶段 + 前端 CI job。
 
-**后端基础就绪但有二审遗留**（M1c + hardening）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
-**OpenAPI 完整性（R5：CreateSessionReq 注册 + cookieAuth/CSRF/403/404 + $ref 解析）须二审收尾修复后，M1d 方可生成 TS 客户端**。
-M1d 不改后端契约（若需契约变更走全量审查）。
+**后端基础就绪**（M1c + hardening + 二审收尾）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
+**OpenAPI 完整性已修（R5：CreateSessionReq 注册 + cookieAuth/CSRF/403/404 + $ref 全解析测试），M1d 可生成 TS 客户端**
+（待二审收尾验收复核完成）。M1d 不改后端契约（若需契约变更走全量审查）。
 
 **待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
 /SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。
