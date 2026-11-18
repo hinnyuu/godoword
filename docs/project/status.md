@@ -74,8 +74,9 @@
 
 **P1（一致性/CI/文档）**：全部完成（R6 SessionEnded 删除原子 / R8 test_gate 接 docs-gate CI / 文档漂移 trivial 项 #14 已修）。
 
-**P2（运维/精化）**：
-- R9 旧 sidecar 升级处理 + 限流器过期清理 + 可信代理 XFF 解析（Config trusted_proxies，IP 限流不退化全局）。
+**P2（运维/精化）**：全部完成（R9 旧 sidecar 兼容 404 可再生 / 限流器过期清理+容量上限 / 可信代理 XFF 最右不可信跳，Config trusted_proxies + 部署 wiki）。
+
+**R1–R9 代码修复全部落地**（各配失败/并发负例，双后端绿，详见 history 2241 + 各 fix commit）。剩余为验收闭环（见下）。
 
 **重新签收证据**（二审第七节）：重置并发仅一次 + 空密码拒绝 / 音频写失败无假成功 / 淘汰各失败点不丢不重 + summarize 多回合 /
 满 mpsc 超时退出 + shutdown abort/join 后 checkpoint / OpenAPI $ref 全解析 + 认证 CSRF 一致 / 管理员并发互禁不失锁 /

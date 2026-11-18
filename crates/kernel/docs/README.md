@@ -39,7 +39,8 @@
   `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**，水位/摘要经
   `evict_session` 原子更新，R4）、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
 - `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
-  `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界）；
+  `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界；
+  **owner 可空 + 旧/损坏 sidecar 视为缺失 → 404 可再生不 500，审计 R9.1**）；
   `MemAudio` 测试替身。**默认新鲜合成**；
   复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash）+ 静态资产（M2）。见 history 音频白名单条目。
 
@@ -82,10 +83,11 @@ capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5
 `src/config.rs` `Config`（来源轴：env > 配置文件 > 内置默认，history 0530）。配置文件 `/data/config.toml`
 （`GODOWORD_CONFIG` 可改路径），TOML + serde。字段：listen（默认 `[::]:8080`）、data_dir（默认 `/data`）、
 database_url（设则 PG，否则 SQLite `data_dir/db/godoword.sqlite`）、registration_mode（invite/open/disabled，默认 invite）、
-provider_presets（预设：端点+适配器+建议模型，**不含 key**）。env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/
-`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`。`EnvSource` trait 抽象 env 访问（无全局竞态单元测试）。
-`view()` 脱敏只读视图（GET /config）：仅暴露 database_backend 类型，**不暴露连接串凭据**。
-用户级配置（providers/bindings）仅 DB，与本轴正交；webui 不回写部署配置。单元测试 5（默认/env 覆盖/坏模式/TOML 预设/env>file）。
+provider_presets（预设：端点+适配器+建议模型，**不含 key**）、**trusted_proxies（可信代理 IP/CIDR 列表，审计 R9.4，默认空）**。
+env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`/
+`GODOWORD_COOKIE_SECURE`/`GODOWORD_TRUSTED_PROXIES`（逗号分隔）。`EnvSource` trait 抽象 env 访问（无全局竞态单元测试）。
+`view()` 脱敏只读视图（GET /config）：仅暴露 database_backend 类型，**不暴露连接串凭据**；trusted_proxies 暴露（部署可见）。
+用户级配置（providers/bindings）仅 DB，与本轴正交；webui 不回写部署配置。单元测试 6（默认/env 覆盖/坏模式/TOML 预设/env>file/trusted_proxies）。
 
 ## M1 简化与 roadmap 差异
 

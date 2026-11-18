@@ -39,6 +39,8 @@ pub struct AppState {
     pub tts: Arc<dyn TtsProvider>,
     /// 登录限流器。
     pub rate_limiter: Arc<RateLimiter>,
+    /// 可信反向代理 IP/CIDR（审计 R9.4，启动时从配置解析）：XFF 客户端 IP 解析用。
+    pub trusted_proxies: Vec<ipnet::IpNet>,
 }
 
 /// 存活探针。

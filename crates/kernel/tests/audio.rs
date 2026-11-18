@@ -132,3 +132,31 @@ async fn put_sidecar_failure_cleans_orphan_pcm() {
     assert!(!pcm_path.exists(), "A3：sidecar 失败后孤儿 PCM 已清理");
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn get_legacy_or_corrupt_sidecar_none() {
+    let dir = temp_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let cache = FsAudio::new(dir.clone());
+    let user = UserId::new();
+    // 旧版 sidecar（无 owner 字段，审计 R9.1）→ 不可授权 → None（404 可再生），不 500。
+    let id = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id.0)), vec![7u8; 100]).unwrap();
+    let legacy = serde_json::json!({
+        "words": [], "format": "pcm", "sample_rate": 24000, "created_at": "2026-01-01T00:00:00Z"
+    });
+    std::fs::write(dir.join(format!("{}.json", id.0)), legacy.to_string()).unwrap();
+    assert!(
+        cache.get(id, user).await.unwrap().is_none(),
+        "R9.1：旧 sidecar 无 owner → None"
+    );
+    // 损坏 sidecar（非法 JSON）→ None，不 500。
+    let id2 = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id2.0)), vec![7u8; 100]).unwrap();
+    std::fs::write(dir.join(format!("{}.json", id2.0)), "{not json").unwrap();
+    assert!(
+        cache.get(id2, user).await.unwrap().is_none(),
+        "R9.1：损坏 sidecar → None"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

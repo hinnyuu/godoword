@@ -3,6 +3,7 @@
 //! auth/admin REST。验身/注册/令牌逻辑在 auth-local crate；本模块只做 HTTP 接线。
 
 use std::collections::HashMap;
+use std::net::IpAddr;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -11,6 +12,7 @@ use axum::http::{header, request::Parts, HeaderMap, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use ipnet::IpNet;
 use kernel_api::{Store, UserId};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -110,10 +112,22 @@ pub async fn csrf_guard(req: axum::extract::Request, next: Next) -> Response {
     next.run(req).await
 }
 
-/// 登录限流（内存，username 键，窗口 5 分钟最多 10 次；单容器重启重置可接受）。
-#[derive(Default)]
+/// 登录限流（内存，username + IP 双维度，窗口 5 分钟最多 10 次；单容器重启重置可接受）。
+/// **过期窗口清理 + 容量上限（审计 R9.2）**：防 username 键无限增长致内存膨胀。
 pub struct RateLimiter {
     inner: Mutex<HashMap<String, (u32, Instant)>>,
+    window: Duration,
+    max_entries: usize,
+}
+
+impl Default for RateLimiter {
+    fn default() -> Self {
+        Self {
+            inner: Mutex::new(HashMap::new()),
+            window: Duration::from_secs(300),
+            max_entries: 8192,
+        }
+    }
 }
 
 impl RateLimiter {
@@ -121,13 +135,15 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self::default()
     }
-    /// 尝试一次（true 允许 / false 超限）。
+    /// 尝试一次（true 允许 / false 超限）。超容量时先清理过期窗口。
     pub fn check(&self, key: &str) -> bool {
         let mut g = self.inner.lock().unwrap();
         let now = Instant::now();
-        let window = Duration::from_secs(300);
+        if g.len() >= self.max_entries {
+            self.prune_locked(&mut g, now);
+        }
         let entry = g.entry(key.to_string()).or_insert((0, now));
-        if now.duration_since(entry.1) > window {
+        if now.duration_since(entry.1) > self.window {
             *entry = (0, now);
         }
         if entry.0 >= 10 {
@@ -136,6 +152,57 @@ impl RateLimiter {
         entry.0 += 1;
         true
     }
+    /// 清理过期窗口；仍超容量则按窗口起点淘汰最旧至半容量（审计 R9.2）。
+    fn prune_locked(&self, g: &mut HashMap<String, (u32, Instant)>, now: Instant) {
+        g.retain(|_, (_, start)| now.duration_since(*start) <= self.window);
+        if g.len() >= self.max_entries {
+            let mut keys: Vec<(String, Instant)> =
+                g.iter().map(|(k, (_, s))| (k.clone(), *s)).collect();
+            keys.sort_by_key(|(_, s)| *s);
+            let remove = g.len() - self.max_entries / 2;
+            for (k, _) in keys.into_iter().take(remove) {
+                g.remove(&k);
+            }
+        }
+    }
+    /// 当前键数（测试/观测用）。
+    #[cfg(test)]
+    pub fn len(&self) -> usize {
+        self.inner.lock().unwrap().len()
+    }
+    /// 是否为空。
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+/// 解析可信代理配置项为 IpNet（支持裸 IP 与 CIDR；非法项跳过，审计 R9.4）。
+pub fn parse_trusted(s: &str) -> Option<IpNet> {
+    if let Ok(net) = s.parse::<IpNet>() {
+        return Some(net);
+    }
+    s.parse::<IpAddr>().ok().map(IpNet::from)
+}
+
+/// 解析客户端 IP（审计 R9.4）：对端非可信代理 → 直接用对端 IP（不采 XFF，防伪造）；
+/// 对端是可信代理 → 从 X-Forwarded-For **右往左取第一个不在可信集的 IP**（最右不可信跳）。
+/// 无可信 XFF 跳则回退对端。防 IP 限流在反代后退化为全局限流。
+pub fn client_ip(peer: IpAddr, headers: &HeaderMap, trusted: &[IpNet]) -> IpAddr {
+    let is_trusted = |ip: &IpAddr| trusted.iter().any(|net| net.contains(ip));
+    if !is_trusted(&peer) {
+        return peer;
+    }
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        for part in xff.split(',').rev() {
+            if let Ok(ip) = part.trim().parse::<IpAddr>() {
+                if !is_trusted(&ip) {
+                    return ip;
+                }
+            }
+        }
+    }
+    peer
 }
 
 /// 注册请求。
@@ -203,10 +270,12 @@ async fn user_info(store: &Store, user: UserId) -> Result<Value, StatusCode> {
 pub async fn register(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<RegisterReq>,
 ) -> Result<Response, StatusCode> {
+    let ip = client_ip(addr.ip(), &headers, &st.trusted_proxies);
     if !st.rate_limiter.check(&format!("reg:{}", req.username))
-        || !st.rate_limiter.check(&format!("reg-ip:{}", addr.ip()))
+        || !st.rate_limiter.check(&format!("reg-ip:{ip}"))
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
@@ -246,10 +315,12 @@ pub async fn register(
 pub async fn login(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<LoginReq>,
 ) -> Result<Response, StatusCode> {
+    let ip = client_ip(addr.ip(), &headers, &st.trusted_proxies);
     if !st.rate_limiter.check(&format!("login:{}", req.username))
-        || !st.rate_limiter.check(&format!("login-ip:{}", addr.ip()))
+        || !st.rate_limiter.check(&format!("login-ip:{ip}"))
     {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
@@ -389,5 +460,94 @@ pub async fn admin_set_status(
         Ok(true) => Ok(Json(json!({ "ok": true }))),
         Ok(false) => Err(StatusCode::NOT_FOUND),
         Err(e) => Err(auth_err_status(e)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_limit_blocks_after_10() {
+        let rl = RateLimiter::new();
+        for _ in 0..10 {
+            assert!(rl.check("k"));
+        }
+        assert!(!rl.check("k"), "第 11 次超限");
+    }
+
+    #[test]
+    fn rate_limiter_prunes_expired() {
+        let rl = RateLimiter {
+            inner: Mutex::new(HashMap::new()),
+            window: Duration::from_millis(1),
+            max_entries: 100,
+        };
+        rl.check("a");
+        assert_eq!(rl.len(), 1);
+        std::thread::sleep(Duration::from_millis(5));
+        let now = Instant::now();
+        let mut g = rl.inner.lock().unwrap();
+        rl.prune_locked(&mut g, now);
+        assert_eq!(g.len(), 0, "R9.2：过期窗口清理");
+        drop(g);
+        assert!(rl.is_empty(), "R9.2：清理后为空");
+    }
+
+    #[test]
+    fn rate_limiter_capacity_cap() {
+        let rl = RateLimiter {
+            inner: Mutex::new(HashMap::new()),
+            window: Duration::from_secs(300),
+            max_entries: 16,
+        };
+        for i in 0..16 {
+            rl.check(&format!("k{i}"));
+        }
+        assert_eq!(rl.len(), 16);
+        rl.check("overflow"); // 触发 prune → 硬容量淘汰最旧至半容量
+        assert!(rl.len() <= 16, "R9.2：容量上限（实得 {}）", rl.len());
+    }
+
+    #[test]
+    fn client_ip_untrusted_peer_ignores_xff() {
+        let trusted: Vec<IpNet> = vec![parse_trusted("10.0.0.1").unwrap()];
+        let peer: IpAddr = "203.0.113.9".parse().unwrap();
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
+        assert_eq!(
+            client_ip(peer, &h, &trusted),
+            peer,
+            "R9.4：非可信对端不采 XFF"
+        );
+    }
+
+    #[test]
+    fn client_ip_trusted_proxy_rightmost_untrusted() {
+        let trusted: Vec<IpNet> = vec!["10.0.0.0/8".parse().unwrap()];
+        let peer: IpAddr = "10.0.0.1".parse().unwrap();
+        let mut h = HeaderMap::new();
+        h.insert("x-forwarded-for", "203.0.113.7, 10.0.0.2".parse().unwrap());
+        assert_eq!(
+            client_ip(peer, &h, &trusted),
+            "203.0.113.7".parse::<IpAddr>().unwrap(),
+            "R9.4：最右不可信跳"
+        );
+    }
+
+    #[test]
+    fn client_ip_no_xff_fallback_peer() {
+        let trusted: Vec<IpNet> = vec![parse_trusted("10.0.0.1").unwrap()];
+        let peer: IpAddr = "10.0.0.1".parse().unwrap();
+        let h = HeaderMap::new();
+        assert_eq!(client_ip(peer, &h, &trusted), peer, "R9.4：无 XFF 回退对端");
+    }
+
+    #[test]
+    fn parse_trusted_ip_and_cidr() {
+        assert!(parse_trusted("10.0.0.1").is_some());
+        assert!(parse_trusted("10.0.0.0/8").is_some());
+        assert!(parse_trusted("::1").is_some());
+        assert!(parse_trusted("not-an-ip").is_none());
     }
 }

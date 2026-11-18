@@ -92,6 +92,9 @@ pub struct Config {
     pub max_detached_turns: u32,
     /// 会话 cookie Secure 标志（默认 true；冒烟/本地 HTTP 设 false）。
     pub cookie_secure: bool,
+    /// 可信反向代理 IP/CIDR 列表（审计 R9.4）：仅这些来源的 X-Forwarded-For 被采信解析客户端 IP；
+    /// 空则不信任 XFF（直连语义）。防 IP 限流在反代后退化为全局限流。
+    pub trusted_proxies: Vec<String>,
 }
 
 impl Default for Config {
@@ -106,6 +109,7 @@ impl Default for Config {
             cache_max_bytes: 1024 * 1024 * 1024,
             max_detached_turns: 4,
             cookie_secure: true,
+            trusted_proxies: Vec::new(),
         }
     }
 }
@@ -165,6 +169,13 @@ impl Config {
         if let Some(v) = env.get("GODOWORD_COOKIE_SECURE") {
             cfg.cookie_secure = matches!(v.as_str(), "true" | "1" | "yes");
         }
+        if let Some(v) = env.get("GODOWORD_TRUSTED_PROXIES") {
+            cfg.trusted_proxies = v
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+        }
         Ok(cfg)
     }
 
@@ -201,6 +212,7 @@ impl Config {
             .to_string(),
             registration_mode: self.registration_mode,
             provider_presets: self.provider_presets.clone(),
+            trusted_proxies: self.trusted_proxies.clone(),
         }
     }
 }
@@ -213,6 +225,7 @@ pub struct ConfigView {
     pub database_backend: String,
     pub registration_mode: RegistrationMode,
     pub provider_presets: Vec<ProviderPreset>,
+    pub trusted_proxies: Vec<String>,
 }
 
 #[cfg(test)]
@@ -268,6 +281,28 @@ mod tests {
     #[test]
     fn bad_registration_mode_fails() {
         assert!(Config::load_with(&env(&[("GODOWORD_REGISTRATION_MODE", "bogus")])).is_err());
+    }
+
+    #[test]
+    fn trusted_proxies_env_parse() {
+        let cfg = Config::load_with(&env(&[(
+            "GODOWORD_TRUSTED_PROXIES",
+            "10.0.0.1, 10.0.0.0/8 , ",
+        )]))
+        .unwrap();
+        assert_eq!(
+            cfg.trusted_proxies,
+            vec!["10.0.0.1".to_string(), "10.0.0.0/8".to_string()],
+            "R9.4：逗号分隔 trim 去空"
+        );
+        assert_eq!(cfg.view().trusted_proxies.len(), 2, "R9.4：视图暴露");
+        assert!(
+            Config::load_with(&env(&[]))
+                .unwrap()
+                .trusted_proxies
+                .is_empty(),
+            "R9.4：默认空（不信任 XFF）"
+        );
     }
 
     #[test]

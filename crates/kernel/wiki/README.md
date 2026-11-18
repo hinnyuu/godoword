@@ -7,5 +7,5 @@ godoword 的内核实现：负责回合循环（LLM 教师对话 + speak 语音�
 + 会话/音频持久化（DB/文件系统，**对象级授权**）+ 上下文预算与 truncate/summarize 淘汰（**水位制正常路径不重复**）
 + call_log 计量 + outbox 骨架 + 存储基底（自动迁移备份、用户密钥静态加密）。
 认证在 auth-local 适配器。音频默认新鲜合成（白名单复用 M2）。教学模块 M2+。
-可靠性边界：音频写失败关闭（R2）、退出 abort+join 与背压（R3）、淘汰原子与 summarize 计费幂等（R4）、SessionEnded 删除原子（R6）已修；OpenAPI 完整性（R5）与运维精化（R9）待收尾（见 status 清单）。
+可靠性：重置令牌事务单次、音频写失败关闭、退出 abort+join 与背压硬边界、淘汰原子 + summarize 计费幂等、SessionEnded 删除原子、管理员禁用串行化均已落地，各配失败/并发负例测试（双后端）。
 面向用户的说明待设置 UI（M1d）补充。

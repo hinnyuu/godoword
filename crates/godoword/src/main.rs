@@ -101,6 +101,18 @@ async fn main() {
 
     let shutdown_rt = runtime.clone();
     let shutdown_store = store.clone();
+    // 可信代理解析（审计 R9.4）：非法项告警跳过；空则不信任 XFF（直连语义）。
+    let trusted_proxies: Vec<ipnet::IpNet> = cfg
+        .trusted_proxies
+        .iter()
+        .filter_map(|s| {
+            let net = auth::parse_trusted(s);
+            if net.is_none() {
+                tracing::warn!("忽略非法 trusted_proxies 项：{s}");
+            }
+            net
+        })
+        .collect();
     let state = Arc::new(AppState {
         sessions,
         audio,
@@ -111,6 +123,7 @@ async fn main() {
         llm,
         tts,
         rate_limiter: Arc::new(auth::RateLimiter::new()),
+        trusted_proxies,
     });
 
     let app = Router::new()

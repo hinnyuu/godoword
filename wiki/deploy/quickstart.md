@@ -123,7 +123,7 @@ suggested_models = ["qwen4-max-preview"]
 ```
 
 env 覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`/
-`GODOWORD_MASTER_KEY`。`GET /api/v1/config` 只读展示生效值（脱敏，不含连接串凭据）。file/env 变更需重启。
+`GODOWORD_MASTER_KEY`/`GODOWORD_COOKIE_SECURE`/`GODOWORD_TRUSTED_PROXIES`。`GET /api/v1/config` 只读展示生效值（脱敏，不含连接串凭据）。file/env 变更需重启。
 
 ## 说明
 
@@ -131,4 +131,7 @@ env 覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODO
 - 回合对话与用户级 REST 经 cookie 会话认证（未认证返回 401）；注册首个用户自动成管理员，邀请码注册后续用户；配置界面 M1d。
   本地/HTTP 测试设 `GODOWORD_COOKIE_SECURE=false`（生产反代 TLS 下保持默认 true）。
 - 生产部署 quadlet systemd 单元 + 反向代理 TLS 见 [deploy/README](../../deploy/README.md)。
+- **反向代理后的登录限流**：默认按直连对端 IP 限流；经反代时所有用户共享反代 IP 会退化为全局限流。
+  设 `GODOWORD_TRUSTED_PROXIES`（逗号分隔 IP/CIDR，如 `10.0.0.1,10.0.0.0/8`）声明可信代理，
+  服务从 `X-Forwarded-For` 取最右不可信跳作为客户端 IP。仅可信代理的 XFF 被采信（防伪造）；反代须正确设置 XFF。
 - SELinux 主机 bind mount 需 `:Z` 标签（容器内无法自动修复，权限拒绝时日志会提示）；quadlet 需 podman≥4.4。
