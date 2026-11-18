@@ -160,6 +160,97 @@ pub async fn dispatch_once(
     Ok(processed)
 }
 
+/// 会话结束原子落库（审计 R6）：读 module_id（失败关闭，不吞错模糊路由）→ session-ended outbox INSERT
+/// → DELETE sessions **同事务**。emit 失败则不删（不丢事件），delete 失败则 outbox 回滚（不伪造结束）；
+/// 事件提交后才可见，dispatcher 不会在删除提交前消费。Ok(true)=已结束删除 / Ok(false)=不存在或非本用户。
+pub async fn end_session(
+    store: &Store,
+    user_id: Uuid,
+    session_id: Uuid,
+) -> Result<bool, KernelError> {
+    let now = Utc::now();
+    let skill_tags = json!([]);
+    let detail = json!({});
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> =
+                sqlx::query_as("SELECT module_id FROM sessions WHERE id = ? AND user_id = ?")
+                    .bind(session_id)
+                    .bind(user_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            sqlx::query("DELETE FROM sessions WHERE id = ? AND user_id = ?")
+                .bind(session_id)
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> =
+                sqlx::query_as("SELECT module_id FROM sessions WHERE id = $1 AND user_id = $2")
+                    .bind(session_id)
+                    .bind(user_id)
+                    .fetch_optional(&mut *tx)
+                    .await
+                    .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            sqlx::query("DELETE FROM sessions WHERE id = $1 AND user_id = $2")
+                .bind(session_id)
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+    }
+}
+
 /// 淘汰 span 幂等键（审计 R4）：消息 ID 集排序后 sha256。同一 span 跨回合稳定 → summarize 计费去重。
 pub fn summary_span_hash(evicted: &[StoredMessage]) -> String {
     let mut ids: Vec<String> = evicted.iter().map(|m| m.id.to_string()).collect();

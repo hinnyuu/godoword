@@ -74,7 +74,6 @@
 - R5 OpenAPI：注册 CreateSessionReq + cookieAuth + CSRF header + 403/404 + $ref 全解析测试。
 
 **P1（一致性/CI/文档）**：
-- R6 SessionEnded 与 delete 原子（禁吞错伪造结束）。
 - R8 test_gate.py 接入 docs-gate CI。
 - 文档漂移：roadmap SSE 口径/gates 第 14 项/PR 模板越权 404/storage 迁移数/绝对化保证加可靠性边界（本交接 PR 已修 trivial 项）。
 

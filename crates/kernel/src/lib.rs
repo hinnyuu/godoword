@@ -28,7 +28,7 @@ pub use context::{
 };
 pub use crypto::MasterKey;
 pub use journal::{
-    dispatch_once, emit_progress, evict_session, lookup_summary_span, mark_processed,
+    dispatch_once, emit_progress, end_session, evict_session, lookup_summary_span, mark_processed,
     pending_events, record_call, store_summary_span, summary_span_hash, CallRecord, OutboxEvent,
     OutboxHandler,
 };

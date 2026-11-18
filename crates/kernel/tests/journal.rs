@@ -332,3 +332,129 @@ async fn evict_session_atomicity() {
         eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
     }
 }
+
+/// R6 会话结束原子断言：越权/不存在 false 不删不发事件；happy 删除 + session-ended outbox + module_id 路由。
+async fn assert_end_session(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let a = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, a).await.unwrap();
+    kernel::repo::ensure_user(&store, other).await.unwrap();
+    let sessions = kernel::DbSessions::new(store.clone());
+    let sid = kernel_api::SessionId::new();
+    sessions
+        .create(
+            kernel_api::UserId(a),
+            sid,
+            kernel::SessionMeta {
+                module_id: Some(kernel_api::ModuleId("teach-gojuon".to_string())),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    // 越权 end → false，session 仍在，无事件。
+    assert!(
+        !kernel::end_session(&store, other, sid.0).await.unwrap(),
+        "{b} R6：越权 end false"
+    );
+    assert!(
+        sessions.exists(kernel_api::UserId(a), sid).await.unwrap(),
+        "{b} R6：越权未删"
+    );
+    // 不存在 end → false。
+    assert!(
+        !kernel::end_session(&store, a, Uuid::new_v4())
+            .await
+            .unwrap(),
+        "{b} R6：不存在 false"
+    );
+    let ev0: (i64,) = fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE session_id = $1",
+        (i64,),
+        sid.0
+    )
+    .unwrap();
+    assert_eq!(ev0.0, 0, "{b} R6：越权/不存在不发事件");
+    // happy end → 删除 + session-ended outbox（module_id 路由）。
+    assert!(
+        kernel::end_session(&store, a, sid.0).await.unwrap(),
+        "{b} R6：end 成功"
+    );
+    assert!(
+        !sessions.exists(kernel_api::UserId(a), sid).await.unwrap(),
+        "{b} R6：end 后删除"
+    );
+    let ev: (i64,) = fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE session_id = $1 AND kind = 'session-ended' AND module_id = 'teach-gojuon'",
+        (i64,),
+        sid.0
+    )
+    .unwrap();
+    assert_eq!(ev.0, 1, "{b} R6：session-ended outbox + module_id 路由");
+    // 无模块 → kernel 哨兵。
+    let sid2 = kernel_api::SessionId::new();
+    sessions
+        .create(kernel_api::UserId(a), sid2, kernel::SessionMeta::default())
+        .await
+        .unwrap();
+    kernel::end_session(&store, a, sid2.0).await.unwrap();
+    let ev2: (i64,) = fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE session_id = $1 AND kind = 'session-ended' AND module_id = 'kernel'",
+        (i64,),
+        sid2.0
+    )
+    .unwrap();
+    assert_eq!(ev2.0, 1, "{b} R6：无模块 kernel 哨兵");
+}
+
+#[tokio::test]
+async fn end_session_atomicity() {
+    let sqlite = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::query("PRAGMA foreign_keys=ON")
+        .execute(&sqlite)
+        .await
+        .unwrap();
+    assert_end_session(Arc::new(Store::Sqlite(sqlite))).await;
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_end_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_end_session(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}
