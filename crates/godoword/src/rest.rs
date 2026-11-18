@@ -85,7 +85,10 @@ pub async fn create_session(
     AuthUser(user): AuthUser,
 ) -> Result<Json<Value>, StatusCode> {
     let id = SessionId::new();
-    let _ = st.sessions.create(user, id, SessionMeta::default()).await;
+    st.sessions
+        .create(user, id, SessionMeta::default())
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "id": id.to_string() })))
 }
 
@@ -95,7 +98,11 @@ pub async fn list_sessions(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
 ) -> Result<Json<Value>, StatusCode> {
-    let ids = st.sessions.list(user).await.unwrap_or_default();
+    let ids = st
+        .sessions
+        .list(user)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({
         "sessions": ids.iter().map(|id| json!({ "id": id.to_string() })).collect::<Vec<_>>()
     })))
@@ -105,14 +112,23 @@ pub async fn list_sessions(
 #[utoipa::path(get, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404)))]
 pub async fn get_session(
     State(st): State<Arc<AppState>>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, StatusCode> {
     let sid = SessionId(id);
-    if !st.sessions.exists(sid).await.unwrap_or(false) {
+    if !st
+        .sessions
+        .exists(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
         return Err(StatusCode::NOT_FOUND);
     }
-    let msgs = st.sessions.history(sid).await.unwrap_or_default();
+    let msgs = st
+        .sessions
+        .history(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "id": id.to_string(), "messages": msgs })))
 }
 
@@ -120,10 +136,22 @@ pub async fn get_session(
 #[utoipa::path(delete, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 204), (status = 401)))]
 pub async fn delete_session(
     State(st): State<Arc<AppState>>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    let _ = st.sessions.delete(SessionId(id)).await;
+    let sid = SessionId(id);
+    if !st
+        .sessions
+        .exists(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    st.sessions
+        .delete(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -142,7 +170,16 @@ pub async fn messages(
     Path(id): Path<Uuid>,
     Json(req): Json<MessageReq>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    let stream = st.runtime.run_turn(user, SessionId(id), req.text);
+    let sid = SessionId(id);
+    if !st
+        .sessions
+        .exists(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let stream = st.runtime.run_turn(user, sid, req.text);
     Ok(Sse::new(stream.map(|ev| Ok::<_, Infallible>(to_sse(ev)))))
 }
 
@@ -150,10 +187,19 @@ pub async fn messages(
 #[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401)))]
 pub async fn cancel(
     State(st): State<Arc<AppState>>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, StatusCode> {
-    st.runtime.cancel(SessionId(id));
+    let sid = SessionId(id);
+    if !st
+        .sessions
+        .exists(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    st.runtime.cancel(sid);
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -161,12 +207,12 @@ pub async fn cancel(
 #[utoipa::path(get, path = "/api/v1/audio/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "音频 id")), responses((status = 200, description = "裸 PCM", content_type = "application/octet-stream"), (status = 401), (status = 404)))]
 pub async fn get_audio(
     State(st): State<Arc<AppState>>,
-    AuthUser(_user): AuthUser,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, StatusCode> {
     let cached = st
         .audio
-        .get(AudioId(id))
+        .get(AudioId(id), user)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;

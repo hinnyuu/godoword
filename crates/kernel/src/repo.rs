@@ -190,16 +190,18 @@ pub async fn delete_provider(store: &Store, user_id: Uuid, id: Uuid) -> Result<b
     Ok(n > 0)
 }
 
-/// 取 provider 密文行（绑定解析内部用）。
+/// 取 provider 密文行（绑定解析内部用）。**带 user_id 归属条件**（审计 C2：不解密他人 provider）。
 pub(crate) async fn get_provider_secret(
     store: &Store,
     id: Uuid,
+    user_id: Uuid,
 ) -> Result<Option<ProviderSecret>, KernelError> {
     fetch_optional_both!(
         store,
-        "SELECT base_url, key_enc, extra_json FROM providers WHERE id = $1",
+        "SELECT base_url, key_enc, extra_json FROM providers WHERE id = $1 AND user_id = $2",
         ProviderSecret,
-        id
+        id,
+        user_id
     )
     .map_err(storage_err)
 }
@@ -214,7 +216,7 @@ pub async fn provider_conn(
     if get_provider(store, user_id, id).await?.is_none() {
         return Ok(None);
     }
-    let secret = get_provider_secret(store, id)
+    let secret = get_provider_secret(store, id, user_id)
         .await?
         .ok_or_else(|| KernelError::Storage(format!("provider 不存在：{id}")))?;
     let key_bytes = master.decrypt(&secret.key_enc)?;
@@ -239,6 +241,12 @@ pub async fn create_binding(
     model: &str,
     params: Value,
 ) -> Result<Binding, KernelError> {
+    // provider 归属校验（审计 C2）：不可绑定他人 provider。
+    if get_provider(store, user_id, provider_id).await?.is_none() {
+        return Err(KernelError::Storage(format!(
+            "provider 不存在或非本用户：{provider_id}"
+        )));
+    }
     let id = Uuid::new_v4();
     let now = Utc::now();
     execute_both!(
@@ -287,6 +295,12 @@ pub async fn update_binding(
     model: &str,
     params: Value,
 ) -> Result<Option<Binding>, KernelError> {
+    // provider 归属校验（审计 C2）：不可改绑他人 provider。
+    if get_provider(store, user_id, provider_id).await?.is_none() {
+        return Err(KernelError::Storage(format!(
+            "provider 不存在或非本用户：{provider_id}"
+        )));
+    }
     let now = Utc::now();
     let affected = execute_both!(
         store,

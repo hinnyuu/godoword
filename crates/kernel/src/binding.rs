@@ -77,7 +77,7 @@ impl BindingResolver for DbBindingResolver {
             let binding =
                 repo::find_binding(&self.store, user.0, &module_id, cap, role_key).await?;
             let Some(b) = binding else { continue };
-            let secret = repo::get_provider_secret(&self.store, b.provider_id)
+            let secret = repo::get_provider_secret(&self.store, b.provider_id, b.user_id)
                 .await?
                 .ok_or_else(|| {
                     KernelError::Storage(format!("绑定引用的 provider 不存在：{}", b.provider_id))

@@ -126,6 +126,10 @@ async fn main() {
         .route("/api/v1/admin/invites", post(auth::admin_invite))
         .route("/api/v1/admin/users", get(auth::admin_users))
         .route(
+            "/api/v1/admin/users/{id}/status",
+            post(auth::admin_set_status),
+        )
+        .route(
             "/api/v1/sessions",
             post(rest::create_session).get(rest::list_sessions),
         )

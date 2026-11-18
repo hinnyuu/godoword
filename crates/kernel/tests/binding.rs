@@ -289,9 +289,8 @@ async fn resolver_and_repo_crud() {
         assert!(
             repo::update_binding(s, other, bind_default.id, prov.id, "hack", json!({}))
                 .await
-                .unwrap()
-                .is_none(),
-            "{b} 用户隔离 update"
+                .is_err(),
+            "{b} 用户隔离 update（归属校验拒绝）"
         );
         assert!(
             !repo::delete_binding(s, other, bind_default.id)
@@ -327,6 +326,35 @@ async fn resolver_and_repo_crud() {
                 .is_none(),
             "{b} 用户隔离 update provider"
         );
+        // 跨用户 provider binding 负例（审计 C2）：不可绑定/改绑他人 provider。
+        let other_prov = repo::create_provider(
+            s,
+            &master,
+            other,
+            "llm-openai",
+            "他人 provider",
+            "https://other.example.com/v1",
+            "sk-other-secret",
+            json!({}),
+        )
+        .await
+        .unwrap();
+        let cross = repo::create_binding(
+            s,
+            user,
+            "*",
+            "tts",
+            "default",
+            other_prov.id,
+            "model-X",
+            json!({}),
+        )
+        .await;
+        assert!(cross.is_err(), "{b} 跨用户 create_binding 拒绝");
+        repo::delete_provider(s, other, other_prov.id)
+            .await
+            .unwrap();
+
         // 删 provider 级联删 bindings（外键 CASCADE）。
         assert!(
             repo::delete_provider(s, user, prov.id).await.unwrap(),

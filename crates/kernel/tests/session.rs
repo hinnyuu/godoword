@@ -39,7 +39,7 @@ async fn run_test(store: Arc<Store>) {
         },
     };
     repo.create(user, sid, meta.clone()).await.unwrap();
-    let got = repo.meta(sid).await.unwrap().expect("meta 存在");
+    let got = repo.meta(user, sid).await.unwrap().expect("meta 存在");
     assert_eq!(got.module_id, meta.module_id, "{b} module_id round-trip");
     assert_eq!(
         got.on_disconnect,
@@ -49,9 +49,9 @@ async fn run_test(store: Arc<Store>) {
     assert_eq!(got.params.context_budget_tokens, 4000, "{b} params 预算");
     assert_eq!(got.params.eviction, Eviction::Summarize, "{b} params 淘汰");
     assert_eq!(got.params.tool_iteration_cap, 5, "{b} params 工具上限");
-    assert!(repo.exists(sid).await.unwrap(), "{b} exists");
+    assert!(repo.exists(user, sid).await.unwrap(), "{b} exists");
     assert!(
-        repo.meta(SessionId::new()).await.unwrap().is_none(),
+        repo.meta(user, SessionId::new()).await.unwrap().is_none(),
         "{b} meta 不存在 None"
     );
 
@@ -60,7 +60,7 @@ async fn run_test(store: Arc<Store>) {
     repo.create(user, sid2, SessionMeta::default())
         .await
         .unwrap();
-    let got2 = repo.meta(sid2).await.unwrap().unwrap();
+    let got2 = repo.meta(user, sid2).await.unwrap().unwrap();
     assert!(got2.module_id.is_none(), "{b} 默认 module None");
     assert_eq!(got2.on_disconnect, OnDisconnect::Cancel, "{b} 默认 cancel");
 
@@ -86,10 +86,10 @@ async fn run_test(store: Arc<Store>) {
         tool_calls: None,
         tool_call_id: Some("call_1".to_string()),
     };
-    repo.append(sid, m1).await.unwrap();
-    repo.append(sid, m2).await.unwrap();
-    repo.append(sid, m3).await.unwrap();
-    let hist = repo.history(sid).await.unwrap();
+    repo.append(user, sid, m1).await.unwrap();
+    repo.append(user, sid, m2).await.unwrap();
+    repo.append(user, sid, m3).await.unwrap();
+    let hist = repo.history(user, sid).await.unwrap();
     assert_eq!(hist.len(), 3, "{b} history 条数");
     assert_eq!(hist[0].role, "user", "{b} seq 顺序 0");
     assert_eq!(hist[1].role, "assistant", "{b} seq 顺序 1");
@@ -117,14 +117,56 @@ async fn run_test(store: Arc<Store>) {
         "{b} list 用户隔离"
     );
 
-    // delete 级联删 messages（外键 CASCADE）。
-    repo.delete(sid).await.unwrap();
+    // 两用户越权负例（审计 C1）：other 不可读/写/删 user 的会话。
     assert!(
-        !repo.exists(sid).await.unwrap(),
+        repo.meta(other, sid).await.unwrap().is_none(),
+        "{b} 越权 meta None"
+    );
+    assert!(
+        !repo.exists(other, sid).await.unwrap(),
+        "{b} 越权 exists false"
+    );
+    assert!(
+        repo.history(other, sid).await.unwrap().is_empty(),
+        "{b} 越权 history 空"
+    );
+    assert!(
+        repo.history_with_ids(other, sid).await.unwrap().is_empty(),
+        "{b} 越权 history_with_ids 空"
+    );
+    let bad_append = repo
+        .append(
+            other,
+            sid,
+            ChatMessage {
+                role: "user".to_string(),
+                content: "越权写入".to_string(),
+                reasoning: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        )
+        .await;
+    assert!(bad_append.is_err(), "{b} 越权 append 拒绝");
+    repo.delete(other, sid).await.unwrap(); // 非本用户删除无效果
+    assert!(
+        repo.exists(user, sid).await.unwrap(),
+        "{b} 越权 delete 不生效"
+    );
+    assert_eq!(
+        repo.history(user, sid).await.unwrap().len(),
+        3,
+        "{b} 越权未写入"
+    );
+
+    // delete 级联删 messages（外键 CASCADE）。
+    repo.delete(user, sid).await.unwrap();
+    assert!(
+        !repo.exists(user, sid).await.unwrap(),
         "{b} delete 后 exists false"
     );
     assert!(
-        repo.history(sid).await.unwrap().is_empty(),
+        repo.history(user, sid).await.unwrap().is_empty(),
         "{b} delete 级联 messages"
     );
     let cnt: (i64,) = kernel_api::fetch_one_both!(
@@ -137,7 +179,7 @@ async fn run_test(store: Arc<Store>) {
     assert_eq!(cnt.0, 0, "{b} messages 级联清空");
 
     // 清理。
-    repo.delete(sid2).await.unwrap();
+    repo.delete(user, sid2).await.unwrap();
     kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", user.0).unwrap();
     kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", other.0).unwrap();
 }

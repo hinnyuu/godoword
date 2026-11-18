@@ -241,12 +241,12 @@ async fn turn_speak_full_sequence() {
             _ => None,
         })
         .expect("audio_id");
-    let cached = audio.get(audio_id).await.unwrap().expect("缓存音频");
+    let cached = audio.get(audio_id, user).await.unwrap().expect("缓存音频");
     assert_eq!(cached.pcm.len(), 4800);
     assert_eq!(cached.words.len(), 1);
 
     // 转录持久化：user + assistant(tool_calls) + tool + assistant = 4
-    let hist = sessions.history(session).await.unwrap();
+    let hist = sessions.history(user, session).await.unwrap();
     assert_eq!(hist.len(), 4);
     assert_eq!(hist[0].role, "user");
     assert_eq!(hist[1].role, "assistant");
@@ -377,6 +377,7 @@ async fn turn_metering_and_eviction() {
     for i in 0..3 {
         sessions
             .append(
+                user,
                 session,
                 kernel_api::ChatMessage {
                     role: "user".to_string(),
@@ -436,7 +437,7 @@ async fn disconnect_continue_completes() {
     // continue：服务端 detach 跑完 → 转录含 assistant。
     let mut len = 0;
     for _ in 0..100 {
-        len = sessions.history(session).await.unwrap().len();
+        len = sessions.history(user, session).await.unwrap().len();
         if len >= 2 {
             break;
         }
@@ -467,7 +468,7 @@ async fn disconnect_cancel_stops() {
     drop(rt.run_turn(user, session, "hi".to_string()));
     // cancel：置取消标志 → 回合中止，仅 user 消息（无 assistant）。
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    let hist = sessions.history(session).await.unwrap();
+    let hist = sessions.history(user, session).await.unwrap();
     assert_eq!(
         hist.len(),
         1,

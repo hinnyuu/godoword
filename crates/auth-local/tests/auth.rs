@@ -146,7 +146,15 @@ async fn run_test(store: Arc<Store>) {
         "{b} 过期会话 None"
     );
 
-    // 禁用账户 → 登录 Disabled。
+    // 禁用账户 → 登录 Disabled + 旧 cookie 失效（审计 C3）。
+    let user4_token = create_session(&store, user4, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        validate_session(&store, &user4_token).await.unwrap(),
+        Some(user4),
+        "{b} 禁用前会话有效"
+    );
     assert!(
         set_user_status(&store, user4, "disabled").await.unwrap(),
         "{b} 设状态"
@@ -157,13 +165,31 @@ async fn run_test(store: Arc<Store>) {
             .is_err(),
         "{b} 禁用登录拒绝"
     );
+    assert_eq!(
+        validate_session(&store, &user4_token).await.unwrap(),
+        None,
+        "{b} 禁用后旧 cookie 失效"
+    );
 
-    // 管理员重置密码。
+    // 管理员重置密码 → 旧会话撤销（审计 C3）。
+    let user1_token = create_session(&store, user1, Duration::hours(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        validate_session(&store, &user1_token).await.unwrap(),
+        Some(user1),
+        "{b} 重置前会话有效"
+    );
     assert!(
         admin_reset_password(&store, user1, "new-pass-12345")
             .await
             .unwrap(),
         "{b} 重置"
+    );
+    assert_eq!(
+        validate_session(&store, &user1_token).await.unwrap(),
+        None,
+        "{b} 重置后旧会话撤销"
     );
     assert!(
         verify_login(&store, "user1", "new-pass-12345")

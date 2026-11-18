@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use kernel_api::{AudioFormat, AudioId, KernelError, WordTimestamp};
+use kernel_api::{AudioFormat, AudioId, KernelError, UserId, WordTimestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::seam::{AudioCache, CachedAudio};
@@ -20,13 +20,14 @@ pub struct FsAudio {
     dir: PathBuf,
 }
 
-/// sidecar 元数据（词级时间戳 + 编码 + 采样率 + 创建时间）。
+/// sidecar 元数据（词级时间戳 + 编码 + 采样率 + 创建时间 + 归属用户）。
 #[derive(Serialize, Deserialize)]
 struct Sidecar {
     words: Vec<WordTimestamp>,
     format: AudioFormat,
     sample_rate: u32,
     created_at: DateTime<Utc>,
+    owner: UserId,
 }
 
 impl FsAudio {
@@ -125,6 +126,7 @@ impl AudioCache for FsAudio {
             format: audio.format,
             sample_rate: audio.sample_rate,
             created_at: Utc::now(),
+            owner: audio.owner,
         };
         let json = serde_json::to_vec(&sidecar)
             .map_err(|e| KernelError::Internal(format!("音频 sidecar 序列化失败：{e}")))?;
@@ -137,7 +139,7 @@ impl AudioCache for FsAudio {
         Ok(())
     }
 
-    async fn get(&self, id: AudioId) -> Result<Option<CachedAudio>, KernelError> {
+    async fn get(&self, id: AudioId, user: UserId) -> Result<Option<CachedAudio>, KernelError> {
         let pcm = match tokio::fs::read(self.pcm_path(id)).await {
             Ok(b) => b,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -146,11 +148,16 @@ impl AudioCache for FsAudio {
         let json = tokio::fs::read(self.json_path(id)).await.map_err(io_err)?;
         let sidecar: Sidecar = serde_json::from_slice(&json)
             .map_err(|e| KernelError::Internal(format!("音频 sidecar 解析失败：{e}")))?;
+        // 归属校验（审计 C1）：非本用户 → None，不泄露存在性。
+        if sidecar.owner != user {
+            return Ok(None);
+        }
         Ok(Some(CachedAudio {
             pcm: Bytes::from(pcm),
             words: sidecar.words,
             format: sidecar.format,
             sample_rate: sidecar.sample_rate,
+            owner: sidecar.owner,
         }))
     }
 }

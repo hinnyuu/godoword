@@ -39,6 +39,11 @@
 
 - M1c-hardening 加固分支（feat/m1c-hardening）：修复第三方审计（/tmp/godoword_M1c_AGENTS第三方审计意见.md，HEAD 03ff4e3）
   发现的收尾阻塞。全部本期修（用户定案，避免延期漂移）；M1d 讨论暂缓至加固后。
+  **H1（P0 C1-C4）完成**：SessionRepo/AudioCache 接缝全路径携带 user_id 对象级授权（DbSessions/MemSessions/FsAudio）；
+  runtime 持久化失败关闭（meta/history/append 错误中止，不调计费上游）；binding/provider 同主（create/update/resolve 归属校验）；
+  validate_session 联查 active + 禁用/重置撤销会话 + is_admin 须 active + 管理员状态路由（防自禁/防禁最后管理员）。
+  两用户负例（repo 层 + REST 层越权 404/跨用户 provider 400/禁用旧 cookie 401）+ 双后端全绿 + clippy/fmt 干净。
+  下一：H2（P1 核心语义 C5-C9，含 C7 淘汰水位 0003 schema）。
 
 ## blocked / 待拍板决策
 

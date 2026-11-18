@@ -92,12 +92,13 @@ impl SessionRepo for DbSessions {
         Ok(())
     }
 
-    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
+    async fn meta(&self, user: UserId, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
         let row: Option<SessionRow> = fetch_optional_both!(
             &*self.store,
-            "SELECT module_id, on_disconnect, params_json FROM sessions WHERE id = $1",
+            "SELECT module_id, on_disconnect, params_json FROM sessions WHERE id = $1 AND user_id = $2",
             SessionRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(row.map(|r| SessionMeta {
@@ -110,23 +111,26 @@ impl SessionRepo for DbSessions {
         }))
     }
 
-    async fn exists(&self, id: SessionId) -> Result<bool, KernelError> {
+    async fn exists(&self, user: UserId, id: SessionId) -> Result<bool, KernelError> {
         let row: Option<(Uuid,)> = fetch_optional_both!(
             &*self.store,
-            "SELECT id FROM sessions WHERE id = $1",
+            "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
             (Uuid,),
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(row.is_some())
     }
 
-    async fn history(&self, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
+    async fn history(&self, user: UserId, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
         let rows: Vec<MessageRow> = fetch_all_both!(
             &*self.store,
-            "SELECT role, content, reasoning, tool_calls, tool_call_id FROM messages WHERE session_id = $1 ORDER BY seq",
+            "SELECT role, content, reasoning, tool_calls, tool_call_id FROM messages
+             WHERE session_id = $1 AND session_id IN (SELECT id FROM sessions WHERE user_id = $2) ORDER BY seq",
             MessageRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(rows
@@ -141,12 +145,18 @@ impl SessionRepo for DbSessions {
             .collect())
     }
 
-    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+    async fn history_with_ids(
+        &self,
+        user: UserId,
+        id: SessionId,
+    ) -> Result<Vec<StoredMessage>, KernelError> {
         let rows: Vec<MessageIdRow> = fetch_all_both!(
             &*self.store,
-            "SELECT id, seq, role, content, reasoning, tool_calls, tool_call_id FROM messages WHERE session_id = $1 ORDER BY seq",
+            "SELECT id, seq, role, content, reasoning, tool_calls, tool_call_id FROM messages
+             WHERE session_id = $1 AND session_id IN (SELECT id FROM sessions WHERE user_id = $2) ORDER BY seq",
             MessageIdRow,
-            id.0
+            id.0,
+            user.0
         )
         .map_err(storage_err)?;
         Ok(rows
@@ -165,7 +175,24 @@ impl SessionRepo for DbSessions {
             .collect())
     }
 
-    async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError> {
+    async fn append(
+        &self,
+        user: UserId,
+        id: SessionId,
+        msg: ChatMessage,
+    ) -> Result<(), KernelError> {
+        // 归属校验（失败关闭，审计 C1/C4）：会话不存在或非本用户 → 错误，不写入。
+        let owned: Option<(Uuid,)> = fetch_optional_both!(
+            &*self.store,
+            "SELECT id FROM sessions WHERE id = $1 AND user_id = $2",
+            (Uuid,),
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
+        if owned.is_none() {
+            return Err(KernelError::Storage(format!("会话不存在或非本用户：{id}")));
+        }
         // seq 分配：单活跃回合锁内串行，COALESCE(MAX(seq),0)+1（PG INTEGER↔i32）。
         let next: (i32,) = fetch_one_both!(
             &*self.store,
@@ -205,10 +232,15 @@ impl SessionRepo for DbSessions {
         Ok(rows.into_iter().map(|(id,)| SessionId(id)).collect())
     }
 
-    async fn delete(&self, id: SessionId) -> Result<(), KernelError> {
-        // messages 经外键 ON DELETE CASCADE 级联删。
-        execute_both!(&*self.store, "DELETE FROM sessions WHERE id = $1", id.0)
-            .map_err(storage_err)?;
+    async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError> {
+        // messages 经外键 ON DELETE CASCADE 级联删；限本用户（审计 C1）。
+        execute_both!(
+            &*self.store,
+            "DELETE FROM sessions WHERE id = $1 AND user_id = $2",
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
         Ok(())
     }
 }

@@ -281,7 +281,6 @@ pub struct Runtime {
     sessions: Arc<dyn SessionRepo>,
     audio: Arc<dyn AudioCache>,
     store: Arc<Store>,
-    tool_cap: u32,
     turn_timeout: Duration,
     active: Arc<Mutex<HashSet<SessionId>>>,
     cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
@@ -289,7 +288,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// 新建运行时（默认守护：工具上限 8、回合超时 120s）。store 供 call_log/outbox 计量。
+    /// 新建运行时（默认守护：回合超时 120s；工具上限取每会话 meta.params）。store 供 call_log/outbox 计量。
     pub fn new(
         llm: Arc<dyn LlmProvider>,
         tts: Arc<dyn TtsProvider>,
@@ -305,18 +304,11 @@ impl Runtime {
             sessions,
             audio,
             store,
-            tool_cap: 8,
             turn_timeout: Duration::from_secs(120),
             active: Arc::new(Mutex::new(HashSet::new())),
             cancels: Arc::new(Mutex::new(HashMap::new())),
             detach: Arc::new(tokio::sync::Semaphore::new(4)),
         }
-    }
-
-    /// 应用默认会话参数（工具上限 fallback；每会话 meta.params 优先）。
-    pub fn with_params(mut self, params: kernel_api::SessionParams) -> Self {
-        self.tool_cap = params.tool_iteration_cap;
-        self
     }
 
     /// 设置 detach 并发上限（on_disconnect=continue 断开后服务端跑完的回合数上限）。
@@ -375,7 +367,7 @@ impl Runtime {
                     // 客户端断开：决策一次（cancel / continue）。
                     decided = true;
                     let on_disc = sessions
-                        .meta(session)
+                        .meta(user, session)
                         .await
                         .ok()
                         .flatten()
@@ -418,7 +410,6 @@ impl Runtime {
         let sessions = self.sessions.clone();
         let audio = self.audio.clone();
         let store = self.store.clone();
-        let default_tool_cap = self.tool_cap;
         let turn_timeout = self.turn_timeout;
         let active = self.active.clone();
         let cancels = self.cancels.clone();
@@ -455,13 +446,45 @@ impl Runtime {
             };
             yield SessionEvent::RunStart { run_id, plan_version: None, model: binding.model.clone() };
 
-            let meta = sessions.meta(session).await.ok().flatten();
-            let params = meta.as_ref().map(|m| m.params.clone()).unwrap_or_default();
-            let tool_cap = meta
-                .as_ref()
-                .map(|m| m.params.tool_iteration_cap)
-                .unwrap_or(default_tool_cap);
-            let history = sessions.history_with_ids(session).await.unwrap_or_default();
+            // 归属 + 失败关闭（审计 C1/C4）：会话不存在/非本用户/DB 错误 → 中止，不调计费上游。
+            let meta = match sessions.meta(user, session).await {
+                Ok(Some(m)) => m,
+                Ok(None) => {
+                    yield SessionEvent::Error {
+                        code: "session_not_found".to_string(),
+                        message: "会话不存在或无权访问".to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+                Err(e) => {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+            };
+            let params = meta.params.clone();
+            let tool_cap = meta.params.tool_iteration_cap;
+            let history = match sessions.history_with_ids(user, session).await {
+                Ok(h) => h,
+                Err(e) => {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+            };
             let user_msg = ChatMessage {
                 role: "user".to_string(),
                 content: user_text,
@@ -469,7 +492,16 @@ impl Runtime {
                 tool_calls: None,
                 tool_call_id: None,
             };
-            let _ = sessions.append(session, user_msg.clone()).await;
+            if let Err(e) = sessions.append(user, session, user_msg.clone()).await {
+                yield SessionEvent::Error {
+                    code: "storage".to_string(),
+                    message: e.to_string(),
+                    retryable: false,
+                    action: None,
+                };
+                yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                return;
+            }
             let system = system_message(DEFAULT_TEACHER_PERSONA);
             let mut assembled = assemble_truncate(
                 system,
@@ -489,8 +521,8 @@ impl Runtime {
             // 淘汰 span 入 outbox（SessionEvicted；module_id 有则用之、无则哨兵 kernel）。
             if !assembled.evicted.is_empty() {
                 let module_id = meta
+                    .module_id
                     .as_ref()
-                    .and_then(|m| m.module_id.as_ref())
                     .map(|m| m.0.clone())
                     .unwrap_or_else(|| "kernel".to_string());
                 let ids: Vec<String> =
@@ -511,7 +543,7 @@ impl Runtime {
             let tools = vec![speak_tool_spec()];
             let mut iterations: u32 = 0;
 
-            let finish = loop {
+            let finish = 'turn: loop {
                 if cancel_flag.load(Ordering::Relaxed) {
                     break FinishReason::Cancelled;
                 }
@@ -627,7 +659,15 @@ impl Runtime {
                     tool_call_id: None,
                 };
                 convo.push(assistant_msg.clone());
-                let _ = sessions.append(session, assistant_msg).await;
+                if let Err(e) = sessions.append(user, session, assistant_msg).await {
+                    yield SessionEvent::Error {
+                        code: "storage".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    break 'turn FinishReason::Error;
+                }
 
                 if chunk_finish == FinishReason::ToolCalls && !pending.is_empty() {
                     for tc in pending {
@@ -707,6 +747,7 @@ impl Runtime {
                                                             words: words_acc.clone(),
                                                             format,
                                                             sample_rate,
+                                                            owner: user,
                                                         }).await;
                                                         yield SessionEvent::AudioEnd {
                                                             audio_id,
@@ -750,7 +791,15 @@ impl Runtime {
                             tool_call_id: Some(tc.id.clone()),
                         };
                         convo.push(tool_msg.clone());
-                        let _ = sessions.append(session, tool_msg).await;
+                        if let Err(e) = sessions.append(user, session, tool_msg).await {
+                            yield SessionEvent::Error {
+                                code: "storage".to_string(),
+                                message: e.to_string(),
+                                retryable: false,
+                                action: None,
+                            };
+                            break 'turn FinishReason::Error;
+                        }
                     }
                     continue;
                 }

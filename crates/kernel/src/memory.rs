@@ -45,45 +45,71 @@ impl SessionRepo for MemSessions {
         Ok(())
     }
 
-    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
-        Ok(self.inner.lock().unwrap().get(&id).map(|s| s.meta.clone()))
-    }
-
-    async fn exists(&self, id: SessionId) -> Result<bool, KernelError> {
-        Ok(self.inner.lock().unwrap().contains_key(&id))
-    }
-
-    async fn history(&self, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
+    async fn meta(&self, user: UserId, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
         Ok(self
             .inner
             .lock()
             .unwrap()
             .get(&id)
+            .filter(|s| s.user == user)
+            .map(|s| s.meta.clone()))
+    }
+
+    async fn exists(&self, user: UserId, id: SessionId) -> Result<bool, KernelError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .get(&id)
+            .map(|s| s.user == user)
+            .unwrap_or(false))
+    }
+
+    async fn history(&self, user: UserId, id: SessionId) -> Result<Vec<ChatMessage>, KernelError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .get(&id)
+            .filter(|s| s.user == user)
             .map(|s| s.messages.iter().map(|m| m.message.clone()).collect())
             .unwrap_or_default())
     }
 
-    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+    async fn history_with_ids(
+        &self,
+        user: UserId,
+        id: SessionId,
+    ) -> Result<Vec<StoredMessage>, KernelError> {
         Ok(self
             .inner
             .lock()
             .unwrap()
             .get(&id)
+            .filter(|s| s.user == user)
             .map(|s| s.messages.clone())
             .unwrap_or_default())
     }
 
-    async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError> {
+    async fn append(
+        &self,
+        user: UserId,
+        id: SessionId,
+        msg: ChatMessage,
+    ) -> Result<(), KernelError> {
         let mut g = self.inner.lock().unwrap();
-        if let Some(s) = g.get_mut(&id) {
-            let seq = (s.messages.len() + 1) as i32;
-            s.messages.push(StoredMessage {
-                id: Uuid::new_v4(),
-                seq,
-                message: msg,
-            });
+        match g.get_mut(&id) {
+            Some(s) if s.user == user => {
+                let seq = (s.messages.len() + 1) as i32;
+                s.messages.push(StoredMessage {
+                    id: Uuid::new_v4(),
+                    seq,
+                    message: msg,
+                });
+                Ok(())
+            }
+            _ => Err(KernelError::Storage(format!("会话不存在或非本用户：{id}"))),
         }
-        Ok(())
     }
 
     async fn list(&self, user: UserId) -> Result<Vec<SessionId>, KernelError> {
@@ -97,8 +123,11 @@ impl SessionRepo for MemSessions {
             .collect())
     }
 
-    async fn delete(&self, id: SessionId) -> Result<(), KernelError> {
-        self.inner.lock().unwrap().remove(&id);
+    async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError> {
+        let mut g = self.inner.lock().unwrap();
+        if g.get(&id).map(|s| s.user == user).unwrap_or(false) {
+            g.remove(&id);
+        }
         Ok(())
     }
 }
@@ -123,12 +152,19 @@ impl AudioCache for MemAudio {
         Ok(())
     }
 
-    async fn get(&self, id: AudioId) -> Result<Option<CachedAudio>, KernelError> {
-        Ok(self.inner.lock().unwrap().get(&id).map(|a| CachedAudio {
-            pcm: a.pcm.clone(),
-            words: a.words.clone(),
-            format: a.format,
-            sample_rate: a.sample_rate,
-        }))
+    async fn get(&self, id: AudioId, user: UserId) -> Result<Option<CachedAudio>, KernelError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .get(&id)
+            .filter(|a| a.owner == user)
+            .map(|a| CachedAudio {
+                pcm: a.pcm.clone(),
+                words: a.words.clone(),
+                format: a.format,
+                sample_rate: a.sample_rate,
+                owner: a.owner,
+            }))
     }
 }

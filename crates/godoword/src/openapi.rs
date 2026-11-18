@@ -26,6 +26,7 @@ use utoipa::OpenApi;
         crate::auth::admin_reset,
         crate::auth::admin_invite,
         crate::auth::admin_users,
+        crate::auth::admin_set_status,
         crate::rest::create_session,
         crate::rest::list_sessions,
         crate::rest::get_session,
@@ -60,6 +61,7 @@ use utoipa::OpenApi;
         crate::auth::LoginReq,
         crate::auth::ResetReq,
         crate::auth::InviteReq,
+        crate::auth::StatusReq,
         crate::rest::MessageReq,
     )),
     tags(

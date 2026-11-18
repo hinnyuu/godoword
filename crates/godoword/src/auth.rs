@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use axum::extract::{FromRequestParts, State};
+use axum::extract::{FromRequestParts, Path, State};
 use axum::http::{header, request::Parts, HeaderMap, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -327,4 +327,51 @@ pub async fn admin_users(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(serde_json::to_value(users).unwrap_or(json!([]))))
+}
+
+/// 设用户状态请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct StatusReq {
+    /// active / disabled。
+    pub status: String,
+}
+
+/// 管理员设用户状态（禁用撤销会话；防自禁/防禁最后一个管理员，审计 C3）。
+#[utoipa::path(post, path = "/api/v1/admin/users/{id}/status", request_body = StatusReq, tag = "admin",
+    params(("id" = Uuid, Path, description = "用户 id")),
+    responses((status = 200, body = Value), (status = 400), (status = 401), (status = 403), (status = 404)))]
+pub async fn admin_set_status(
+    State(st): State<Arc<AppState>>,
+    AdminUser(admin): AdminUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<StatusReq>,
+) -> Result<Json<Value>, StatusCode> {
+    if req.status != "active" && req.status != "disabled" {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    let target = UserId(id);
+    if req.status == "disabled" {
+        if id == admin.0 {
+            return Err(StatusCode::BAD_REQUEST); // 不可禁用自己
+        }
+        if auth_local::is_admin(&st.store, target)
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        {
+            let n = auth_local::active_admin_count(&st.store)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            if n <= 1 {
+                return Err(StatusCode::BAD_REQUEST); // 不可禁用最后一个活跃管理员
+            }
+        }
+    }
+    let ok = auth_local::set_user_status(&st.store, target, &req.status)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if ok {
+        Ok(Json(json!({ "ok": true })))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
