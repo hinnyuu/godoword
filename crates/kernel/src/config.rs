@@ -88,6 +88,8 @@ pub struct Config {
     pub cache_ttl_secs: u64,
     /// 音频缓存容量上限（字节，默认 1GiB）；超限淘汰最旧。
     pub cache_max_bytes: u64,
+    /// on_disconnect=continue 的 detach 并发回合上限（默认 4）；超限降级 cancel。
+    pub max_detached_turns: u32,
 }
 
 impl Default for Config {
@@ -100,6 +102,7 @@ impl Default for Config {
             provider_presets: Vec::new(),
             cache_ttl_secs: 30 * 24 * 3600,
             cache_max_bytes: 1024 * 1024 * 1024,
+            max_detached_turns: 4,
         }
     }
 }
@@ -149,6 +152,11 @@ impl Config {
         if let Some(v) = env.get("GODOWORD_CACHE_MAX_BYTES") {
             cfg.cache_max_bytes = v.parse().map_err(|_| {
                 KernelError::Internal(format!("GODOWORD_CACHE_MAX_BYTES 须为整数，实得 {v}"))
+            })?;
+        }
+        if let Some(v) = env.get("GODOWORD_MAX_DETACHED_TURNS") {
+            cfg.max_detached_turns = v.parse().map_err(|_| {
+                KernelError::Internal(format!("GODOWORD_MAX_DETACHED_TURNS 须为整数，实得 {v}"))
             })?;
         }
         Ok(cfg)

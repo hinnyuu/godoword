@@ -38,7 +38,11 @@
   （Summarizer role + 失败回退）+ 淘汰 span 入 outbox（SessionEvicted，module_id 哨兵 kernel）+ call_log 计量
   （LLM/TTS/summarize，adapter_id 取 trait id）；journal（record_call/emit_progress/pending/dispatch_once）
   + outbox dispatcher 骨架（main 空注册表，M2 消费）。双后端测试全绿（session/journal 独立 PG schema 隔离；
-  计量测试用文件库 + ensure_user 避外键违约）+ clippy/fmt 干净。下一：phase 3（continue 运行时重构）。
+  计量测试用文件库 + ensure_user 避外键违约）+ clippy/fmt 干净。
+  **phase 3 完成**：run_turn 执行/投递分离——执行体 spawn tokio task 经有界 mpsc 投递，SSE 订阅 receiver；
+  断开（receiver drop）读 on_disconnect：cancel 置标志 / continue 取 detach permit 排空跑完（permit 满降级 cancel）；
+  活跃锁归执行体（task 结束释放）；detach semaphore 默认 4（Config max_detached_turns 可配）；cancel_all + 优雅退出接线。
+  断开 continue/cancel 测试（current_thread 确定时序）+ clippy/fmt 干净。下一：phase 4（auth-local crate）。
 
 ## blocked / 待拍板决策
 

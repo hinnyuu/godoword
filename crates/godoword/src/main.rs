@@ -15,10 +15,8 @@ use axum::{
 };
 #[cfg(feature = "dev-bypass")]
 use kernel::DbBindingResolver;
-#[cfg(feature = "dev-bypass")]
-use kernel::Runtime;
 use kernel::{
-    run_migrations, AudioCache, Config, DbSessions, FsAudio, MasterKey, SessionRepo,
+    run_migrations, AudioCache, Config, DbSessions, FsAudio, MasterKey, Runtime, SessionRepo,
     KERNEL_MIGRATIONS,
 };
 use kernel_api::{LlmProvider, TtsProvider};
@@ -99,7 +97,8 @@ async fn main() {
             sessions.clone(),
             audio.clone(),
             store.clone(),
-        );
+        )
+        .with_detach_cap(cfg.max_detached_turns as usize);
         let user = dev::dev_user();
         dev::seed(&store, &master, user).await;
         tracing::warn!("dev-bypass 启用：固定 dev user + DB 绑定解析（仅开发测试，release 不含）");
@@ -118,6 +117,7 @@ async fn main() {
         None::<Arc<dyn TtsProvider>>,
     );
 
+    let shutdown_rt = runtime.clone();
     let state = Arc::new(AppState {
         sessions,
         audio,
@@ -194,15 +194,15 @@ async fn main() {
         Err(e) => panic!("绑定端口失败：{e}"),
     };
     let local = listener.local_addr().expect("读取本地地址");
-    tracing::info!("godoword M1b 监听 {local}");
+    tracing::info!("godoword M1c 监听 {local}");
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(shutdown_rt))
         .await
         .expect("服务运行失败");
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(runtime: Option<Arc<Runtime>>) {
     let ctrl_c = async {
         tokio::signal::ctrl_c().await.expect("安装 Ctrl-C 处理失败");
     };
@@ -221,4 +221,7 @@ async fn shutdown_signal() {
         _ = terminate => {},
     }
     tracing::info!("收到退出信号，优雅关闭");
+    if let Some(rt) = runtime {
+        rt.cancel_all();
+    }
 }

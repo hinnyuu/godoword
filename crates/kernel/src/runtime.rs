@@ -285,6 +285,7 @@ pub struct Runtime {
     turn_timeout: Duration,
     active: Arc<Mutex<HashSet<SessionId>>>,
     cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
+    detach: Arc<tokio::sync::Semaphore>,
 }
 
 impl Runtime {
@@ -308,6 +309,7 @@ impl Runtime {
             turn_timeout: Duration::from_secs(120),
             active: Arc::new(Mutex::new(HashSet::new())),
             cancels: Arc::new(Mutex::new(HashMap::new())),
+            detach: Arc::new(tokio::sync::Semaphore::new(4)),
         }
     }
 
@@ -315,6 +317,21 @@ impl Runtime {
     pub fn with_params(mut self, params: kernel_api::SessionParams) -> Self {
         self.tool_cap = params.tool_iteration_cap;
         self
+    }
+
+    /// 设置 detach 并发上限（on_disconnect=continue 断开后服务端跑完的回合数上限）。
+    pub fn with_detach_cap(self, cap: usize) -> Self {
+        Self {
+            detach: Arc::new(tokio::sync::Semaphore::new(cap)),
+            ..self
+        }
+    }
+
+    /// 取消所有活跃回合（优雅退出用）。
+    pub fn cancel_all(&self) {
+        for flag in self.cancels.lock().unwrap().values() {
+            flag.store(true, Ordering::Relaxed);
+        }
     }
 
     /// 会话仓储句柄（REST 用）。
@@ -334,8 +351,62 @@ impl Runtime {
         }
     }
 
-    /// 跑一个回合，返回 SessionEvent 流（SSE）。断开即取消（drop 流中止上游，释放活跃锁）。
+    /// 跑一个回合，返回 SessionEvent 流（SSE）。执行/投递分离：回合 spawn 为 tokio task 经有界 mpsc
+    /// 投递，SSE 订阅 receiver。客户端断开（receiver drop）→ 读 on_disconnect：cancel 置取消标志 /
+    /// continue 取 detach permit 后排空跑完（permit 满则降级 cancel）。活跃锁归执行体（task 结束释放）。
     pub fn run_turn(
+        &self,
+        user: UserId,
+        session: SessionId,
+        user_text: String,
+    ) -> impl Stream<Item = SessionEvent> + Send + 'static {
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<SessionEvent>(256);
+        let exec = self.run_turn_stream(user, session, user_text);
+        let sessions = self.sessions.clone();
+        let cancels = self.cancels.clone();
+        let detach = self.detach.clone();
+
+        tokio::spawn(async move {
+            let mut exec = Box::pin(exec);
+            let mut decided = false;
+            let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
+            while let Some(ev) = exec.next().await {
+                if tx.send(ev).await.is_err() && !decided {
+                    // 客户端断开：决策一次（cancel / continue）。
+                    decided = true;
+                    let on_disc = sessions
+                        .meta(session)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|m| m.on_disconnect)
+                        .unwrap_or_default();
+                    let mut cancel = true;
+                    if on_disc == crate::seam::OnDisconnect::Continue {
+                        if let Ok(p) = detach.clone().try_acquire_owned() {
+                            _detach_permit = Some(p);
+                            cancel = false; // continue：排空跑完
+                        }
+                    }
+                    if cancel {
+                        if let Some(flag) = cancels.lock().unwrap().get(&session) {
+                            flag.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+            }
+            // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
+        });
+
+        async_stream::stream! {
+            while let Some(ev) = rx.recv().await {
+                yield ev;
+            }
+        }
+    }
+
+    /// 回合执行体（async_stream，yield SessionEvent）。由 run_turn spawn 为 task 经 mpsc 投递。
+    fn run_turn_stream(
         &self,
         user: UserId,
         session: SessionId,

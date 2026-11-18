@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::stream::{self, StreamExt};
 use kernel::{
-    run_migrations, AudioCache, BindingResolver, MemAudio, MemSessions, ResolvedBinding, Runtime,
-    SessionMeta, SessionRepo, KERNEL_MIGRATIONS,
+    run_migrations, AudioCache, BindingResolver, MemAudio, MemSessions, OnDisconnect,
+    ResolvedBinding, Runtime, SessionMeta, SessionRepo, KERNEL_MIGRATIONS,
 };
 use kernel_api::{
     AudioEvent, AudioFormat, AudioStream, ChatChunk, ChatRequest, ChatStream, FinishReason,
@@ -412,4 +412,67 @@ async fn turn_metering_and_eviction() {
     assert!(evicted.0 >= 1, "淘汰 span 入 outbox（kernel 哨兵）");
     drop(store);
     std::fs::remove_dir_all(&db_dir).unwrap();
+}
+
+// current_thread：spawn 的 task 须待 await 才运行，保证 drop(stream) 先于 task 首次 send（确定断开时序）。
+#[tokio::test(flavor = "current_thread")]
+async fn disconnect_continue_completes() {
+    let (rt, sessions, _audio) = runtime(false).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                on_disconnect: OnDisconnect::Continue,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    // 立即 drop 流（模拟客户端断开），不消费任何事件。
+    drop(rt.run_turn(user, session, "hi".to_string()));
+    // continue：服务端 detach 跑完 → 转录含 assistant。
+    let mut len = 0;
+    for _ in 0..100 {
+        len = sessions.history(session).await.unwrap().len();
+        if len >= 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        len >= 2,
+        "continue 断开后服务端跑完（user+assistant），实得 {len}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disconnect_cancel_stops() {
+    let (rt, sessions, _audio) = runtime(false).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                on_disconnect: OnDisconnect::Cancel,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    drop(rt.run_turn(user, session, "hi".to_string()));
+    // cancel：置取消标志 → 回合中止，仅 user 消息（无 assistant）。
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let hist = sessions.history(session).await.unwrap();
+    assert_eq!(
+        hist.len(),
+        1,
+        "cancel 断开后回合中止（仅 user），实得 {}",
+        hist.len()
+    );
+    assert_eq!(hist[0].role, "user");
 }
