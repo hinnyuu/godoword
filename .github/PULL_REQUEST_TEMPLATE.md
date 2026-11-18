@@ -15,7 +15,7 @@
 ## 自动化冒烟（CI）
 
 > CI `smoke` job 在镜像构建后自动执行 `scripts/acceptance/smoke.sh`（podman，资源隔离 + 自动清理）。
-> 覆盖 healthz/meta/静态/双栈/优雅退出/uid 卷矩阵/删容器重建/bind 属主 + **M1c auth 流（注册首用户/cookie/me/会话/providers/CSRF 403/越权 401）**。
+> 覆盖 healthz/meta/静态/双栈/优雅退出/uid 卷矩阵/删容器重建/bind 属主 + **M1c auth 流（注册首用户/cookie/me/会话/providers/CSRF 403/未认证 401/跨用户资源 404/非管理员管理面 403/限流 429）**。
 > 本地可跑 `bash scripts/acceptance/smoke.sh <镜像>`。**声明覆盖范围须与脚本断言一致**（审计 C10：不得夸大）。
 
 - [ ] CI smoke 绿（贴 checks 链接）

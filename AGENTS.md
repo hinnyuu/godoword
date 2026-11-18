@@ -44,6 +44,8 @@ godoword：私有部署外语学习 Web 应用（日语优先），LLM 担任语
 - 双后端：含共享 SQL 的测试走 `backends()` 夹具（SQLite 恒跑 + `TEST_PG_URL` 驱动 PG）；
   共享 SQL 守双兼容 SQL 子集（uuid 主键 / 应用侧时间戳 / JSON 整取回 Rust）。
 - **多用户授权负例**：用户级资源（session/audio/provider/binding）须对象级归属校验 + 两用户越权负例（审计 C1/C2）。
+- **可靠性须测试锚定**：凡声称失败关闭/原子/单次/硬边界，须有失败路径 + 并发负例测试，不能只测 happy path（二审 R1-R4/R7）。
+  加固叙事入 history，live 文档只记当前事实、status 只留开放项——防安全文字淹没产品本质（history 2127 文档精炼原则）。
 
 ## 文档体系
 

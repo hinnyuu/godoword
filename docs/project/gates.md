@@ -38,7 +38,7 @@
     `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；
     **main 分支保护 required check**，方言漂移双向捕获。含共享 SQL 的 crate 须走 `backends()` 夹具。
     release 亦对 main 镜像重跑冒烟（R4 same-tree）。
-14. **status 新鲜度**：改 `src/` 或 `tests/` 须同 PR 更新 `docs/project/status.md`（live 交接），
+14. **status 新鲜度**：改 `src/`、`tests/`、`migrations/` 或 `web/` 须同 PR 更新 `docs/project/status.md`（live 交接），
     可 docs-nochange 豁免。见 [conventions](conventions.md#agent-交接与入门)。
 
 本地预检：`python3 scripts/docs-gate/gate.py --local`（覆盖率/漏改/链接/术语/中文/禁入/status 新鲜度，无需网络）；
