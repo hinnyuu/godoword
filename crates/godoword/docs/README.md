@@ -9,7 +9,7 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 - 启动序（`src/main.rs`）：`Config::load` → `init::init_data_dir`（自适应降权 + 建 /data 子目录）
   → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001+0002+0003，迁移前备份）
   → 适配器 + DbBindingResolver + Runtime（**无条件构建**）→ 监听（`into_make_service_with_connect_info` 供 IP 限流）。
-  后台 task：音频缓存周期清理 + outbox dispatcher 骨架。退出屏障：`runtime.shutdown`（cancel + 有界等待 detached）+ WAL checkpoint。
+  后台 task：音频缓存周期清理 + outbox dispatcher 骨架。退出屏障：`runtime.shutdown`（cancel + 有界等待 + 超时 abort+join，R3）+ WAL checkpoint（真屏障）。
 - `/healthz`、`/readyz`、`/api/v1/meta`（milestone=M1c）、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、静态占位页。
 - **认证**（`src/auth.rs`）：per-request `AuthUser`/`AdminUser` extractor（cookie → `validate_session` 联查 active）；
   cookie HttpOnly/SameSite=Lax/Secure 可配；CSRF 自定义头守卫（`/api/v1` 变更须 `X-Requested-With`，缺则 403）；

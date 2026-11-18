@@ -319,6 +319,14 @@ impl Runtime {
         }
     }
 
+    /// 设置回合硬超时（默认 120s；测试可缩短验证背压硬边界）。
+    pub fn with_turn_timeout(self, timeout: Duration) -> Self {
+        Self {
+            turn_timeout: timeout,
+            ..self
+        }
+    }
+
     /// 取消所有活跃回合（优雅退出用）。
     pub fn cancel_all(&self) {
         for flag in self.cancels.lock().unwrap().values() {
@@ -326,20 +334,26 @@ impl Runtime {
         }
     }
 
-    /// 优雅退出屏障（审计 C6）：置取消标志 → 有界等待 detached 任务落盘 → abort 超时者。
-    /// 调用方随后做 WAL checkpoint（SQLite）确保持久化屏障。
+    /// 优雅退出屏障（审计 C6/R3）：置取消标志 → 有界等待 detached 任务落盘 → **超时者 abort 并 join**
+    /// （drop future 于 await 点取消，sqlx 事务 drop 回滚不留半提交）→ 全部终止后返回。
+    /// 调用方随后做 WAL checkpoint（SQLite）才是严格写入屏障（无任务并发写）。
     pub async fn shutdown(&self, grace: Duration) {
         self.cancel_all();
-        let handles: Vec<tokio::task::JoinHandle<()>> =
+        let mut handles: Vec<tokio::task::JoinHandle<()>> =
             std::mem::take(&mut *self.tasks.lock().unwrap());
-        let join_all = async {
-            for h in handles {
+        let wait = async {
+            for h in handles.iter_mut() {
                 let _ = h.await;
             }
         };
-        if tokio::time::timeout(grace, join_all).await.is_err() {
-            // 超时者已在 grace 内未落盘完毕；handles 已 move，超时即放弃等待（进程随后退出）。
-            tracing::warn!("优雅退出等待 detached 任务超时（{grace:?}）");
+        if tokio::time::timeout(grace, wait).await.is_err() {
+            tracing::warn!("优雅退出等待 detached 任务超时（{grace:?}），abort 剩余任务并 join");
+            for h in &handles {
+                h.abort();
+            }
+            for h in handles.iter_mut() {
+                let _ = h.await;
+            }
         }
     }
 
@@ -409,22 +423,19 @@ impl Runtime {
                     }
                 }
             };
-            // 硬超时（审计 C6）：超时则 exec drop 中止上游，发 timeout + RunEnd。
+            // 硬超时（审计 C6/R3/A1）：超时则 exec drop 中止上游。**try_send 非阻塞**投递 timeout + RunEnd——
+            // 满 mpsc（receiver 存活但不消费）亦不永久阻塞；任务随即结束 → exec drop → ActiveGuard 释放活跃锁。
             if tokio::time::timeout(turn_timeout, poll).await.is_err() {
-                let _ = tx
-                    .send(SessionEvent::Error {
-                        code: "timeout".to_string(),
-                        message: "回合硬超时".to_string(),
-                        retryable: false,
-                        action: None,
-                    })
-                    .await;
-                let _ = tx
-                    .send(SessionEvent::RunEnd {
-                        run_id,
-                        finish_reason: FinishReason::Error,
-                    })
-                    .await;
+                let _ = tx.try_send(SessionEvent::Error {
+                    code: "timeout".to_string(),
+                    message: "回合硬超时".to_string(),
+                    retryable: false,
+                    action: None,
+                });
+                let _ = tx.try_send(SessionEvent::RunEnd {
+                    run_id,
+                    finish_reason: FinishReason::Error,
+                });
             }
             // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
         });

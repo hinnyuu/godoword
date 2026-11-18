@@ -585,3 +585,111 @@ async fn disconnect_cancel_stops() {
     );
     assert_eq!(hist[0].role, "user");
 }
+
+/// 洪泛 LLM（审计 R3）：单轮发 300 个 TextDelta（>256 mpsc 容量）+ Stop，撑满投递通道制造背压。
+struct FloodLlm;
+
+#[async_trait]
+impl LlmProvider for FloodLlm {
+    fn id(&self) -> &'static str {
+        "flood-llm"
+    }
+    fn features(&self) -> LlmFeatures {
+        LlmFeatures {
+            tool_calling: false,
+            reasoning: false,
+            streaming: true,
+        }
+    }
+    async fn list_models(&self, _: &ProviderConn) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![])
+    }
+    async fn chat_stream(
+        &self,
+        _: &ProviderConn,
+        _: ChatRequest,
+    ) -> Result<ChatStream, ProviderError> {
+        let mut chunks: Vec<Result<ChatChunk, ProviderError>> = Vec::new();
+        for i in 0..300 {
+            chunks.push(Ok(ChatChunk::TextDelta(format!("t{i}"))));
+        }
+        chunks.push(Ok(ChatChunk::Finish(FinishReason::Stop)));
+        Ok(Box::pin(stream::iter(chunks)))
+    }
+}
+
+async fn runtime_flood(turn_timeout: std::time::Duration) -> (Runtime, Arc<MemSessions>) {
+    let sessions = Arc::new(MemSessions::new());
+    let store = Arc::new(Store::Sqlite(
+        sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap(),
+    ));
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let rt = Runtime::new(
+        Arc::new(FloodLlm),
+        Arc::new(MockTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        Arc::new(MemAudio::new()),
+        store,
+    )
+    .with_turn_timeout(turn_timeout);
+    (rt, sessions)
+}
+
+/// R3/A1：receiver 存活但不消费 → 满 mpsc → 硬超时 try_send 不永久阻塞 → 任务结束释放活跃锁。
+#[tokio::test(flavor = "current_thread")]
+async fn full_mpsc_timeout_releases_lock() {
+    let (rt, sessions) = runtime_flood(std::time::Duration::from_millis(100)).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    // 持流不消费（rx 存活）：300 delta 填满 256 mpsc → 任务阻塞 send → 硬超时 → 任务结束。
+    let _stream1 = rt.run_turn(user, session, "x".to_string());
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // 活跃锁已释放：新回合不 busy（首事件 RunStart，正常完成）。
+    let events2: Vec<SessionEvent> = rt.run_turn(user, session, "y".to_string()).collect().await;
+    assert!(
+        matches!(events2.first(), Some(SessionEvent::RunStart { .. })),
+        "R3/A1：满 mpsc 超时后活跃锁释放（新回合不 busy）"
+    );
+    assert!(
+        matches!(
+            events2.last(),
+            Some(SessionEvent::RunEnd {
+                finish_reason: FinishReason::Stop,
+                ..
+            })
+        ),
+        "新回合正常完成"
+    );
+}
+
+/// R3：shutdown 超时任务真 abort+join（卡在满 mpsc 无法 cancel）→ 活跃锁释放，checkpoint 前无并发写。
+#[tokio::test(flavor = "current_thread")]
+async fn shutdown_aborts_stuck_tasks() {
+    let (rt, sessions) = runtime_flood(std::time::Duration::from_secs(120)).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    let _stream1 = rt.run_turn(user, session, "x".to_string());
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    // 任务卡在满 mpsc（cancel 标志无法被处理）；短 grace shutdown → abort+join → 锁释放。
+    rt.shutdown(std::time::Duration::from_millis(50)).await;
+    let events2: Vec<SessionEvent> = rt.run_turn(user, session, "y".to_string()).collect().await;
+    assert!(
+        matches!(events2.first(), Some(SessionEvent::RunStart { .. })),
+        "R3：shutdown abort+join 后活跃锁释放"
+    );
+}

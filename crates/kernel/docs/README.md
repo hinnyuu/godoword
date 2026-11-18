@@ -11,9 +11,10 @@
   → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量 → run-end。
   **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
   （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。**对象级授权**：sessions 全路径携带 user_id（审计 C1）。
-- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，默认 120s，审计 C6）、
+- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，默认 120s，审计 C6；
+  超时后 **try_send 非阻塞**投递，满 mpsc 不消费亦不永久阻塞，任务结束释放活跃锁，审计 R3/A1）、
   每会话单活跃回合锁（`ActiveGuard` 归执行体）；detach semaphore 默认 4；**上游退避重试**（LLM/TTS 可重试错误 bounded 2，审计 C8）；
-  TTS 流响应 cancel；`shutdown` 退出屏障（cancel + 有界等待 detached 落盘）+ `checkpoint`（SQLite WAL，审计 C6）。
+  TTS 流响应 cancel；`shutdown` 退出屏障（cancel + 有界等待 + **超时 abort+join**，审计 R3）+ `checkpoint`（SQLite WAL，真写入屏障）。
 - speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
   （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定）；音频流迭代内联于循环，
   live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
