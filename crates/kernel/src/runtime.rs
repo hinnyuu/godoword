@@ -1,6 +1,6 @@
 //! 内核回合循环：解析绑定 → 装配提示词 → 流式 LLM → 发 delta → 执行 speak → 回喂 → 循环至 stop/守护上限。
 //! M1a 无教学模块：用默认教师 persona，无 plan.teacher_prompt。依赖内部接缝（零返工）。
-//! speak 音频迭代内联于循环，live 发 audio 事件（断开即取消，drop 流中止上游）。
+//! speak 音频迭代内联于循环，live 发 audio 事件。执行/投递分离（task + mpsc），断开按 on_disconnect 决策 cancel/continue。
 
 use base64::Engine;
 use bytes::Bytes;

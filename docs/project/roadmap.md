@@ -7,7 +7,7 @@
 | 里程碑 | 内容 | 版本 | 状态 |
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
-| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 进行中（M1a/M1b 完成） |
+| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 进行中（M1a/M1b/M1c 完成，M1d 待启动） |
 | M2 | teach-assess + teach-gojuon（placement → plan → 自适应课程，黄金路径全通） | — | 未开始 |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
@@ -43,8 +43,8 @@
 | 子里程碑 | 范围 | 验收 | 状态 |
 |---|---|---|---|
 | M1a | 适配器 + 回合循环 + SSE 出声（垂直切片，无持久化/无认证/无 UI）：新 crate `llm-openai`（LlmProvider 全实现）、`tts-qwen-audio`（TtsProvider 全实现，DashScope 原生协议）、`kernel` 最小回合循环（内部接缝 + speak 规格执行 + 基础守护 + SSE）；godoword feature 注册 + 会话 REST + dev 旁路 | CI fixture 黄金 + 回合循环 mock + 守护；本地真 key 出声脚本；冒烟结构性；**无人工视觉** | 完成 |
-| M1b | kernel 存储基底 + 部署初始化（无 UI）：Store pool 初始化 + 迁移编排（自动备份）+ 完整 kernel schema + 加密（主密钥 AES-256-GCM）+ 绑定解析 DB impl + 配置加载（env>file>默认 + 预设）+ **自适应降权 + 幂等 entrypoint** + provider/binding REST + schema 前瞻 | CI 双后端迁移/CRUD/加密/绑定/配置；冒烟完整 uid/卷矩阵；人工残留 SELinux(Fedora)；**无人工视觉** | 完成（待合并） |
-| M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存（音频默认新鲜合成 + 文件系统回放 + 缓存有界）+ 上下文装配/淘汰/淘汰前 span 入 outbox（LLM 提取 M2）+ call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2id + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置；godoword 认证中间件 + auth/admin REST | CI auth 流 + 会话持久化双后端 + 淘汰/outbox；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 未开始 |
+| M1b | kernel 存储基底 + 部署初始化（无 UI）：Store pool 初始化 + 迁移编排（自动备份）+ 完整 kernel schema + 加密（主密钥 AES-256-GCM）+ 绑定解析 DB impl + 配置加载（env>file>默认 + 预设）+ **自适应降权 + 幂等 entrypoint** + provider/binding REST + schema 前瞻 | CI 双后端迁移/CRUD/加密/绑定/配置；冒烟完整 uid/卷矩阵；人工残留 SELinux(Fedora)；**无人工视觉** | 完成 |
+| M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存（音频默认新鲜合成 + 文件系统回放 + 缓存有界）+ 上下文装配/淘汰（水位制）/淘汰前 span 入 outbox（LLM 提取 M2）+ call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2id + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置 token 化；godoword 认证中间件 + auth/admin REST。**M1c-hardening 加固**：对象级授权 + 持久化失败关闭 + 硬超时/退出屏障 + 上游重试（第三方审计 C1-C9） | CI auth 流 + 会话持久化双后端 + 淘汰/outbox + 两用户越权负例；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 完成（含加固） |
 | M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 未开始 |
 
 依赖链 M1a → M1b → M1c → M1d（线性，每段把前段接入）。
@@ -148,4 +148,4 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - token 估算为字符启发式（roadmap 换 tokenizer）。
 - 部署 M1b 含完整 entrypoint（自适应降权/卷初始化/主密钥/迁移备份）+ provider/binding/config REST + OpenAPI；
   **M1c 用户级 REST release 开放（cookie 会话认证，未认证 401）**。
-- M0 人工残留验收已通过：SELinux/quadlet（Fedora 44）、docker 含 compose（真实 Debian 13）。M1b SELinux :Z 残留待补测。
+- M0/M1b/M1c 人工残留验收均已通过：SELinux :Z 正例/负例 + quadlet（Fedora 44）、docker 含 compose（真实 Debian 13）。

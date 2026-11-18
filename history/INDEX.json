@@ -952,5 +952,34 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-18-1618-m1c-hardening.md",
+    "title": "M1c-hardening：第三方审计驱动的收尾加固",
+    "date": "2026-11-18T16:18+08:00",
+    "keywords": [
+      "m1c-hardening",
+      "audit",
+      "authorization",
+      "ownership",
+      "fail-closed",
+      "eviction-watermark",
+      "hard-timeout",
+      "retry",
+      "reset-token",
+      "gate-fix",
+      "drift"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

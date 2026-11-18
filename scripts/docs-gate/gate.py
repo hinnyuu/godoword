@@ -9,6 +9,7 @@
 """
 import argparse
 import fnmatch
+import glob
 import json
 import os
 import re
@@ -66,7 +67,7 @@ def md_files():
 
 def check_coverage(files, mods, proj, fails):
     for crate, rules in mods.items():
-        for sub in ("src/", "tests/"):
+        for sub in ("src/", "tests/", "migrations/"):
             prefix = f"crates/{crate}/{sub}"
             for f in files:
                 if f.startswith(prefix):
@@ -87,21 +88,30 @@ def target_satisfied(target, changed_set):
     return target in changed_set
 
 
+def expand_target(d):
+    """通配目录目标逐模块展开（审计 D6：crates/*/docs/ → 各模块 docs/ 前缀）。"""
+    if "*" in d:
+        return [
+            os.path.relpath(p, ROOT).replace(os.sep, "/") + "/"
+            for p in sorted(glob.glob(str(ROOT / d)))
+        ]
+    return [d]
+
+
 def check_omission(chg, mods, proj, waiver, fails):
     changed_set = set(chg)
     required_targets = set()
     history_required = False
     for f in chg:
-        # 项目规则：docs 目标为项目根相对
-        if f.startswith(PROJECT_PREFIXES):
-            for r in proj:
-                if fnmatch.fnmatch(f, r["match"]):
-                    for d in r.get("docs", []):
-                        required_targets.add(d)
-                    if r.get("history") == "required":
-                        history_required = True
-        # 模块规则：docs 目标为 crate 相对（crates/<name>/docs/、wiki/）
-        m = re.match(r"crates/([^/]+)/(src|tests)/", f)
+        # 项目规则：匹配所有变更文件（审计 D6：不只 PROJECT_PREFIXES，kernel-api 跨模块规则可达）。
+        for r in proj:
+            if fnmatch.fnmatch(f, r["match"]):
+                for d in r.get("docs", []):
+                    required_targets.update(expand_target(d))
+                if r.get("history") == "required":
+                    history_required = True
+        # 模块规则：docs 目标为 crate 相对（crates/<name>/docs/、wiki/）；含 migrations（审计 D7）。
+        m = re.match(r"crates/([^/]+)/(src|tests|migrations)/", f)
         if m and m.group(1) in mods:
             crate = m.group(1)
             rel = f[len(f"crates/{crate}/"):]
@@ -191,8 +201,11 @@ def check_forbidden(files, fails):
 
 
 def check_status(chg, waiver, fails):
-    # live 交接新鲜度：代码（src/tests）改动须同 PR 更新 status.md
-    work = any(re.match(r"crates/[^/]+/(src|tests)/", f) for f in chg)
+    # live 交接新鲜度：代码（src/tests/migrations）或 web 改动须同 PR 更新 status.md（审计 D7）。
+    work = any(
+        re.match(r"crates/[^/]+/(src|tests|migrations)/", f) or f.startswith("web/")
+        for f in chg
+    )
     if work and "docs/project/status.md" not in set(chg):
         if waiver:
             print("[status·豁免] 代码改动但 status.md 未更新（docs-nochange）")

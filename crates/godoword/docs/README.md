@@ -2,22 +2,23 @@
 
 bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 axum 服务。
 
-## 当前状态（M1c）
+## 当前状态（M1c + M1c-hardening 加固）
 
 幂等 entrypoint + 存储基底 + DB 绑定解析 + 会话 REST/SSE + 认证/管理 REST + 配置只读：
 
 - 启动序（`src/main.rs`）：`Config::load` → `init::init_data_dir`（自适应降权 + 建 /data 子目录）
-  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001+0002，迁移前备份）
-  → 适配器 + DbBindingResolver + Runtime（**无条件构建**，release 含完整回合能力）→ 监听。
-  后台 task：音频缓存周期清理（TTL/容量）+ outbox dispatcher 骨架（M2 模块消费）。
-- `/healthz`、`/readyz`（存储探活）、`/api/v1/meta`（milestone=M1c）、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、静态占位页。
-- **认证**（`src/auth.rs`）：per-request `AuthUser`/`AdminUser` extractor（cookie → `auth_local::validate_session`）；
-  cookie HttpOnly/SameSite=Lax/Secure 可配（`GODOWORD_COOKIE_SECURE`）；CSRF 自定义头守卫中间件（`/api/v1` 变更请求须 `X-Requested-With`）；
-  登录限流内存（10 次/5 分钟）。`POST /api/v1/auth/{register,login,logout}`、`GET /auth/me`；
-  `POST /api/v1/admin/{reset,invites}`、`GET /admin/users`（管理员）。
-- 会话：`POST/GET /api/v1/sessions`、`GET/DELETE /sessions/{id}`、`POST /sessions/{id}/messages`（→SSE）、
-  `POST /sessions/{id}/cancel`、`GET /api/v1/audio/{id}`（均经 AuthUser）。
-- provider/binding CRUD + models/voices 测试端点（`src/settings.rs`，经 AuthUser，key 加密不回显）。
+  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001+0002+0003，迁移前备份）
+  → 适配器 + DbBindingResolver + Runtime（**无条件构建**）→ 监听（`into_make_service_with_connect_info` 供 IP 限流）。
+  后台 task：音频缓存周期清理 + outbox dispatcher 骨架。退出屏障：`runtime.shutdown`（cancel + 有界等待 detached）+ WAL checkpoint。
+- `/healthz`、`/readyz`、`/api/v1/meta`（milestone=M1c）、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、静态占位页。
+- **认证**（`src/auth.rs`）：per-request `AuthUser`/`AdminUser` extractor（cookie → `validate_session` 联查 active）；
+  cookie HttpOnly/SameSite=Lax/Secure 可配；CSRF 自定义头守卫（`/api/v1` 变更须 `X-Requested-With`，缺则 403）；
+  登录限流内存（username + **IP** 双维度，10 次/5 分钟）。`POST /auth/{register,login,logout,reset-password}`、`GET /auth/me`；
+  `POST /admin/{reset,invites}`、`GET /admin/users`、`POST /admin/users/{id}/status`（**防自禁/防禁最后管理员**）。
+  **重置 token 化（C8）**：admin/reset 生成令牌 → 用户 POST auth/reset-password 持令牌设密码。
+- 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params，C5**）、`GET/DELETE /sessions/{id}`（DELETE 发 SessionEnded）、
+  `POST /sessions/{id}/messages`（→SSE）、`POST /sessions/{id}/cancel`、`GET /audio/{id}`（均经 AuthUser + **对象级归属校验，越权 404，C1**）。
+- provider/binding CRUD + models/voices 测试端点（`src/settings.rs`，经 AuthUser，**binding 强制 provider 同主 C2**，key 加密不回显，**测试端点计量 C9**）。
 - 状态 `AppState`：DbSessions/FsAudio（trait 对象）+ Runtime + `Arc<Store>` + Config + MasterKey + 适配器 + RateLimiter；
   **用户经 per-request AuthUser**（无固定 user）。
 

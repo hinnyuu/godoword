@@ -2,7 +2,7 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1c 已实现）
+## 当前事实（M1c + M1c-hardening 加固）
 
 实现 [`kernel_api::AuthProvider`]（验身 seam）+ 注册/邀请/会话令牌/管理员重置 crate 函数（组合根 REST 调用）。
 依赖 kernel-api only（适配器纪律）；注册模式由组合根传入 `require_invite`（不依赖 kernel config）。
@@ -15,10 +15,13 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   **首用户事务锁成管理员**（SQLite 单写者串行 / PG `pg_advisory_xact_lock`，防竞态，history 0600）；
   username 唯一；require_invite 且非首用户 → 校验邀请码（max_uses/expires）并 used_count+1。
 - `verify_login`：JOIN users/local_credentials by username，argon2 校验，status!=active → Disabled。
-- 会话令牌：`create_session`（opaque 随机令牌，存 sha256 hash + expires_at）/`validate_session`（未过期→user_id）
-  /`delete_session`（登出）。`auth_sessions` 表（kernel 0002 迁移）与单次 `tokens` 表分离（可撤销）。
+- 会话令牌：`create_session`（opaque 随机令牌，存 sha256 hash + expires_at）/`validate_session`（**联查 users.status=active**，
+  禁用账户旧 cookie 失效，审计 C3）/`delete_session`（登出）/`revoke_user_sessions`（禁用/重置撤销）。
+  `auth_sessions` 表（kernel 0002）与单次 `tokens` 分离（可撤销）。
 - 邀请码：`create_invite`（明文码返回，存 hash + max_uses + 可选 expires）。
-- 管理：`list_users`/`set_user_status`/`is_admin`/`admin_reset_password`（管理员权限由组合根校验）。
+- 管理：`list_users`/`set_user_status`（**禁用撤销会话**）/`is_admin`（**须 active**）/`active_admin_count`（防禁最后管理员）/
+  `admin_reset_password`（设密码 + 撤销会话）。**重置 token 化（审计 C8）**：`create_reset_token`（tokens 表 purpose=password_reset，单次 1h）
+  + `reset_with_token`（用户持令牌自行设密码，管理员不知晓新密码）。
 
 ## schema（kernel 0002 迁移）
 
