@@ -5,12 +5,14 @@ use async_trait::async_trait;
 use kernel_api::{AudioId, ChatMessage, KernelError, SessionId, UserId};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use uuid::Uuid;
 
-use crate::seam::{AudioCache, CachedAudio, SessionRepo};
+use crate::seam::{AudioCache, CachedAudio, SessionMeta, SessionRepo, StoredMessage};
 
 struct SessionState {
     user: UserId,
-    messages: Vec<ChatMessage>,
+    meta: SessionMeta,
+    messages: Vec<StoredMessage>,
 }
 
 /// 内存会话仓储。
@@ -28,13 +30,23 @@ impl MemSessions {
 
 #[async_trait]
 impl SessionRepo for MemSessions {
-    async fn create(&self, user: UserId, id: SessionId) -> Result<(), KernelError> {
+    async fn create(
+        &self,
+        user: UserId,
+        id: SessionId,
+        meta: SessionMeta,
+    ) -> Result<(), KernelError> {
         let mut g = self.inner.lock().unwrap();
         g.entry(id).or_insert(SessionState {
             user,
+            meta,
             messages: Vec::new(),
         });
         Ok(())
+    }
+
+    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
+        Ok(self.inner.lock().unwrap().get(&id).map(|s| s.meta.clone()))
     }
 
     async fn exists(&self, id: SessionId) -> Result<bool, KernelError> {
@@ -47,6 +59,16 @@ impl SessionRepo for MemSessions {
             .lock()
             .unwrap()
             .get(&id)
+            .map(|s| s.messages.iter().map(|m| m.message.clone()).collect())
+            .unwrap_or_default())
+    }
+
+    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .get(&id)
             .map(|s| s.messages.clone())
             .unwrap_or_default())
     }
@@ -54,7 +76,12 @@ impl SessionRepo for MemSessions {
     async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError> {
         let mut g = self.inner.lock().unwrap();
         if let Some(s) = g.get_mut(&id) {
-            s.messages.push(msg);
+            let seq = (s.messages.len() + 1) as i32;
+            s.messages.push(StoredMessage {
+                id: Uuid::new_v4(),
+                seq,
+                message: msg,
+            });
         }
         Ok(())
     }

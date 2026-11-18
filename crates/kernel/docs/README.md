@@ -2,18 +2,21 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1a 最小回合循环）
+## 当前事实（M1c 会话运行时接基底）
 
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
-- `Runtime`（`src/runtime.rs`）：回合循环。解析绑定 → 装配提示词（默认教师 persona + speak 工具规格）
-  → 流式 LLM → 发 text/reasoning-delta → 收集 tool_calls → **内联执行 speak**（live 发 audio 事件）
-  → 回喂工具结果 → 循环至 stop/守护上限 → 持久化消息 → run-end。返回 `SessionEvent` 流（SSE）。
-- 守护：工具迭代上限（默认 8，`SessionParams.tool_iteration_cap`）、回合超时（默认 120s）、
-  每会话单活跃回合锁（`ActiveGuard`，stream drop 自动释放 → 断开即取消）。
+- `Runtime`（`src/runtime.rs`）：回合循环。解析绑定 → 读会话 meta.params → 上下文装配（token 预算 + truncate/summarize 淘汰，
+  淘汰 span 入 outbox）→ 流式 LLM → 发 delta → 内联执行 speak → 回喂 → 循环至 stop/守护上限 → 持久化消息 + call_log 计量 → run-end。
+  **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
+  （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。
+- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、回合超时（默认 120s）、
+  每会话单活跃回合锁（`ActiveGuard` 归执行体，task 结束释放）；detach semaphore 默认 4（`Config.max_detached_turns`）；`cancel_all` 优雅退出。
 - speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
   （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定）；音频流迭代内联于循环，
-  live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存。
+  live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成）。
+- 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退）；
+  call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
 - 错误归一化：`ProviderError` → `SessionEvent::Error`（auth/quota→action:settings、rate_limit/network 可重试等）。
 
 ## 内部接缝（非契约，零返工设计）
@@ -22,8 +25,9 @@
 
 - `BindingResolver`：解析 (user,module,cap,role) → `ResolvedBinding{conn,model,params}`。M1a env impl 在
   godoword（dev-bypass feature）；M1b/c DB 5 级 fallback + 解密。
-- `SessionRepo`：create/exists/history/append/list/delete。`MemSessions`（内存）M1a 生产默认（临时，dev-debt T2）
-  + 永久测试替身；M1c DB impl。
+- `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete。
+  **M1c `DbSessions` 生产默认**（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；`MemSessions` 降测试替身（dev-debt T2 回归）。
+  `SessionMeta{module_id,on_disconnect,params}`、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`（淘汰 span 引用消息 ID）。
 - `AudioCache`：put/get `CachedAudio{pcm,words,format,sample_rate}`。`MemAudio`（内存）M1a 默认；M1c 文件系统
   `/data/cache/<id>.pcm` + sidecar（原子写，TTL+容量上限有界）。**默认新鲜合成**（随机 AudioId 存供回放）；
   复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断）+ 静态资产（M2 模块入仓库）。见 history 音频白名单条目。
@@ -31,7 +35,7 @@
 ## 存储基底（M1b）
 
 `src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接）+ `src/migrate.rs`（自定义双后端迁移 runner：
-版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（全部 11 表）。
+版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（11 表）+ `0002_auth.sql`（users.username + auth_sessions）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
 
 ## 加密（M1b）
@@ -73,8 +77,8 @@ provider_presets（预设：端点+适配器+建议模型，**不含 key**）。
 
 - 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
-- 存储基底（pool/迁移/schema）+ 加密 + 绑定 DB impl M1b 落地；配置/降权 M1b、认证 M1c。
-  会话/音频仍内存（`SessionRepo`/`AudioCache` DB/文件系统 impl M1c，dev-debt T2 余部）。
-- 上下文装配当前全量历史（无预算/淘汰）；token 预算 + truncate/summarize 淘汰 + 淘汰前 span 入 outbox M1c（LLM 提取报告 M2）。
-- on_disconnect 当前仅 cancel（drop 即取消）；continue + detach 上限 M1c。
-- 用量计量当前仅发 Usage 事件；call_log 持久化 M1c。
+- M1b 存储基底/加密/绑定 DB/配置/降权；**M1c 会话/音频持久化（DbSessions/FsAudio，T2 回归）+ 上下文预算/淘汰
+  + outbox/call_log + continue detach 已落地**。认证在 auth-local crate + godoword（M1c）。
+- 音频默认新鲜合成；白名单复用 + 静态资产 + 角色音色档案实体 M2（M1c 机制无关其形态、零返工）。
+- LLM 提取报告（extractor role）归 teach-assess M2；M1c outbox dispatcher 骨架无消费者。
+- token 估算字符启发式（roadmap 远期换 tokenizer）。

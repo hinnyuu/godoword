@@ -84,6 +84,14 @@ pub struct Config {
     pub registration_mode: RegistrationMode,
     /// provider 预设（仅配置文件）。
     pub provider_presets: Vec<ProviderPreset>,
+    /// 音频缓存 TTL（秒，默认 30 天）；过期清理（缓存可再生）。
+    pub cache_ttl_secs: u64,
+    /// 音频缓存容量上限（字节，默认 1GiB）；超限淘汰最旧。
+    pub cache_max_bytes: u64,
+    /// on_disconnect=continue 的 detach 并发回合上限（默认 4）；超限降级 cancel。
+    pub max_detached_turns: u32,
+    /// 会话 cookie Secure 标志（默认 true；冒烟/本地 HTTP 设 false）。
+    pub cookie_secure: bool,
 }
 
 impl Default for Config {
@@ -94,6 +102,10 @@ impl Default for Config {
             database_url: None,
             registration_mode: RegistrationMode::default(),
             provider_presets: Vec::new(),
+            cache_ttl_secs: 30 * 24 * 3600,
+            cache_max_bytes: 1024 * 1024 * 1024,
+            max_detached_turns: 4,
+            cookie_secure: true,
         }
     }
 }
@@ -135,6 +147,24 @@ impl Config {
         if let Some(r) = env.get("GODOWORD_REGISTRATION_MODE") {
             cfg.registration_mode = RegistrationMode::parse(&r)?;
         }
+        if let Some(v) = env.get("GODOWORD_CACHE_TTL_SECS") {
+            cfg.cache_ttl_secs = v.parse().map_err(|_| {
+                KernelError::Internal(format!("GODOWORD_CACHE_TTL_SECS 须为整数，实得 {v}"))
+            })?;
+        }
+        if let Some(v) = env.get("GODOWORD_CACHE_MAX_BYTES") {
+            cfg.cache_max_bytes = v.parse().map_err(|_| {
+                KernelError::Internal(format!("GODOWORD_CACHE_MAX_BYTES 须为整数，实得 {v}"))
+            })?;
+        }
+        if let Some(v) = env.get("GODOWORD_MAX_DETACHED_TURNS") {
+            cfg.max_detached_turns = v.parse().map_err(|_| {
+                KernelError::Internal(format!("GODOWORD_MAX_DETACHED_TURNS 须为整数，实得 {v}"))
+            })?;
+        }
+        if let Some(v) = env.get("GODOWORD_COOKIE_SECURE") {
+            cfg.cookie_secure = matches!(v.as_str(), "true" | "1" | "yes");
+        }
         Ok(cfg)
     }
 
@@ -146,6 +176,16 @@ impl Config {
     /// 备份目录（data_dir/backups）。
     pub fn backup_dir(&self) -> PathBuf {
         self.data_dir.join("backups")
+    }
+
+    /// 音频缓存目录（data_dir/cache）。
+    pub fn cache_dir(&self) -> PathBuf {
+        self.data_dir.join("cache")
+    }
+
+    /// 音频缓存 TTL。
+    pub fn cache_ttl(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(self.cache_ttl_secs)
     }
 
     /// 脱敏只读视图（GET /config 用）：不暴露 database_url 凭据，仅后端类型。

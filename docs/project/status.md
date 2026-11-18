@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T03:29+08:00
-- 当前里程碑: **M1b 已合并（9d9c907）→ M1c 设计已定案（本 docs PR 落档 + 全量审查）→ 待启动实现**
+- verified: 2026-11-18T11:29+08:00
+- 当前里程碑: **M1c 实现完成（feat/m1c-session-auth，PR #10）——六 phase 全落地，待 CI 绿 + 人工残留 sign-off + merge**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ **M1b（9d9c907）**
 
 ## done
@@ -30,9 +30,33 @@
 
 ## in-flight
 
-- 本 docs PR（分支 docs/m1c-design-decisions）：M1c 设计决策落档（history 0329 三条目 + 触发规则条目）
-  + 全量语义审查（一审 + 二审，设计方向级 supersede 蓝图 hash-cache 触发）+ docs reconciliation。
-  合并后开 feat/m1c-session-auth 实现分支。
+- M1c 实现分支 feat/m1c-session-auth（设计已定案 history 0329，不重议）。
+  **phase 1 完成**：SessionRepo 接缝扩展（SessionMeta/OnDisconnect + create 携带 meta + meta()/history_with_ids）；
+  DbSessions（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；FsAudio（/data/cache 原子写 + sidecar
+  + TTL/容量有界周期清理）；main/AppState/REST 转 trait 对象。内存 impl 降为测试替身（T2 余部回归）。
+  **phase 2 完成**：context（字符启发式 token 估算 + truncate 装配）；runtime 每会话 params + summarize 淘汰
+  （Summarizer role + 失败回退）+ 淘汰 span 入 outbox（SessionEvicted，module_id 哨兵 kernel）+ call_log 计量
+  （LLM/TTS/summarize，adapter_id 取 trait id）；journal（record_call/emit_progress/pending/dispatch_once）
+  + outbox dispatcher 骨架（main 空注册表，M2 消费）。双后端测试全绿（session/journal 独立 PG schema 隔离；
+  计量测试用文件库 + ensure_user 避外键违约）+ clippy/fmt 干净。
+  **phase 3 完成**：run_turn 执行/投递分离——执行体 spawn tokio task 经有界 mpsc 投递，SSE 订阅 receiver；
+  断开（receiver drop）读 on_disconnect：cancel 置标志 / continue 取 detach permit 排空跑完（permit 满降级 cancel）；
+  活跃锁归执行体（task 结束释放）；detach semaphore 默认 4（Config max_detached_turns 可配）；cancel_all + 优雅退出接线。
+  断开 continue/cancel 测试（current_thread 确定时序）+ clippy/fmt 干净。
+  **phase 4 完成**：新 crate auth-local（kind=adapter provides=None，依赖 kernel-api only）——argon2id hash/verify、
+  register（首用户事务锁成管理员：SQLite 单写者/PG advisory xact lock；username 唯一；invite 校验用尽/过期）、
+  verify_login（禁用拒绝）、会话令牌 create/validate/delete（auth_sessions 表，opaque token sha256）、
+  create_invite、list_users/set_user_status/is_admin/admin_reset_password、LocalAuth impl AuthProvider。
+  kernel 0002 迁移（users 增 username + UNIQUE 索引 + auth_sessions 表）；storage 测试适配 2 迁移。
+  auth-local 双后端测试全绿（独立 PG schema）+ clippy/fmt 干净。
+  **phase 5 完成**：godoword auth 模块（per-request AuthUser/AdminUser extractor cookie→validate_session、
+  cookie HttpOnly/SameSite=Lax/Secure 可配、CSRF 自定义头守卫中间件、登录限流内存 10 次/5 分钟、
+  auth REST register/login/logout/me + admin REST reset/invites/users）；AppState 转 per-request（runtime/适配器非 optional，移除 user）；
+  **删除 dev-bypass（T1 回归：dev.rs/feature/GODOWORD_DEV_*）**，适配器非 optional，Runtime 无条件构建，用户级 REST release 开放（未认证 401）。
+  本地 auth 流端到端实证：首用户成管理员/邀请注册/非管理员 403/登出失效/CSRF 403/限流 429 全过。
+  **phase 6 完成**：冒烟脚本 503→401 + auth 流 + cookie_secure=false；M1c 实现 history（1129）+ 模块 docs/wiki +
+  architecture/roadmap/storage 当前态更新；本地真 key 全链路（走真认证 register→provider/binding→回合 finish=stop + speak + 转录 4 消息）实证。
+  **M1c 六 phase 全落地**，dev-debt T1/T2 回归。待 CI 绿（image/smoke）+ 人工残留 sign-off + merge → M1d。
 
 ## blocked / 待拍板决策
 

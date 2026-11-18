@@ -4,18 +4,21 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::stream::{self, StreamExt};
 use kernel::{
-    AudioCache, BindingResolver, MemAudio, MemSessions, ResolvedBinding, Runtime, SessionRepo,
+    run_migrations, AudioCache, BindingResolver, MemAudio, MemSessions, OnDisconnect,
+    ResolvedBinding, Runtime, SessionMeta, SessionRepo, KERNEL_MIGRATIONS,
 };
 use kernel_api::{
     AudioEvent, AudioFormat, AudioStream, ChatChunk, ChatRequest, ChatStream, FinishReason,
     KernelError, LlmFeatures, LlmProvider, ModelInfo, ProviderConn, ProviderError, SessionEvent,
-    SessionId, SessionParams, ToolCall, TtsProvider, TtsRequest, TtsUsage, Usage, UserId,
+    SessionId, SessionParams, Store, ToolCall, TtsProvider, TtsRequest, TtsUsage, Usage, UserId,
     VoiceInfo, WordTimestamp,
 };
 use secrecy::SecretString;
 use serde_json::json;
+use sqlx::SqlitePool;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
+use uuid::Uuid;
 
 /// mock LLM：首轮发 text + speak 工具调用 + usage + finish(tool_calls)；次轮发 text + finish(stop)。
 struct MockLlm {
@@ -151,9 +154,19 @@ impl BindingResolver for MockBindings {
     }
 }
 
-fn runtime(always_tool: bool, cap: u32) -> (Runtime, Arc<MemSessions>, Arc<MemAudio>) {
+async fn runtime(always_tool: bool) -> (Runtime, Arc<MemSessions>, Arc<MemAudio>) {
     let sessions = Arc::new(MemSessions::new());
     let audio = Arc::new(MemAudio::new());
+    let store = Arc::new(Store::Sqlite(
+        sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap(),
+    ));
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
     let rt = Runtime::new(
         Arc::new(MockLlm {
             calls: AtomicU32::new(0),
@@ -163,20 +176,20 @@ fn runtime(always_tool: bool, cap: u32) -> (Runtime, Arc<MemSessions>, Arc<MemAu
         Arc::new(MockBindings),
         sessions.clone(),
         audio.clone(),
-    )
-    .with_params(SessionParams {
-        tool_iteration_cap: cap,
-        ..Default::default()
-    });
+        store,
+    );
     (rt, sessions, audio)
 }
 
 #[tokio::test]
 async fn turn_speak_full_sequence() {
-    let (rt, sessions, audio) = runtime(false, 8);
+    let (rt, sessions, audio) = runtime(false).await;
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
 
     let events: Vec<SessionEvent> = rt
         .run_turn(user, session, "教我こんにちは".to_string())
@@ -244,10 +257,23 @@ async fn turn_speak_full_sequence() {
 
 #[tokio::test]
 async fn tool_cap_guard() {
-    let (rt, sessions, _audio) = runtime(true, 2);
+    let (rt, sessions, _audio) = runtime(true).await;
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                params: SessionParams {
+                    tool_iteration_cap: 2,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
 
     let events: Vec<SessionEvent> = rt
         .run_turn(user, session, "朗读".to_string())
@@ -282,6 +308,9 @@ async fn unconfigured_binding_errors() {
         }
     }
     let sessions = Arc::new(MemSessions::new());
+    let store = Arc::new(Store::Sqlite(
+        SqlitePool::connect("sqlite::memory:").await.unwrap(),
+    ));
     let rt = Runtime::new(
         Arc::new(MockLlm {
             calls: AtomicU32::new(0),
@@ -291,10 +320,159 @@ async fn unconfigured_binding_errors() {
         Arc::new(NoBinding),
         sessions.clone(),
         Arc::new(MemAudio::new()),
+        store,
     );
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
     let events: Vec<SessionEvent> = rt.run_turn(user, session, "hi".to_string()).collect().await;
     assert!(events.iter().any(|e| matches!(e, SessionEvent::Error { code, action: Some(a), .. } if code == "unconfigured" && a == "settings")));
+}
+
+#[tokio::test]
+async fn turn_metering_and_eviction() {
+    let sessions = Arc::new(MemSessions::new());
+    let audio = Arc::new(MemAudio::new());
+    let db_dir = std::env::temp_dir().join(format!("gw-turn-meter-{}", Uuid::new_v4()));
+    let store = Arc::new(
+        kernel::open_sqlite(&db_dir.join("db").join("t.sqlite"))
+            .await
+            .unwrap(),
+    );
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let rt = Runtime::new(
+        Arc::new(MockLlm {
+            calls: AtomicU32::new(0),
+            always_tool: false,
+        }),
+        Arc::new(MockTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        audio.clone(),
+        store.clone(),
+    );
+    let user = UserId::new();
+    let session = SessionId::new();
+    kernel::repo::ensure_user(&store, user.0).await.unwrap();
+    // 低预算（5 token）+ 预置历史 → 装配时淘汰历史 span 入 outbox。
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                params: SessionParams {
+                    context_budget_tokens: 5,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    for i in 0..3 {
+        sessions
+            .append(
+                session,
+                kernel_api::ChatMessage {
+                    role: "user".to_string(),
+                    content: format!("历史消息{i}啊啊啊啊"),
+                    reasoning: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            )
+            .await
+            .unwrap();
+    }
+    let _events: Vec<SessionEvent> = rt
+        .run_turn(user, session, "新消息".to_string())
+        .collect()
+        .await;
+
+    // call_log 计量：至少 LLM 调用（MockLlm 两轮 → 2 条 llm）。
+    let llm_calls: (i64,) = kernel_api::fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM call_log WHERE capability = 'llm'",
+        (i64,)
+    )
+    .unwrap();
+    assert!(llm_calls.0 >= 1, "call_log 记录 LLM 调用");
+    // outbox：淘汰 span 发 session-evicted（module_id 哨兵 kernel）。
+    let evicted: (i64,) = kernel_api::fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE kind = 'session-evicted' AND module_id = 'kernel'",
+        (i64,)
+    )
+    .unwrap();
+    assert!(evicted.0 >= 1, "淘汰 span 入 outbox（kernel 哨兵）");
+    drop(store);
+    std::fs::remove_dir_all(&db_dir).unwrap();
+}
+
+// current_thread：spawn 的 task 须待 await 才运行，保证 drop(stream) 先于 task 首次 send（确定断开时序）。
+#[tokio::test(flavor = "current_thread")]
+async fn disconnect_continue_completes() {
+    let (rt, sessions, _audio) = runtime(false).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                on_disconnect: OnDisconnect::Continue,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    // 立即 drop 流（模拟客户端断开），不消费任何事件。
+    drop(rt.run_turn(user, session, "hi".to_string()));
+    // continue：服务端 detach 跑完 → 转录含 assistant。
+    let mut len = 0;
+    for _ in 0..100 {
+        len = sessions.history(session).await.unwrap().len();
+        if len >= 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        len >= 2,
+        "continue 断开后服务端跑完（user+assistant），实得 {len}"
+    );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn disconnect_cancel_stops() {
+    let (rt, sessions, _audio) = runtime(false).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                on_disconnect: OnDisconnect::Cancel,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    drop(rt.run_turn(user, session, "hi".to_string()));
+    // cancel：置取消标志 → 回合中止，仅 user 消息（无 assistant）。
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    let hist = sessions.history(session).await.unwrap();
+    assert_eq!(
+        hist.len(),
+        1,
+        "cancel 断开后回合中止（仅 user），实得 {}",
+        hist.len()
+    );
+    assert_eq!(hist[0].role, "user");
 }

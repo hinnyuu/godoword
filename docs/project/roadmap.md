@@ -133,19 +133,19 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - 信封加密（per-user data key）、主密钥轮换工具
 - RP-initiated logout（OIDC 会话联动）
 
-## 当前差异（M1a/M1b 完成，M1c–M1d 待做）
+## 当前差异（M1a/M1b/M1c 完成，M1d 待做）
 
 - M1 拆分为 M1a–M1d 四子里程碑（见上蓝图），垂直切片先行；speak 规格落 kernel-api 契约（决策 A）；
-  开发态临时取舍登记回归机制。**M1a 完成**：适配器 + 回合循环 + SSE 出声（本地真 key 验证）。
-  **M1b 完成**：存储基底 + 加密 + 绑定 DB + 配置 + 自适应降权 + provider/binding REST（本地真 key 全链路验证，待 PR 合并）。
+  开发态临时取舍登记回归机制。**M1a 完成**：适配器 + 回合循环 + SSE 出声。**M1b 完成**：存储基底 + 加密 + 绑定 DB + 配置 + 自适应降权。
+  **M1c 完成**：会话/音频持久化 + 上下文预算/淘汰 + outbox/call_log + continue detach + auth-local 认证 + 管理（本地真 key 走真认证验证）。
 - 存储契约 **C 方案**（Store enum 双具体驱动 + 薄分发宏 + 双兼容 SQL 子集）已定，
   双后端 CI 测试（storage required check）已立；**kernel 存储编排 M1b 已实现**（自定义双后端迁移 runner + 备份）。sqlx Any 已证伪弃用。
 - 协议类型（SessionEvent/ModuleManifest）serde 黄金测试已立；speak 契约黄金测试 M1a 已立；
-  kernel-api 有意耦合 axum/sqlx 已声明（M1b 未改契约）。
-- kernel 回合循环 + llm-openai + tts-qwen-audio M1a 已实现；**M1b 绑定解析转 DB（加密）**；
-  会话/音频持久化 + 认证 M1c，教学模块 M2+。会话/音频仍内存态（dev-debt T2 余部 M1c）。
+  kernel-api 有意耦合 axum/sqlx 已声明（M1b/M1c 未改契约）。
+- kernel 回合循环 + llm-openai + tts-qwen-audio M1a 已实现；M1b 绑定解析转 DB（加密）；
+  **M1c 会话/音频持久化（DbSessions/FsAudio）+ 认证落地**（dev-debt T1/T2 回归）；教学模块 M2+。
 - 前端为静态占位，Svelte 骨架 M1d 起。
 - token 估算为字符启发式（roadmap 换 tokenizer）。
 - 部署 M1b 含完整 entrypoint（自适应降权/卷初始化/主密钥/迁移备份）+ provider/binding/config REST + OpenAPI；
-  用户级 REST release 把守至 M1c 认证。
+  **M1c 用户级 REST release 开放（cookie 会话认证，未认证 401）**。
 - M0 人工残留验收已通过：SELinux/quadlet（Fedora 44）、docker 含 compose（真实 Debian 13）。M1b SELinux :Z 残留待补测。

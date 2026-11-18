@@ -1,0 +1,15 @@
+id: auth-local
+name: 本地认证适配器
+version: 0.0.0
+kind: adapter
+description: 实现 AuthProvider（argon2id 验身）；注册/邀请/会话令牌/管理员重置为 crate 函数（组合根 REST 调用）。auth 不经 bindings 绑定，provides 无能力。
+
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
+cross_module:
+  - kernel-api

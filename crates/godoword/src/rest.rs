@@ -1,6 +1,6 @@
 //! 会话 REST + SSE 传输 + 系统端点（healthz/readyz/meta/config）。
 //! POST /messages 响应即该回合 SessionEvent 流（SSE 不入 OpenAPI，单独协议文档）。
-//! 用户级端点 release M1b 由 dev-bypass 把守（user_access，M1c 认证后开放）。
+//! 用户级端点经 AuthUser extractor 认证（cookie → 会话令牌，M1c）；未认证 401。
 
 use axum::extract::{Path, State};
 use axum::http::{header, StatusCode};
@@ -9,45 +9,36 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
-use kernel::{
-    AudioCache, Config, ConfigView, MasterKey, MemAudio, MemSessions, Runtime, SessionRepo,
-};
-use kernel_api::{AudioId, LlmProvider, SessionEvent, SessionId, Store, TtsProvider, UserId};
+use kernel::{AudioCache, Config, ConfigView, MasterKey, Runtime, SessionMeta, SessionRepo};
+use kernel_api::{AudioId, LlmProvider, SessionEvent, SessionId, Store, TtsProvider};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::convert::Infallible;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// 应用状态（M1b：内存会话/音频 + DB 存储基底 + 配置；runtime/适配器仅 dev-bypass 模式存在）。
+use crate::auth::{AuthUser, RateLimiter};
+
+/// 应用状态（M1c：DB 会话/文件系统音频 + 运行时 + 认证；用户经 per-request AuthUser）。
 pub struct AppState {
-    /// 会话仓储。
-    pub sessions: Arc<MemSessions>,
-    /// 音频缓存。
-    pub audio: Arc<MemAudio>,
-    /// 运行时（dev-bypass 模式 Some；release M1b None，回合返回 503）。
-    pub runtime: Option<Arc<Runtime>>,
-    /// 当前用户（M1b dev 固定用户；M1c 真认证）。
-    pub user: UserId,
-    /// 存储基底（迁移已应用；readyz 探活 + 绑定解析）。
+    /// 会话仓储（DB impl）。
+    pub sessions: Arc<dyn SessionRepo>,
+    /// 音频缓存（文件系统 impl）。
+    pub audio: Arc<dyn AudioCache>,
+    /// 运行时（回合循环）。
+    pub runtime: Arc<Runtime>,
+    /// 存储基底（迁移已应用；readyz 探活 + 绑定解析 + 认证）。
     pub store: Arc<Store>,
     /// 部署级配置（/config 脱敏只读）。
     pub cfg: Config,
     /// 主密钥（provider key 加解密）。
     pub master: Arc<MasterKey>,
-    /// LLM 适配器（models 测试端点；release M1b None）。
-    pub llm: Option<Arc<dyn LlmProvider>>,
-    /// TTS 适配器（voices 测试端点；release M1b None）。
-    pub tts: Option<Arc<dyn TtsProvider>>,
-}
-
-/// 用户级 REST 访问门：release M1b 无认证，需 dev-bypass（M1c 真认证中间件替换）。
-pub(crate) fn user_access() -> Result<(), StatusCode> {
-    if cfg!(feature = "dev-bypass") {
-        Ok(())
-    } else {
-        Err(StatusCode::SERVICE_UNAVAILABLE)
-    }
+    /// LLM 适配器。
+    pub llm: Arc<dyn LlmProvider>,
+    /// TTS 适配器。
+    pub tts: Arc<dyn TtsProvider>,
+    /// 登录限流器。
+    pub rate_limiter: Arc<RateLimiter>,
 }
 
 /// 存活探针。
@@ -71,8 +62,7 @@ pub async fn meta() -> Json<Value> {
     Json(json!({
         "name": "godoword",
         "version": env!("CARGO_PKG_VERSION"),
-        "milestone": "M1b",
-        "dev_bypass": cfg!(feature = "dev-bypass"),
+        "milestone": "M1c",
     }))
 }
 
@@ -89,31 +79,35 @@ fn to_sse(ev: SessionEvent) -> Event {
 }
 
 /// 创建会话。
-#[utoipa::path(post, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 503)))]
-pub async fn create_session(State(st): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
-    user_access()?;
+#[utoipa::path(post, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 401)))]
+pub async fn create_session(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<Value>, StatusCode> {
     let id = SessionId::new();
-    let _ = st.sessions.create(st.user, id).await;
+    let _ = st.sessions.create(user, id, SessionMeta::default()).await;
     Ok(Json(json!({ "id": id.to_string() })))
 }
 
 /// 列出用户会话。
-#[utoipa::path(get, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 503)))]
-pub async fn list_sessions(State(st): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
-    user_access()?;
-    let ids = st.sessions.list(st.user).await.unwrap_or_default();
+#[utoipa::path(get, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 401)))]
+pub async fn list_sessions(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+) -> Result<Json<Value>, StatusCode> {
+    let ids = st.sessions.list(user).await.unwrap_or_default();
     Ok(Json(json!({
         "sessions": ids.iter().map(|id| json!({ "id": id.to_string() })).collect::<Vec<_>>()
     })))
 }
 
 /// 读会话转录。
-#[utoipa::path(get, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 404), (status = 503)))]
+#[utoipa::path(get, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404)))]
 pub async fn get_session(
     State(st): State<Arc<AppState>>,
+    AuthUser(_user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, StatusCode> {
-    user_access()?;
     let sid = SessionId(id);
     if !st.sessions.exists(sid).await.unwrap_or(false) {
         return Err(StatusCode::NOT_FOUND);
@@ -123,12 +117,12 @@ pub async fn get_session(
 }
 
 /// 删除会话（含转录）。
-#[utoipa::path(delete, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 204), (status = 503)))]
+#[utoipa::path(delete, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 204), (status = 401)))]
 pub async fn delete_session(
     State(st): State<Arc<AppState>>,
+    AuthUser(_user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    user_access()?;
     let _ = st.sessions.delete(SessionId(id)).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -141,38 +135,35 @@ pub struct MessageReq {
 }
 
 /// 发消息 → 该回合 SSE 事件流（SSE 不入 OpenAPI schema）。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 503)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 401)))]
 pub async fn messages(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
     Json(req): Json<MessageReq>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    user_access()?;
-    let rt = st.runtime.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    let stream = rt.run_turn(st.user, SessionId(id), req.text);
+    let stream = st.runtime.run_turn(user, SessionId(id), req.text);
     Ok(Sse::new(stream.map(|ev| Ok::<_, Infallible>(to_sse(ev)))))
 }
 
 /// 显式取消活跃回合。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 503)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401)))]
 pub async fn cancel(
     State(st): State<Arc<AppState>>,
+    AuthUser(_user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Value>, StatusCode> {
-    user_access()?;
-    if let Some(rt) = &st.runtime {
-        rt.cancel(SessionId(id));
-    }
+    st.runtime.cancel(SessionId(id));
     Ok(Json(json!({ "ok": true })))
 }
 
 /// 回放缓存音频（裸 PCM）。
-#[utoipa::path(get, path = "/api/v1/audio/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "音频 id")), responses((status = 200, description = "裸 PCM", content_type = "application/octet-stream"), (status = 404), (status = 503)))]
+#[utoipa::path(get, path = "/api/v1/audio/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "音频 id")), responses((status = 200, description = "裸 PCM", content_type = "application/octet-stream"), (status = 401), (status = 404)))]
 pub async fn get_audio(
     State(st): State<Arc<AppState>>,
+    AuthUser(_user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Response, StatusCode> {
-    user_access()?;
     let cached = st
         .audio
         .get(AudioId(id))

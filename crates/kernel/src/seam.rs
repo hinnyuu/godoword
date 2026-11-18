@@ -5,8 +5,9 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use kernel_api::{
     AudioFormat, Capability, ChatMessage, KernelError, ModuleId, ProviderConn, Role, SessionId,
-    UserId, WordTimestamp,
+    SessionParams, UserId, WordTimestamp,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// 解析后的绑定：kernel 解密后的连接 + 模型 + 参数。
@@ -32,15 +33,75 @@ pub trait BindingResolver: Send + Sync {
     ) -> Result<ResolvedBinding, KernelError>;
 }
 
+/// 断开行为（sessions.on_disconnect）。cancel 默认省费 / continue 服务端跑完（detach）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OnDisconnect {
+    /// 断开即取消活跃回合（默认）。
+    #[default]
+    Cancel,
+    /// 断开后服务端 detach 跑完回合。
+    Continue,
+}
+
+impl OnDisconnect {
+    /// 解析存储字符串（未知值回退默认 cancel）。
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "continue" => Self::Continue,
+            _ => Self::Cancel,
+        }
+    }
+
+    /// 存储字符串。
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cancel => "cancel",
+            Self::Continue => "continue",
+        }
+    }
+}
+
+/// 会话元数据（创建时写入，运行时读取：on_disconnect 决定断开行为，params 决定预算/淘汰/工具上限）。
+#[derive(Debug, Clone, Default)]
+pub struct SessionMeta {
+    /// 教学模块 id（M1 无模块为 None）。
+    pub module_id: Option<ModuleId>,
+    /// 断开行为。
+    pub on_disconnect: OnDisconnect,
+    /// 会话运行时参数（预算/淘汰/工具上限）。
+    pub params: SessionParams,
+}
+
+/// 持久化消息（含 DB id/seq，供淘汰 span 引用消息 ID 入 outbox detail）。
+#[derive(Debug, Clone)]
+pub struct StoredMessage {
+    /// 消息 DB id。
+    pub id: uuid::Uuid,
+    /// 会话内序号。
+    pub seq: i32,
+    /// 消息体。
+    pub message: ChatMessage,
+}
+
 /// 会话仓储接缝。M1a 内存实现，M1c DB 实现。
 #[async_trait]
 pub trait SessionRepo: Send + Sync {
-    /// 创建会话。
-    async fn create(&self, user: UserId, id: SessionId) -> Result<(), KernelError>;
+    /// 创建会话（携带元数据）。
+    async fn create(
+        &self,
+        user: UserId,
+        id: SessionId,
+        meta: SessionMeta,
+    ) -> Result<(), KernelError>;
+    /// 读会话元数据（不存在 → None）。
+    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError>;
     /// 会话是否存在。
     async fn exists(&self, id: SessionId) -> Result<bool, KernelError>;
     /// 读历史消息（上下文装配用）。
     async fn history(&self, id: SessionId) -> Result<Vec<ChatMessage>, KernelError>;
+    /// 读历史消息含 id/seq（淘汰 span 引用消息 ID 用）。
+    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError>;
     /// 追加消息（持久化转录）。
     async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError>;
     /// 列出用户会话。

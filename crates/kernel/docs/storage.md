@@ -30,16 +30,16 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 - **PostgreSQL**：运行时镜像（debian-slim）无 pg_dump，**跳过 + 告警日志**，PG 部署自备外部备份
   （见 [wiki/deploy](../../../wiki/deploy/quickstart.md)）。
 
-## schema（`migrations/0001_init.sql`，M1b 一次性建全部表）
+## schema（`migrations/0001_init.sql` + `0002_auth.sql`）
 
 双兼容子集：uuid 主键应用生成、时间戳应用侧（`Utc::now()`）、JSON 整取回 Rust、`$1` 占位、
 单一 PG 风格类型名（UUID/TIMESTAMPTZ/JSONB/BOOLEAN/BYTEA/TEXT/INTEGER）靠 SQLite 类型亲和性双后端通用。
 外键 `REFERENCES … ON DELETE CASCADE`（SQLite 须 pool 启用 foreign_keys，PG 默认强制）。
-M1c/M4 逻辑后续填表（前瞻），M1b 仅建表 + providers/bindings  CRUD。
+0001（M1b）建 11 表；0002（M1c）增 users.username + auth_sessions。M4 oidc 前瞻。
 
 | 表 | 列 | 约束/说明 |
 |---|---|---|
-| users | id UUID PK, email TEXT?, display_name TEXT?, is_admin BOOL, status TEXT, created_at/updated_at TS | email 可空前瞻 M4；status active/disabled |
+| users | id UUID PK, email TEXT?, display_name TEXT?, **username TEXT?（0002）**, is_admin BOOL, status TEXT, created_at/updated_at TS | username 本地登录标识（UNIQUE 索引，可空 OIDC 无）；email 可空前瞻 M4；status active/disabled |
 | local_credentials | user_id UUID PK→users, password_hash TEXT, created_at/updated_at TS | M1c argon2；一用户一凭据 |
 | oidc_identities | id UUID PK, user_id→users, issuer TEXT, subject TEXT, created_at TS | M4 前瞻；UNIQUE(issuer,subject) |
 | providers | id UUID PK, user_id→users, adapter_id TEXT, label TEXT, base_url TEXT, **key_enc BYTEA**, extra_json JSONB?, created_at/updated_at TS | 一实例一 key；key_enc=nonce+密文+tag |
@@ -50,9 +50,11 @@ M1c/M4 逻辑后续填表（前瞻），M1b 仅建表 + providers/bindings  CRUD
 | progress_events | id UUID PK, user_id→users, session_id UUID?, module_id TEXT, kind TEXT, skill_tags JSONB?, detail JSONB?, created_at TS, processed_at TS? | outbox；processed_at 空=未处理 |
 | tokens | id UUID PK, user_id UUID?→users, purpose TEXT, token_hash TEXT, expires_at TS, used_at TS?, created_at TS | 前瞻；单次（used_at） |
 | invites | id UUID PK, code_hash TEXT, max_uses INTEGER, used_count INTEGER, created_by UUID?→users(SET NULL), expires_at TS?, created_at TS | 邀请码注册 |
+| auth_sessions | id UUID PK, user_id→users CASCADE, token_hash TEXT, expires_at TS, created_at TS | **0002（M1c）** cookie 会话令牌（opaque token sha256，可撤销），与单次 tokens 分离 |
 
 索引：providers(user_id)、bindings(user_id)、sessions(user_id)、call_log(user_id,created_at)、
-progress_events(user_id,processed_at)、tokens(token_hash)、invites(code_hash)。
+progress_events(user_id,processed_at)、tokens(token_hash)、invites(code_hash)、users(username) UNIQUE、
+auth_sessions(token_hash)、auth_sessions(user_id)。
 
 **bindings 哨兵 `*`**：取代 NULL 表全模块默认——两后端 NULL 皆互不相等致 UNIQUE 失效，
 哨兵使 UNIQUE(user,module,cap,role) 正常约束、5 级 fallback 解析一致（见 [architecture](../../../docs/project/architecture.md)）。
