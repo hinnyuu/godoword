@@ -211,7 +211,10 @@ pub async fn provider_models(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
-    let models = llm.list_models(&conn).await.map_err(|e| {
+    let start = std::time::Instant::now();
+    let result = llm.list_models(&conn).await;
+    meter_test(&st.store, user, "llm", llm.id(), "", start, &result).await;
+    let models = result.map_err(|e| {
         tracing::warn!("list_models 上游错误：{e}");
         upstream_status(&e)
     })?;
@@ -239,11 +242,50 @@ pub async fn provider_voices(
         .model
         .or_else(|| tts.models().first().map(|m| m.id.clone()))
         .ok_or(StatusCode::BAD_REQUEST)?;
-    let voices = tts.list_voices(&conn, &model).await.map_err(|e| {
+    let start = std::time::Instant::now();
+    let result = tts.list_voices(&conn, &model).await;
+    meter_test(&st.store, user, "tts", tts.id(), &model, start, &result).await;
+    let voices = result.map_err(|e| {
         tracing::warn!("list_voices 上游错误：{e}");
         upstream_status(&e)
     })?;
     Ok(Json(voices))
+}
+
+/// 测试端点上游调用计量（审计 C9：所有上游调用经 call_log）。
+async fn meter_test<T>(
+    store: &kernel_api::Store,
+    user: kernel_api::UserId,
+    capability: &str,
+    adapter_id: &str,
+    model: &str,
+    start: std::time::Instant,
+    result: &Result<T, ProviderError>,
+) {
+    let err = result
+        .as_ref()
+        .err()
+        .map(|e| upstream_status(e).to_string());
+    let _ = kernel::record_call(
+        store,
+        kernel::CallRecord {
+            user_id: user.0,
+            session_id: None,
+            run_id: None,
+            capability: capability.to_string(),
+            adapter_id: adapter_id.to_string(),
+            model: model.to_string(),
+            prompt_tokens: None,
+            completion_tokens: None,
+            reasoning_tokens: None,
+            total_tokens: None,
+            characters: None,
+            latency_ms: start.elapsed().as_millis() as i32,
+            status: if result.is_ok() { "ok" } else { "error" }.to_string(),
+            error_code: err,
+        },
+    )
+    .await;
 }
 
 fn upstream_status(e: &ProviderError) -> StatusCode {

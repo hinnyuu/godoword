@@ -43,7 +43,11 @@
   runtime 持久化失败关闭（meta/history/append 错误中止，不调计费上游）；binding/provider 同主（create/update/resolve 归属校验）；
   validate_session 联查 active + 禁用/重置撤销会话 + is_admin 须 active + 管理员状态路由（防自禁/防禁最后管理员）。
   两用户负例（repo 层 + REST 层越权 404/跨用户 provider 400/禁用旧 cookie 401）+ 双后端全绿 + clippy/fmt 干净。
-  下一：H2（P1 核心语义 C5-C9，含 C7 淘汰水位 0003 schema）。
+  **H2（P1 C5-C9）完成**：C5 create_session 公开 on_disconnect/params；C6 硬超时（timeout 包裹执行体）+ TTS 流 cancel
+  + detached 退出屏障（tasks 注册 + shutdown 有界等待 + WAL checkpoint）；C7 淘汰水位（0003 sessions.summary/evicted_up_to，
+  滚动摘要 + 水位推进 + outbox 一次，多回合不重复测试）；C8 重置 token 化（tokens 表单次）+ IP 限流维度 + SessionEnded
+  + 上游退避重试（LLM/TTS 可重试错误 bounded 2）；C9 测试端点计量。双后端全绿 + clippy/fmt 干净。
+  下一：H3（OpenAPI 修正 D4）。
 
 ## blocked / 待拍板决策
 

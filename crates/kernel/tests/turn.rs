@@ -411,6 +411,28 @@ async fn turn_metering_and_eviction() {
     )
     .unwrap();
     assert!(evicted.0 >= 1, "淘汰 span 入 outbox（kernel 哨兵）");
+    // 第二回合：水位推进后不重复淘汰已处理 span（审计 C7：消息 ID 不重复入 outbox）。
+    let _events2: Vec<SessionEvent> = rt
+        .run_turn(user, session, "再一条".to_string())
+        .collect()
+        .await;
+    let details: Vec<(serde_json::Value,)> = kernel_api::fetch_all_both!(
+        &*store,
+        "SELECT detail FROM progress_events WHERE kind = 'session-evicted'",
+        (serde_json::Value,)
+    )
+    .unwrap();
+    let mut seen = std::collections::HashSet::new();
+    for (d,) in details {
+        if let Some(ids) = d["message_ids"].as_array() {
+            for id in ids {
+                assert!(
+                    seen.insert(id.as_str().unwrap().to_string()),
+                    "C7：同一消息 ID 不重复入 outbox"
+                );
+            }
+        }
+    }
     drop(store);
     std::fs::remove_dir_all(&db_dir).unwrap();
 }

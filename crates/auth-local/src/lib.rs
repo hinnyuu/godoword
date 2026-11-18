@@ -460,6 +460,60 @@ pub async fn admin_reset_password(
     Ok(n > 0)
 }
 
+/// 管理员生成密码重置令牌（tokens 表 purpose=password_reset，单次，1h 过期；审计 C8 token 化）。
+/// 管理员不直接知晓用户新密码——用户持令牌自行重置。
+pub async fn create_reset_token(store: &Store, target: UserId) -> Result<String, AuthError> {
+    let token = generate_token();
+    let now = Utc::now();
+    let expires = now + Duration::hours(1);
+    execute_both!(
+        store,
+        "INSERT INTO tokens (id, user_id, purpose, token_hash, expires_at, used_at, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        Uuid::new_v4(),
+        target.0,
+        "password_reset",
+        token_hash(&token),
+        expires,
+        Option::<DateTime<Utc>>::None,
+        now
+    )
+    .map_err(internal)?;
+    Ok(token)
+}
+
+/// 用户持重置令牌设新密码（校验单次/过期 → 设密码 + 撤销旧会话 + 标记令牌已用）。
+pub async fn reset_with_token(
+    store: &Store,
+    token: &str,
+    new_password: &str,
+) -> Result<bool, AuthError> {
+    let now = Utc::now();
+    let row: Option<(Uuid, Uuid)> = fetch_optional_both!(
+        store,
+        "SELECT id, user_id FROM tokens WHERE token_hash = $1 AND purpose = 'password_reset'
+         AND used_at IS NULL AND expires_at > $2",
+        (Uuid, Uuid),
+        token_hash(token),
+        now
+    )
+    .map_err(internal)?;
+    let Some((token_id, user_id)) = row else {
+        return Ok(false);
+    };
+    if !admin_reset_password(store, UserId(user_id), new_password).await? {
+        return Ok(false);
+    }
+    execute_both!(
+        store,
+        "UPDATE tokens SET used_at = $1 WHERE id = $2",
+        now,
+        token_id
+    )
+    .map_err(internal)?;
+    Ok(true)
+}
+
 #[async_trait]
 impl AuthProvider for LocalAuth {
     fn id(&self) -> &'static str {

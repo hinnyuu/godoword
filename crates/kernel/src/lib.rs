@@ -41,4 +41,4 @@ pub use seam::{
     SessionRepo, StoredMessage,
 };
 pub use session::DbSessions;
-pub use storage::{open_pg, open_sqlite, ping};
+pub use storage::{checkpoint, open_pg, open_sqlite, ping};

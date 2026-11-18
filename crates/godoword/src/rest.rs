@@ -78,15 +78,40 @@ fn to_sse(ev: SessionEvent) -> Event {
     Event::default().event(name).data(v["data"].to_string())
 }
 
+/// 创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配）。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct CreateSessionReq {
+    /// 断开行为 cancel/continue（默认 cancel）。
+    #[serde(default)]
+    pub on_disconnect: Option<String>,
+    /// 运行时参数（预算/淘汰/工具上限，默认值见 SessionParams；JSON 对象）。
+    #[serde(default)]
+    pub params: Option<Value>,
+}
+
 /// 创建会话。
-#[utoipa::path(post, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 401)))]
+#[utoipa::path(post, path = "/api/v1/sessions", request_body = CreateSessionReq, tag = "sessions", responses((status = 200, body = Value), (status = 400), (status = 401)))]
 pub async fn create_session(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
+    body: Option<Json<CreateSessionReq>>,
 ) -> Result<Json<Value>, StatusCode> {
+    let mut meta = SessionMeta::default();
+    if let Some(Json(req)) = body {
+        if let Some(od) = req.on_disconnect {
+            meta.on_disconnect = match od.as_str() {
+                "cancel" => kernel::OnDisconnect::Cancel,
+                "continue" => kernel::OnDisconnect::Continue,
+                _ => return Err(StatusCode::BAD_REQUEST),
+            };
+        }
+        if let Some(p) = req.params {
+            meta.params = serde_json::from_value(p).map_err(|_| StatusCode::BAD_REQUEST)?;
+        }
+    }
     let id = SessionId::new();
     st.sessions
-        .create(user, id, SessionMeta::default())
+        .create(user, id, meta)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(json!({ "id": id.to_string() })))
@@ -148,6 +173,25 @@ pub async fn delete_session(
     {
         return Err(StatusCode::NOT_FOUND);
     }
+    // 会话结束发 SessionEnded outbox（审计 C8；module_id 有则用之、无则哨兵 kernel）。
+    let module_id = st
+        .sessions
+        .meta(user, sid)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|m| m.module_id.map(|m| m.0))
+        .unwrap_or_else(|| "kernel".to_string());
+    let _ = kernel::emit_progress(
+        &st.store,
+        user.0,
+        Some(sid.0),
+        &module_id,
+        "session-ended",
+        json!([]),
+        json!({}),
+    )
+    .await;
     st.sessions
         .delete(user, sid)
         .await

@@ -34,6 +34,11 @@ pub const KERNEL_MIGRATIONS: &[Migration] = &[
         name: "auth",
         sql: include_str!("../migrations/0002_auth.sql"),
     },
+    Migration {
+        version: "0003",
+        name: "eviction_watermark",
+        sql: include_str!("../migrations/0003_eviction_watermark.sql"),
+    },
 ];
 
 const VERSION_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS _schema_migrations (

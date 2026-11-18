@@ -49,6 +49,8 @@ struct SessionRow {
     module_id: Option<String>,
     on_disconnect: String,
     params_json: Option<Value>,
+    summary: Option<String>,
+    evicted_up_to: Option<i32>,
 }
 
 /// messages 行含 id/seq（淘汰 span 引用消息 ID 用）。
@@ -77,14 +79,16 @@ impl SessionRepo for DbSessions {
             .map_err(|e| KernelError::Internal(format!("会话参数序列化失败：{e}")))?;
         execute_both!(
             &*self.store,
-            "INSERT INTO sessions (id, user_id, module_id, plan_version, on_disconnect, params_json, created_at, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+            "INSERT INTO sessions (id, user_id, module_id, plan_version, on_disconnect, params_json, summary, evicted_up_to, created_at, updated_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
             id.0,
             user.0,
             module_id,
             Option::<String>::None,
             meta.on_disconnect.as_str(),
             &params,
+            meta.summary,
+            meta.evicted_up_to,
             now,
             now
         )
@@ -95,7 +99,7 @@ impl SessionRepo for DbSessions {
     async fn meta(&self, user: UserId, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
         let row: Option<SessionRow> = fetch_optional_both!(
             &*self.store,
-            "SELECT module_id, on_disconnect, params_json FROM sessions WHERE id = $1 AND user_id = $2",
+            "SELECT module_id, on_disconnect, params_json, summary, evicted_up_to FROM sessions WHERE id = $1 AND user_id = $2",
             SessionRow,
             id.0,
             user.0
@@ -108,6 +112,8 @@ impl SessionRepo for DbSessions {
                 .params_json
                 .and_then(|v| serde_json::from_value(v).ok())
                 .unwrap_or_default(),
+            summary: r.summary,
+            evicted_up_to: r.evicted_up_to.unwrap_or(0),
         }))
     }
 
@@ -237,6 +243,26 @@ impl SessionRepo for DbSessions {
         execute_both!(
             &*self.store,
             "DELETE FROM sessions WHERE id = $1 AND user_id = $2",
+            id.0,
+            user.0
+        )
+        .map_err(storage_err)?;
+        Ok(())
+    }
+
+    async fn update_eviction(
+        &self,
+        user: UserId,
+        id: SessionId,
+        summary: Option<String>,
+        evicted_up_to: i32,
+    ) -> Result<(), KernelError> {
+        execute_both!(
+            &*self.store,
+            "UPDATE sessions SET summary = $1, evicted_up_to = $2, updated_at = $3 WHERE id = $4 AND user_id = $5",
+            summary,
+            evicted_up_to,
+            Utc::now(),
             id.0,
             user.0
         )

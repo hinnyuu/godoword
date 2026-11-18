@@ -37,6 +37,8 @@ async fn run_test(store: Arc<Store>) {
             eviction: Eviction::Summarize,
             tool_iteration_cap: 5,
         },
+        summary: Some("先前摘要".to_string()),
+        evicted_up_to: 7,
     };
     repo.create(user, sid, meta.clone()).await.unwrap();
     let got = repo.meta(user, sid).await.unwrap().expect("meta 存在");
@@ -49,6 +51,19 @@ async fn run_test(store: Arc<Store>) {
     assert_eq!(got.params.context_budget_tokens, 4000, "{b} params 预算");
     assert_eq!(got.params.eviction, Eviction::Summarize, "{b} params 淘汰");
     assert_eq!(got.params.tool_iteration_cap, 5, "{b} params 工具上限");
+    assert_eq!(
+        got.summary.as_deref(),
+        Some("先前摘要"),
+        "{b} summary round-trip"
+    );
+    assert_eq!(got.evicted_up_to, 7, "{b} 水位 round-trip");
+    // update_eviction 推进水位 + 滚动摘要（审计 C7）。
+    repo.update_eviction(user, sid, Some("新摘要".to_string()), 12)
+        .await
+        .unwrap();
+    let got_w = repo.meta(user, sid).await.unwrap().unwrap();
+    assert_eq!(got_w.summary.as_deref(), Some("新摘要"), "{b} 水位更新摘要");
+    assert_eq!(got_w.evicted_up_to, 12, "{b} 水位推进");
     assert!(repo.exists(user, sid).await.unwrap(), "{b} exists");
     assert!(
         repo.meta(user, SessionId::new()).await.unwrap().is_none(),

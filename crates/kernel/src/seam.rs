@@ -71,6 +71,10 @@ pub struct SessionMeta {
     pub on_disconnect: OnDisconnect,
     /// 会话运行时参数（预算/淘汰/工具上限）。
     pub params: SessionParams,
+    /// 滚动摘要（已淘汰 span 的压缩，审计 C7；每回合前置入系统提示词）。
+    pub summary: Option<String>,
+    /// 已淘汰水位（seq ≤ 此值的历史已淘汰，不再重复摘要/outbox，审计 C7）。
+    pub evicted_up_to: i32,
 }
 
 /// 持久化消息（含 DB id/seq，供淘汰 span 引用消息 ID 入 outbox detail）。
@@ -117,6 +121,14 @@ pub trait SessionRepo: Send + Sync {
     async fn list(&self, user: UserId) -> Result<Vec<SessionId>, KernelError>;
     /// 删除会话（限本用户，含转录）。
     async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError>;
+    /// 更新淘汰水位 + 滚动摘要（审计 C7；限本用户）。
+    async fn update_eviction(
+        &self,
+        user: UserId,
+        id: SessionId,
+        summary: Option<String>,
+        evicted_up_to: i32,
+    ) -> Result<(), KernelError>;
 }
 
 /// 缓存音频。
