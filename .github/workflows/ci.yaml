@@ -27,6 +27,8 @@ jobs:
         run: python3 scripts/docs-gate/gate.py --ci --base "$BASE_SHA"
       - name: 索引 freshness
         run: python3 scripts/docs-gate/gate.py --check-index
+      - name: 门禁逻辑回归（审计 R8）
+        run: python3 scripts/docs-gate/test_gate.py
 
   commitlint:
     runs-on: ubuntu-latest

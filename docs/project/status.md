@@ -72,9 +72,7 @@
 
 **P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化；各配失败/并发负例，双后端绿）。
 
-**P1（一致性/CI/文档）**：
-- R8 test_gate.py 接入 docs-gate CI。
-- 文档漂移：roadmap SSE 口径/gates 第 14 项/PR 模板越权 404/storage 迁移数/绝对化保证加可靠性边界（本交接 PR 已修 trivial 项）。
+**P1（一致性/CI/文档）**：全部完成（R6 SessionEnded 删除原子 / R8 test_gate 接 docs-gate CI / 文档漂移 trivial 项 #14 已修）。
 
 **P2（运维/精化）**：
 - R9 旧 sidecar 升级处理 + 限流器过期清理 + 可信代理 XFF 解析（Config trusted_proxies，IP 限流不退化全局）。

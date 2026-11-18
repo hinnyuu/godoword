@@ -18,7 +18,8 @@
    新文件未登记 → 红（防图谱腐烂）。Cargo.toml/module.yaml/docs 自身豁免覆盖率。
 3. **漏改门禁**：改动文件命中的 docs/wiki 须在同 PR 更新，或显式豁免。**项目规则匹配所有变更文件**
    （审计 D6：kernel-api 跨模块规则可达，牵连 architecture + 逐模块 docs）；通配目录目标（`crates/*/docs/`）逐模块展开 + 前缀匹配。
-   migration-only/web-only 变更亦触发漏改/history/status（审计 D7）。门禁逻辑回归见 `scripts/docs-gate/test_gate.py`。
+   migration-only/web-only 变更亦触发漏改/history/status（审计 D7）。门禁逻辑回归见 `scripts/docs-gate/test_gate.py`
+   （**docs-gate CI job 必跑，审计 R8**）。
 4. **链接检查**：docs/wiki/history 内部相对链接有效，**含锚点校验**（`#锚点` 须命中目标标题）。
 5. **术语门禁**：扫描 [glossary.yaml](glossary.yaml) 禁用别名（glossary.yaml 自身除外；
    **history 豁免**——历史正文不可变，写入时用词合规由当时门禁保证）。
