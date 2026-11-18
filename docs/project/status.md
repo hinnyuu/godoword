@@ -70,8 +70,7 @@
 
 ## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
 
-**P0（恢复无阻塞前必修）**：
-- R5 OpenAPI：注册 CreateSessionReq + cookieAuth + CSRF header + 403/404 + $ref 全解析测试。
+**P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化；各配失败/并发负例，双后端绿）。
 
 **P1（一致性/CI/文档）**：
 - R8 test_gate.py 接入 docs-gate CI。

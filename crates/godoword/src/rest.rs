@@ -180,7 +180,7 @@ pub struct MessageReq {
 }
 
 /// 发消息 → 该回合 SSE 事件流（SSE 不入 OpenAPI schema）。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 401)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 401), (status = 404)))]
 pub async fn messages(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
@@ -201,7 +201,7 @@ pub async fn messages(
 }
 
 /// 显式取消活跃回合。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404)))]
 pub async fn cancel(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,

@@ -36,3 +36,4 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
   **dev-bypass 已删除（DEV-DEBT T1 回归）**，适配器非 optional，用户级 REST release 开放（未认证 401）。
 - 白名单音频复用 + 静态资产 + 角色音色档案实体 M2（音频默认新鲜合成，M1c 机制无关 M2 形态）。
 - Svelte 前端 M1d；教学模块 M2+。models/voices OpenAPI 暂通用 object 标注（契约类型精确 schema 待契约演进）。
+  **OpenAPI 完整性（R5）**：CreateSessionReq 注册 + cookieAuth/security + 变更端点 CSRF header/403 + 404 标注 + `$ref` 全解析单元测试，M1d 可生成 TS。
