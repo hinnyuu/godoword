@@ -95,10 +95,23 @@ JAR="/tmp/${TAG}-jar"
 REG=$(curl -s --max-time 8 -c "$JAR" -X POST http://127.0.0.1:18080/api/v1/auth/register -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"username":"smoke-admin","password":"smoke-pass-123"}')
 assert_contains "注册首用户成管理员" "$REG" '"is_admin":true'
 assert_contains "me（cookie 认证）" "$(curl -s --max-time 8 -b "$JAR" http://127.0.0.1:18080/api/v1/auth/me)" '"username":"smoke-admin"'
-assert_eq "认证后创建会话 200" "200" "$(http_code -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/sessions -H 'X-Requested-With: godoword')"
+SID=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/sessions -H 'X-Requested-With: godoword' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+assert_eq "认证后创建会话 200" "200" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/sessions/$SID)"
 assert_eq "认证后 providers 200" "200" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/providers)"
 assert_contains "admin users（管理员）" "$(curl -s --max-time 8 -b "$JAR" http://127.0.0.1:18080/api/v1/admin/users)" '"username":"smoke-admin"'
-rm -f "$JAR"
+# 两用户越权负例（审计 C1/C2）：邀请注册 user2 → 跨用户访问 admin 会话 404 / admin 面 403。
+JAR2="/tmp/${TAG}-jar2"
+CODE=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/admin/invites -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"max_uses":1}' | sed -n 's/.*"code":"\([^"]*\)".*/\1/p')
+curl -s --max-time 8 -c "$JAR2" -X POST http://127.0.0.1:18080/api/v1/auth/register -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d "{\"username\":\"smoke-user2\",\"password\":\"smoke-pass-456\",\"invite_code\":\"$CODE\"}" >/dev/null
+assert_eq "user2 跨用户读 admin 会话 404" "404" "$(http_code -b "$JAR2" http://127.0.0.1:18080/api/v1/sessions/$SID)"
+assert_eq "user2 跨用户删 admin 会话 404" "404" "$(http_code -b "$JAR2" -X DELETE http://127.0.0.1:18080/api/v1/sessions/$SID -H 'X-Requested-With: godoword')"
+assert_eq "user2 访问 admin 面 403" "403" "$(http_code -b "$JAR2" http://127.0.0.1:18080/api/v1/admin/users)"
+assert_eq "admin 会话未被 user2 删除" "200" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/sessions/$SID)"
+# 登录限流（审计 C10：声明覆盖限流须有 429 断言）：11 次错密码 → 第 11 次 429。
+LAST=""
+for i in $(seq 1 11); do LAST=$(http_code -X POST http://127.0.0.1:18080/api/v1/auth/login -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"username":"smoke-admin","password":"wrong"}'); done
+assert_eq "登录限流第 11 次 429" "429" "$LAST"
+rm -f "$JAR" "$JAR2"
 assert_contains "启动日志双栈 [::]" "$(as_user podman logs "${TAG}-named" 2>&1)" '[::]'
 assert_contains "启动日志降权/保持" "$(as_user podman logs "${TAG}-named" 2>&1)" 'uid 0'
 # 趁容器运行 capturing 主密钥 mtime（T4 重建复用断言用；停止后 podman exec 不可用）。

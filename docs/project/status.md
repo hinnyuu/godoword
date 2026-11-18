@@ -47,7 +47,11 @@
   + detached 退出屏障（tasks 注册 + shutdown 有界等待 + WAL checkpoint）；C7 淘汰水位（0003 sessions.summary/evicted_up_to，
   滚动摘要 + 水位推进 + outbox 一次，多回合不重复测试）；C8 重置 token 化（tokens 表单次）+ IP 限流维度 + SessionEnded
   + 上游退避重试（LLM/TTS 可重试错误 bounded 2）；C9 测试端点计量。双后端全绿 + clippy/fmt 干净。
-  下一：H3（OpenAPI 修正 D4）。
+  **H3-H6 完成**：OpenAPI 清 503/dev-bypass 改 401 + 403/CSRF + SSE 精确表述；全状态面 reconcile（roadmap 表/README/web/wiki/
+  module.yaml/rustdoc/PR 模板清理列）+ **门禁 D6/D7 修复 + test_gate.py 合成回归 6 例**；AGENTS 协议加固（冲突裁决/gh 降级/
+  缺陷≠重议/收尾定向核对/不自指）；smoke 补两用户越权 404 + admin 面 403 + 限流 429 断言（C10 声明与脚本一致）。
+  本地真 key 全链路 + 加固 REST 验证（continue 公开配置/越权 404/限流 429/重置令牌单次）全过。
+  **M1c-hardening 六阶段全落地**，待 CI 绿 + R4 重测 + 人工残留 sign-off → 恢复"M1c 收尾完成无阻塞" → M1d。
 
 ## blocked / 待拍板决策
 
