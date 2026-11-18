@@ -375,6 +375,17 @@ pub async fn list_users(store: &Store) -> Result<Vec<UserInfo>, AuthError> {
     .map_err(internal)
 }
 
+/// 取单个用户信息（不存在 → None）。
+pub async fn get_user(store: &Store, user: UserId) -> Result<Option<UserInfo>, AuthError> {
+    fetch_optional_both!(
+        store,
+        "SELECT id, username, display_name, is_admin, status, created_at FROM users WHERE id = $1",
+        UserInfo,
+        user.0
+    )
+    .map_err(internal)
+}
+
 /// 设用户状态（active/disabled，管理员用）。
 pub async fn set_user_status(store: &Store, user: UserId, status: &str) -> Result<bool, AuthError> {
     let n = execute_both!(

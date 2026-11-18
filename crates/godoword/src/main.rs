@@ -1,23 +1,21 @@
-//! godoword 组合根。M1b：幂等 entrypoint（配置→自适应降权→主密钥→迁移→启动）+ 存储基底 +
-//! DB 绑定解析 + 会话 REST/SSE + provider/binding CRUD + 配置只读 + OpenAPI。
-//! dev-bypass feature 启用固定 dev user + env 种入 DB（DEV-DEBT T1，release 永不启用）；认证 M1c。
+//! godoword 组合根。M1c：幂等 entrypoint（配置→自适应降权→主密钥→迁移→启动）+ 存储基底 +
+//! DB 绑定解析 + 会话 REST/SSE + provider/binding CRUD + 认证/管理 REST + 配置只读 + OpenAPI。
+//! 用户级端点经 cookie 会话认证（auth-local）；dev-bypass 已删除（DEV-DEBT T1 回归）。
 
-#[cfg(feature = "dev-bypass")]
-mod dev;
+mod auth;
 mod init;
 mod openapi;
 mod rest;
 mod settings;
 
 use axum::{
+    middleware,
     routing::{get, post},
     Router,
 };
-#[cfg(feature = "dev-bypass")]
-use kernel::DbBindingResolver;
 use kernel::{
-    run_migrations, AudioCache, Config, DbSessions, FsAudio, MasterKey, Runtime, SessionRepo,
-    KERNEL_MIGRATIONS,
+    run_migrations, AudioCache, Config, DbBindingResolver, DbSessions, FsAudio, MasterKey, Runtime,
+    SessionRepo, KERNEL_MIGRATIONS,
 };
 use kernel_api::{LlmProvider, TtsProvider};
 use std::sync::Arc;
@@ -85,12 +83,12 @@ async fn main() {
         });
     }
 
-    #[cfg(feature = "dev-bypass")]
-    let (runtime, user, llm, tts) = {
-        let llm = Arc::new(llm_openai::OpenAiProvider::new());
-        let tts = Arc::new(tts_qwen_audio::QwenTtsProvider::new());
-        let resolver = Arc::new(DbBindingResolver::new(store.clone(), master.clone()));
-        let rt = Runtime::new(
+    // 适配器 + DB 绑定解析 + 运行时（M1c 无条件构建，release 含完整回合能力）。
+    let llm: Arc<dyn LlmProvider> = Arc::new(llm_openai::OpenAiProvider::new());
+    let tts: Arc<dyn TtsProvider> = Arc::new(tts_qwen_audio::QwenTtsProvider::new());
+    let resolver = Arc::new(DbBindingResolver::new(store.clone(), master.clone()));
+    let runtime = Arc::new(
+        Runtime::new(
             llm.clone(),
             tts.clone(),
             resolver,
@@ -98,36 +96,20 @@ async fn main() {
             audio.clone(),
             store.clone(),
         )
-        .with_detach_cap(cfg.max_detached_turns as usize);
-        let user = dev::dev_user();
-        dev::seed(&store, &master, user).await;
-        tracing::warn!("dev-bypass 启用：固定 dev user + DB 绑定解析（仅开发测试，release 不含）");
-        (
-            Some(Arc::new(rt)),
-            user,
-            Some(llm as Arc<dyn LlmProvider>),
-            Some(tts as Arc<dyn TtsProvider>),
-        )
-    };
-    #[cfg(not(feature = "dev-bypass"))]
-    let (runtime, user, llm, tts) = (
-        None,
-        kernel_api::UserId(uuid::Uuid::nil()),
-        None::<Arc<dyn LlmProvider>>,
-        None::<Arc<dyn TtsProvider>>,
+        .with_detach_cap(cfg.max_detached_turns as usize),
     );
 
-    let shutdown_rt = runtime.clone();
+    let shutdown_rt = Some(runtime.clone());
     let state = Arc::new(AppState {
         sessions,
         audio,
         runtime,
-        user,
         store,
         cfg,
         master,
         llm,
         tts,
+        rate_limiter: Arc::new(auth::RateLimiter::new()),
     });
 
     let app = Router::new()
@@ -136,6 +118,13 @@ async fn main() {
         .route("/api/v1/meta", get(rest::meta))
         .route("/api/v1/config", get(rest::config))
         .route("/api/v1/openapi.json", get(openapi::openapi_json))
+        .route("/api/v1/auth/register", post(auth::register))
+        .route("/api/v1/auth/login", post(auth::login))
+        .route("/api/v1/auth/logout", post(auth::logout))
+        .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/admin/reset", post(auth::admin_reset))
+        .route("/api/v1/admin/invites", post(auth::admin_invite))
+        .route("/api/v1/admin/users", get(auth::admin_users))
         .route(
             "/api/v1/sessions",
             post(rest::create_session).get(rest::list_sessions),
@@ -176,6 +165,7 @@ async fn main() {
                 .delete(settings::delete_binding),
         )
         .fallback_service(ServeDir::new("web/shell/public"))
+        .layer(middleware::from_fn(auth::csrf_guard))
         .with_state(state);
 
     // 默认双栈监听 [::]（兼容 IPv4），IPv6 不可用回退 0.0.0.0；配置 listen 可覆盖。

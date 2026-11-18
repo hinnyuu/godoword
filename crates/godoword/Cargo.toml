@@ -11,20 +11,16 @@ rust-version.workspace = true
 name = "godoword"
 path = "src/main.rs"
 
-[features]
-default = []
-# DEV-DEBT T1：开发态 env key 旁路 + 固定 dev user，仅本地开发测试用，release 永不启用，M1c 删除。
-# M1a 适配器随 dev-bypass 编译（release M1a 无回合能力，M1b/c 转正式绑定后改为非 optional）。
-dev-bypass = ["dep:llm-openai", "dep:tts-qwen-audio"]
-
 [dependencies]
 kernel-api.workspace = true
 kernel.workspace = true
-llm-openai = { workspace = true, optional = true }
-tts-qwen-audio = { workspace = true, optional = true }
+auth-local.workspace = true
+llm-openai.workspace = true
+tts-qwen-audio.workspace = true
 async-trait.workspace = true
 axum = { workspace = true, features = ["http1", "json", "tokio", "query"] }
 bytes.workspace = true
+chrono.workspace = true
 futures-util.workspace = true
 nix.workspace = true
 secrecy.workspace = true

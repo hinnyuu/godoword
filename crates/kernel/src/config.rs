@@ -90,6 +90,8 @@ pub struct Config {
     pub cache_max_bytes: u64,
     /// on_disconnect=continue 的 detach 并发回合上限（默认 4）；超限降级 cancel。
     pub max_detached_turns: u32,
+    /// 会话 cookie Secure 标志（默认 true；冒烟/本地 HTTP 设 false）。
+    pub cookie_secure: bool,
 }
 
 impl Default for Config {
@@ -103,6 +105,7 @@ impl Default for Config {
             cache_ttl_secs: 30 * 24 * 3600,
             cache_max_bytes: 1024 * 1024 * 1024,
             max_detached_turns: 4,
+            cookie_secure: true,
         }
     }
 }
@@ -158,6 +161,9 @@ impl Config {
             cfg.max_detached_turns = v.parse().map_err(|_| {
                 KernelError::Internal(format!("GODOWORD_MAX_DETACHED_TURNS 须为整数，实得 {v}"))
             })?;
+        }
+        if let Some(v) = env.get("GODOWORD_COOKIE_SECURE") {
+            cfg.cookie_secure = matches!(v.as_str(), "true" | "1" | "yes");
         }
         Ok(cfg)
     }

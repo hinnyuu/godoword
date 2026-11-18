@@ -14,7 +14,8 @@ use serde_json::Value;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use crate::rest::{user_access, AppState};
+use crate::auth::AuthUser;
+use crate::rest::AppState;
 
 /// 新建 provider 请求。
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -94,13 +95,13 @@ fn map_storage_err(e: kernel_api::KernelError) -> StatusCode {
 )]
 pub async fn create_provider(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Json(req): Json<CreateProviderReq>,
 ) -> Result<(StatusCode, Json<Provider>), StatusCode> {
-    user_access()?;
     let p = repo::create_provider(
         &st.store,
         &st.master,
-        st.user.0,
+        user.0,
         &req.adapter_id,
         &req.label,
         &req.base_url,
@@ -119,9 +120,9 @@ pub async fn create_provider(
 )]
 pub async fn list_providers(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
 ) -> Result<Json<Vec<Provider>>, StatusCode> {
-    user_access()?;
-    let v = repo::list_providers(&st.store, st.user.0)
+    let v = repo::list_providers(&st.store, user.0)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(v))
@@ -135,10 +136,10 @@ pub async fn list_providers(
 )]
 pub async fn get_provider(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Provider>, StatusCode> {
-    user_access()?;
-    repo::get_provider(&st.store, st.user.0, id)
+    repo::get_provider(&st.store, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map(Json)
@@ -153,14 +154,14 @@ pub async fn get_provider(
 )]
 pub async fn update_provider(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateProviderReq>,
 ) -> Result<Json<Provider>, StatusCode> {
-    user_access()?;
     repo::update_provider(
         &st.store,
         &st.master,
-        st.user.0,
+        user.0,
         id,
         &req.label,
         &req.base_url,
@@ -181,10 +182,10 @@ pub async fn update_provider(
 )]
 pub async fn delete_provider(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    user_access()?;
-    let deleted = repo::delete_provider(&st.store, st.user.0, id)
+    let deleted = repo::delete_provider(&st.store, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if deleted {
@@ -202,11 +203,11 @@ pub async fn delete_provider(
 )]
 pub async fn provider_models(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<ModelInfo>>, StatusCode> {
-    user_access()?;
-    let llm = st.llm.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    let conn = repo::provider_conn(&st.store, &st.master, st.user.0, id)
+    let llm = &st.llm;
+    let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -225,12 +226,12 @@ pub async fn provider_models(
 )]
 pub async fn provider_voices(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
     Query(q): Query<VoicesQuery>,
 ) -> Result<Json<Vec<VoiceInfo>>, StatusCode> {
-    user_access()?;
-    let tts = st.tts.as_ref().ok_or(StatusCode::SERVICE_UNAVAILABLE)?;
-    let conn = repo::provider_conn(&st.store, &st.master, st.user.0, id)
+    let tts = &st.tts;
+    let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
@@ -261,12 +262,12 @@ fn upstream_status(e: &ProviderError) -> StatusCode {
 )]
 pub async fn create_binding(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Json(req): Json<CreateBindingReq>,
 ) -> Result<(StatusCode, Json<Binding>), StatusCode> {
-    user_access()?;
     let b = repo::create_binding(
         &st.store,
-        st.user.0,
+        user.0,
         &req.module_id,
         &req.capability,
         &req.role,
@@ -286,9 +287,9 @@ pub async fn create_binding(
 )]
 pub async fn list_bindings(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
 ) -> Result<Json<Vec<Binding>>, StatusCode> {
-    user_access()?;
-    let v = repo::list_bindings(&st.store, st.user.0)
+    let v = repo::list_bindings(&st.store, user.0)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(v))
@@ -302,10 +303,10 @@ pub async fn list_bindings(
 )]
 pub async fn get_binding(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Binding>, StatusCode> {
-    user_access()?;
-    repo::get_binding(&st.store, st.user.0, id)
+    repo::get_binding(&st.store, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .map(Json)
@@ -320,13 +321,13 @@ pub async fn get_binding(
 )]
 pub async fn update_binding(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateBindingReq>,
 ) -> Result<Json<Binding>, StatusCode> {
-    user_access()?;
     repo::update_binding(
         &st.store,
-        st.user.0,
+        user.0,
         id,
         req.provider_id,
         &req.model,
@@ -346,10 +347,10 @@ pub async fn update_binding(
 )]
 pub async fn delete_binding(
     State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    user_access()?;
-    let deleted = repo::delete_binding(&st.store, st.user.0, id)
+    let deleted = repo::delete_binding(&st.store, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     if deleted {

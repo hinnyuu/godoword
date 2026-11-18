@@ -12,13 +12,20 @@ use utoipa::OpenApi;
     info(
         title = "godoword API",
         version = "0.0.0",
-        description = "私有部署外语学习服务 REST API（M1b）。用户级端点 release 需认证（M1c）；当前 dev-bypass 开发模式。"
+        description = "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local）；变更请求须带 CSRF 自定义头。"
     ),
     paths(
         crate::rest::healthz,
         crate::rest::readyz,
         crate::rest::meta,
         crate::rest::config,
+        crate::auth::register,
+        crate::auth::login,
+        crate::auth::logout,
+        crate::auth::me,
+        crate::auth::admin_reset,
+        crate::auth::admin_invite,
+        crate::auth::admin_users,
         crate::rest::create_session,
         crate::rest::list_sessions,
         crate::rest::get_session,
@@ -49,10 +56,16 @@ use utoipa::OpenApi;
         crate::settings::UpdateProviderReq,
         crate::settings::CreateBindingReq,
         crate::settings::UpdateBindingReq,
+        crate::auth::RegisterReq,
+        crate::auth::LoginReq,
+        crate::auth::ResetReq,
+        crate::auth::InviteReq,
         crate::rest::MessageReq,
     )),
     tags(
         (name = "system", description = "存活/就绪/元信息/配置"),
+        (name = "auth", description = "注册/登录/登出/当前用户"),
+        (name = "admin", description = "管理员重置/邀请码/用户管理"),
         (name = "sessions", description = "会话与回合（SSE）"),
         (name = "providers", description = "BYOK provider 管理 + 测试连接"),
         (name = "bindings", description = "模块→provider 绑定"),

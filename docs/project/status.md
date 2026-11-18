@@ -48,7 +48,12 @@
   verify_login（禁用拒绝）、会话令牌 create/validate/delete（auth_sessions 表，opaque token sha256）、
   create_invite、list_users/set_user_status/is_admin/admin_reset_password、LocalAuth impl AuthProvider。
   kernel 0002 迁移（users 增 username + UNIQUE 索引 + auth_sessions 表）；storage 测试适配 2 迁移。
-  auth-local 双后端测试全绿（独立 PG schema）+ clippy/fmt 干净。下一：phase 5（godoword 认证中间件 + REST + 删 dev-bypass）。
+  auth-local 双后端测试全绿（独立 PG schema）+ clippy/fmt 干净。
+  **phase 5 完成**：godoword auth 模块（per-request AuthUser/AdminUser extractor cookie→validate_session、
+  cookie HttpOnly/SameSite=Lax/Secure 可配、CSRF 自定义头守卫中间件、登录限流内存 10 次/5 分钟、
+  auth REST register/login/logout/me + admin REST reset/invites/users）；AppState 转 per-request（runtime/适配器非 optional，移除 user）；
+  **删除 dev-bypass（T1 回归：dev.rs/feature/GODOWORD_DEV_*）**，适配器非 optional，Runtime 无条件构建，用户级 REST release 开放（未认证 401）。
+  本地 auth 流端到端实证：首用户成管理员/邀请注册/非管理员 403/登出失效/CSRF 403/限流 429 全过。下一：phase 6（冒烟脚本 + 真 key + 文档/history + 审查）。
 
 ## blocked / 待拍板决策
 
