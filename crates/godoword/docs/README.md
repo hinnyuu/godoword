@@ -14,7 +14,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 - **认证**（`src/auth.rs`）：per-request `AuthUser`/`AdminUser` extractor（cookie → `validate_session` 联查 active）；
   cookie HttpOnly/SameSite=Lax/Secure 可配；CSRF 自定义头守卫（`/api/v1` 变更须 `X-Requested-With`，缺则 403）；
   登录限流内存（username + **IP** 双维度，10 次/5 分钟）。`POST /auth/{register,login,logout,reset-password}`、`GET /auth/me`；
-  `POST /admin/{reset,invites}`、`GET /admin/users`、`POST /admin/users/{id}/status`（**防自禁/防禁最后管理员**）。
+  `POST /admin/{reset,invites}`、`GET /admin/users`、`POST /admin/users/{id}/status`（**防自禁/防禁最后管理员 +
+  并发互禁不失锁，R7 串行化守卫收口 auth-local `set_user_status_guarded`**）。
   **重置 token 化（C8）+ 事务原子单次（R1）**：admin/reset 生成令牌 → 用户 POST auth/reset-password 持令牌设密码
   （密码策略经 auth-local `validate_password` 统一，弱密码 → 400；重置条件认领事务，并发仅一次成功）。
 - 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params，C5**）、`GET/DELETE /sessions/{id}`（DELETE 发 SessionEnded）、

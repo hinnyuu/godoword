@@ -458,6 +458,147 @@ pub async fn active_admin_count(store: &Store) -> Result<i64, AuthError> {
     Ok(row.0)
 }
 
+/// SQLite 管理员状态守卫体（Transaction Executor lifetime 泛型足够，同 register helper）。
+/// 守卫嵌入条件 UPDATE 子查询：首语句即写（获写锁），子查询于写时见最新已提交态 → 并发互禁串行化。
+/// 禁用条件 `NOT(目标是活跃管理员 AND 活跃管理员数<=1)`：非最后管理员才禁；rows=0 区分不存在/最后管理员。
+async fn set_status_sqlite(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    actor: UserId,
+    target: UserId,
+    disable: bool,
+    now: DateTime<Utc>,
+) -> Result<bool, AuthError> {
+    if disable && target == actor {
+        return Err(AuthError::RegistrationRestricted(
+            "不可禁用自己".to_string(),
+        ));
+    }
+    let n = if disable {
+        sqlx::query(
+            "UPDATE users SET status = 'disabled', updated_at = ? WHERE id = ?
+             AND NOT (is_admin AND status = 'active'
+                      AND (SELECT COUNT(*) FROM users WHERE is_admin AND status = 'active') <= 1)",
+        )
+        .bind(now)
+        .bind(target.0)
+        .execute(&mut **tx)
+        .await
+        .map_err(internal)?
+        .rows_affected()
+    } else {
+        sqlx::query("UPDATE users SET status = 'active', updated_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(target.0)
+            .execute(&mut **tx)
+            .await
+            .map_err(internal)?
+            .rows_affected()
+    };
+    if n == 0 {
+        if disable {
+            let exists: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM users WHERE id = ?")
+                .bind(target.0)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(internal)?;
+            if exists.is_none() {
+                return Ok(false);
+            }
+            return Err(AuthError::RegistrationRestricted(
+                "不可禁用最后一个活跃管理员".to_string(),
+            ));
+        }
+        return Ok(false);
+    }
+    if disable {
+        sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
+            .bind(target.0)
+            .execute(&mut **tx)
+            .await
+            .map_err(internal)?;
+    }
+    Ok(true)
+}
+
+/// 管理员设用户状态（**串行化守卫 + 事务原子**，审计 R7）：防自禁 / 防禁最后一个活跃管理员 / 禁用撤销会话。
+/// 检查与禁用须串行化防并发互禁→零管理员：PG `pg_advisory_xact_lock` / SQLite 条件 UPDATE 子查询（写锁内求值）。
+/// Ok(true)=已更新 / Ok(false)=用户不存在 / Err=守卫拒绝（→400）。
+pub async fn set_user_status_guarded(
+    store: &Store,
+    actor: UserId,
+    target: UserId,
+    status: &str,
+) -> Result<bool, AuthError> {
+    let disable = status != "active";
+    let now = Utc::now();
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let r = set_status_sqlite(&mut tx, actor, target, disable, now).await;
+            match r {
+                Ok(v) => {
+                    tx.commit().await.map_err(internal)?;
+                    Ok(v)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            sqlx::query("SELECT pg_advisory_xact_lock($1)")
+                .bind(0x6777_6164_i64) // "gwad"：管理员状态串行化锁（区别注册锁）
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            let row: Option<(bool,)> = sqlx::query_as("SELECT is_admin FROM users WHERE id = $1")
+                .bind(target.0)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(internal)?;
+            let Some((target_admin,)) = row else {
+                return Ok(false);
+            };
+            if disable {
+                if target == actor {
+                    return Err(AuthError::RegistrationRestricted(
+                        "不可禁用自己".to_string(),
+                    ));
+                }
+                if target_admin {
+                    let (n,): (i64,) = sqlx::query_as(
+                        "SELECT COUNT(*) FROM users WHERE is_admin = $1 AND status = 'active'",
+                    )
+                    .bind(true)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+                    if n <= 1 {
+                        return Err(AuthError::RegistrationRestricted(
+                            "不可禁用最后一个活跃管理员".to_string(),
+                        ));
+                    }
+                }
+            }
+            sqlx::query("UPDATE users SET status = $1, updated_at = $2 WHERE id = $3")
+                .bind(status)
+                .bind(now)
+                .bind(target.0)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            if disable {
+                sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
+                    .bind(target.0)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            }
+            tx.commit().await.map_err(internal)?;
+            Ok(true)
+        }
+    }
+}
+
 /// 管理员重置用户密码（设新密码哈希 + 撤销旧会话，**同事务原子**，审计 R1；管理员权限由组合根校验）。
 pub async fn admin_reset_password(
     store: &Store,

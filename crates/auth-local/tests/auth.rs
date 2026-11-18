@@ -5,9 +5,10 @@
 use std::sync::Arc;
 
 use auth_local::{
-    admin_reset_password, create_invite, create_reset_token, create_session, delete_session,
-    hash_password, is_admin, list_users, register, reset_with_token, set_user_status,
-    validate_session, verify_login, verify_password, LocalAuth,
+    active_admin_count, admin_reset_password, create_invite, create_reset_token, create_session,
+    delete_session, hash_password, is_admin, list_users, register, reset_with_token,
+    set_user_status, set_user_status_guarded, validate_session, verify_login, verify_password,
+    LocalAuth,
 };
 use chrono::{Duration, Utc};
 use kernel::{run_migrations, KERNEL_MIGRATIONS};
@@ -412,6 +413,127 @@ async fn reset_token_concurrent_single_use() {
             .await
             .unwrap();
         assert_concurrent_reset(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}
+
+/// 管理员状态守卫断言（审计 R7）：自禁拒绝 + 最后管理员拒绝 + 并发互禁后仍≥1 活跃管理员（不失锁）。
+async fn assert_admin_guard(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let a = register(&store, "admin-a", "pass-a-1234", None, None, false)
+        .await
+        .unwrap();
+    let bb = register(&store, "admin-b", "pass-b-1234", None, None, false)
+        .await
+        .unwrap();
+    // 测试 setup：提升 B 为管理员（生产首用户成管理员，这里直接置位构造两管理员）。
+    kernel_api::execute_both!(
+        &*store,
+        "UPDATE users SET is_admin = $1 WHERE id = $2",
+        true,
+        bb.0
+    )
+    .unwrap();
+    assert_eq!(
+        active_admin_count(&store).await.unwrap(),
+        2,
+        "{b} 两活跃管理员"
+    );
+    // 自禁拒绝。
+    assert!(
+        set_user_status_guarded(&store, a, a, "disabled")
+            .await
+            .is_err(),
+        "{b} 不可自禁"
+    );
+    // 串行：A 禁 B 成功（2→1）；B（已禁用）禁 A 被最后管理员守卫拒绝。
+    assert!(
+        set_user_status_guarded(&store, a, bb, "disabled")
+            .await
+            .unwrap(),
+        "{b} A 禁 B"
+    );
+    assert_eq!(
+        active_admin_count(&store).await.unwrap(),
+        1,
+        "{b} 禁 B 后剩 1"
+    );
+    assert!(
+        set_user_status_guarded(&store, bb, a, "disabled")
+            .await
+            .is_err(),
+        "{b} 不可禁最后管理员"
+    );
+    assert_eq!(
+        active_admin_count(&store).await.unwrap(),
+        1,
+        "{b} 最后管理员守卫保住 1"
+    );
+    // 恢复 B 活跃 → 两管理员，供并发互禁。
+    assert!(
+        set_user_status_guarded(&store, a, bb, "active")
+            .await
+            .unwrap(),
+        "{b} 恢复 B"
+    );
+    assert_eq!(
+        active_admin_count(&store).await.unwrap(),
+        2,
+        "{b} 恢复两管理员"
+    );
+    // 并发互禁：恰一个成功，另一个被守卫拒绝；最终≥1 活跃管理员。
+    let s1 = store.clone();
+    let s2 = store.clone();
+    let h1 = tokio::spawn(async move { set_user_status_guarded(&s1, a, bb, "disabled").await });
+    let h2 = tokio::spawn(async move { set_user_status_guarded(&s2, bb, a, "disabled").await });
+    let r1 = h1.await.unwrap();
+    let r2 = h2.await.unwrap();
+    let ok_count = [r1.is_ok(), r2.is_ok()].iter().filter(|x| **x).count();
+    assert_eq!(ok_count, 1, "{b} 并发互禁恰一个成功（实得 {ok_count}）");
+    let n = active_admin_count(&store).await.unwrap();
+    assert!(n >= 1, "{b} 并发互禁后仍≥1 活跃管理员（实得 {n}）");
+}
+
+#[tokio::test]
+async fn admin_status_guard_concurrent() {
+    let dir = std::env::temp_dir().join(format!("gw-admin-conc-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_admin_guard(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_admin_conc_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_admin_guard(Arc::new(Store::Pg(pg))).await;
         sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
             .execute(&admin)
             .await

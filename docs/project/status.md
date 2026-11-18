@@ -75,7 +75,6 @@
 - R3 退出/背压：真 abort+join 后 checkpoint；硬超时后 try_send/关通道（满 mpsc 不消费仍超时退出回归）。
 - R4 淘汰：emit+update 同事务；summarize 计费幂等键去重；emit/update 各失败点 + summarize 多回合行为测试。
 - R5 OpenAPI：注册 CreateSessionReq + cookieAuth + CSRF header + 403/404 + $ref 全解析测试。
-- R7 管理员：禁用事务/锁串行化（防并发互禁→零管理员）+ 并发负例。
 
 **P1（一致性/CI/文档）**：
 - R6 SessionEnded 与 delete 原子（禁吞错伪造结束）。

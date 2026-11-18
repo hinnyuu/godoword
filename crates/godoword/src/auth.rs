@@ -384,28 +384,10 @@ pub async fn admin_set_status(
         return Err(StatusCode::BAD_REQUEST);
     }
     let target = UserId(id);
-    if req.status == "disabled" {
-        if id == admin.0 {
-            return Err(StatusCode::BAD_REQUEST); // 不可禁用自己
-        }
-        if auth_local::is_admin(&st.store, target)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        {
-            let n = auth_local::active_admin_count(&st.store)
-                .await
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            if n <= 1 {
-                return Err(StatusCode::BAD_REQUEST); // 不可禁用最后一个活跃管理员
-            }
-        }
-    }
-    let ok = auth_local::set_user_status(&st.store, target, &req.status)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    if ok {
-        Ok(Json(json!({ "ok": true })))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    // 守卫 + 禁用串行化原子（审计 R7）：防自禁/防禁最后管理员/并发互禁不失锁，收口 auth-local 事务。
+    match auth_local::set_user_status_guarded(&st.store, admin, target, &req.status).await {
+        Ok(true) => Ok(Json(json!({ "ok": true }))),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => Err(auth_err_status(e)),
     }
 }

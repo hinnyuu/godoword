@@ -23,6 +23,8 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   `auth_sessions` 表（kernel 0002）与单次 `tokens` 分离（可撤销）。
 - 邀请码：`create_invite`（明文码返回，存 hash + max_uses + 可选 expires）。
 - 管理：`list_users`/`set_user_status`（**禁用撤销会话**）/`is_admin`（**须 active**）/`active_admin_count`（防禁最后管理员）/
+  `set_user_status_guarded`（**串行化守卫 + 事务原子，审计 R7**：防自禁/防禁最后活跃管理员/禁用撤销会话；
+  PG `pg_advisory_xact_lock` / SQLite 条件 UPDATE 子查询写锁内求值，防并发互禁→零管理员）/
   `admin_reset_password`（设密码 + 撤销会话，**同事务原子 + validate_password**，审计 R1）。
   **重置 token 化（审计 C8）+ 事务原子单次性（审计 R1）**：`create_reset_token`（tokens 表 purpose=password_reset，单次 1h）
   + `reset_with_token`（**先 validate_password**（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**
@@ -40,4 +42,5 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
 `backends()` 夹具（SQLite 恒跑 + TEST_PG_URL 驱动 PG，独立 schema 隔离）。验证 argon2 round-trip/错密码、
 **密码策略（弱密码/超长拒绝 + 大小写敏感，审计 R1）**、注册首用户成管理员、username 唯一、invite 注册（用尽/过期拒绝）、
 登录（禁用拒绝）、会话令牌创建/校验/过期/登出、管理员重置、用户状态、**重置令牌并发仅一次成功 + 弱密码不消费令牌
-（审计 R1，独立并发测试 SQLite 文件库 + PG）**。
+（审计 R1，独立并发测试 SQLite 文件库 + PG）**、**管理员守卫（自禁/最后管理员拒绝 + 并发互禁后仍≥1 活跃管理员，
+审计 R7，独立并发测试）**。
