@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T12:48+08:00
-- 当前里程碑: **M1c 已合并（3c4dc0b）但第三方审计发现收尾阻塞 → M1c-hardening 加固子里程碑进行中（M1d 暂缓至加固后）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ **M1c-hardening（进行中）**
+- verified: 2026-11-18T19:47+08:00
+- 当前里程碑: **M1c 收尾完成无阻塞（含 M1c-hardening 加固 fa59c4e，第三方审计闭环）→ M1d 待启动（交接新 agent）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ **M1c-hardening（fa59c4e）**
 
 ## done
 
@@ -34,78 +34,54 @@
   + call_log 计量 + continue 执行/投递分离（task+mpsc，detach 上限）+ auth-local（argon2id + 邀请注册首用户管理员 + cookie 会话
   + CSRF + 限流 + 管理员重置）+ godoword 认证中间件 + auth/admin REST + **删 dev-bypass（T1 回归）**。kernel 0002 迁移
   （users.username + auth_sessions）。**不改 kernel-api 契约**。本地真 key 走真认证全链路 + auth 流端到端实证。详见 history 1129。
+- **M1c-hardening 第三方审计驱动加固（fa59c4e，PR #12 已合并，R4 main 重测 success，SELinux/quadlet/docker sign-off）**：
+  独立第三方 agent 审计发现"实现存在 ≠ 授权边界/数据完整性/交接真实性完成"，主开发者定案全部本期修。
+  P0 对象级授权（session/audio/binding 全路径校验归属，越权 404）+ binding/provider 同主 + 禁用/重置撤销会话 + 持久化失败关闭；
+  P1 continue 公开配置 + 硬超时/TTS cancel/退出屏障（WAL checkpoint）+ 淘汰水位（0003）+ 重置 token 化/IP 限流/SessionEnded/上游重试 + 测试端点计量；
+  OpenAPI 修正 + 全状态面 reconcile + **门禁 D6/D7 修复 + 合成回归 6 例** + AGENTS 协议加固。两用户负例 + 多回合不重复 + 重置令牌单次锚定。详见 history 1618。
 
 ## in-flight
 
-- M1c-hardening 加固分支（feat/m1c-hardening）：修复第三方审计（/tmp/godoword_M1c_AGENTS第三方审计意见.md，HEAD 03ff4e3）
-  发现的收尾阻塞。全部本期修（用户定案，避免延期漂移）；M1d 讨论暂缓至加固后。
-  **H1（P0 C1-C4）完成**：SessionRepo/AudioCache 接缝全路径携带 user_id 对象级授权（DbSessions/MemSessions/FsAudio）；
-  runtime 持久化失败关闭（meta/history/append 错误中止，不调计费上游）；binding/provider 同主（create/update/resolve 归属校验）；
-  validate_session 联查 active + 禁用/重置撤销会话 + is_admin 须 active + 管理员状态路由（防自禁/防禁最后管理员）。
-  两用户负例（repo 层 + REST 层越权 404/跨用户 provider 400/禁用旧 cookie 401）+ 双后端全绿 + clippy/fmt 干净。
-  **H2（P1 C5-C9）完成**：C5 create_session 公开 on_disconnect/params；C6 硬超时（timeout 包裹执行体）+ TTS 流 cancel
-  + detached 退出屏障（tasks 注册 + shutdown 有界等待 + WAL checkpoint）；C7 淘汰水位（0003 sessions.summary/evicted_up_to，
-  滚动摘要 + 水位推进 + outbox 一次，多回合不重复测试）；C8 重置 token 化（tokens 表单次）+ IP 限流维度 + SessionEnded
-  + 上游退避重试（LLM/TTS 可重试错误 bounded 2）；C9 测试端点计量。双后端全绿 + clippy/fmt 干净。
-  **H3-H6 完成**：OpenAPI 清 503/dev-bypass 改 401 + 403/CSRF + SSE 精确表述；全状态面 reconcile（roadmap 表/README/web/wiki/
-  module.yaml/rustdoc/PR 模板清理列）+ **门禁 D6/D7 修复 + test_gate.py 合成回归 6 例**；AGENTS 协议加固（冲突裁决/gh 降级/
-  缺陷≠重议/收尾定向核对/不自指）；smoke 补两用户越权 404 + admin 面 403 + 限流 429 断言（C10 声明与脚本一致）。
-  本地真 key 全链路 + 加固 REST 验证（continue 公开配置/越权 404/限流 429/重置令牌单次）全过。
-  **M1c-hardening 六阶段全落地**，待 CI 绿 + R4 重测 + 人工残留 sign-off → 恢复"M1c 收尾完成无阻塞" → M1d。
+- 本交接 docs PR（分支 docs/m1c-hardening-accepted-m1d-handoff）：status 恢复"M1c 收尾完成无阻塞" + M1d 启动规划。
+  合并后新 agent 从 main 接续 M1d。
 
 ## blocked / 待拍板决策
 
-- **M1c 收尾阻塞（第三方审计核实属实，修复中）**：
-  - C1【高】session/audio 只验登录不验资源归属（rest.rs 丢弃 AuthUser，DbSessions 按 id 查询）→ 跨用户读/删/写/取消/回放。
-  - C2【高】binding 可引用他人 provider 并解密用其 key/额度（create/update/resolve 无归属校验）。
-  - C3【高】禁用账户旧 cookie 仍有效（validate_session 不查 status，set_user_status 不撤销会话）+ 无管理员状态路由。
-  - C4【高】持久化失败被吞（create_session/append let _ =）→ 假成功 + 未授权上游计费。
-  - C5–C10【中高/中】continue 无公开配置入口、cancel/timeout 非硬边界 + 无 WAL checkpoint、淘汰无持久水位（重复摘要/outbox）、
-    设计漂移（重置未 token 化/限流无 IP/SessionEnded 未发/上游无重试）、provider_models 未计量、smoke 过度声明（无 429 断言）。
-  - D1–D9 文档漂移（roadmap 表自相矛盾/README/web M0/module.yaml/rustdoc/OpenAPI 503 残留/PR 模板）+ **门禁实现缺陷
-    （D6 kernel-api 跨模块规则不可达 + crates/*/docs/ 通配恒 false；D7 migration/web 盲区）**。
-- 加固设计决策（C7 淘汰水位 schema、C6 退出屏障、C5 continue API、C2 校验层）见下方规划，重大者交用户。
+- 无当前阻塞。M1c + M1c-hardening 已落地并经第三方审计闭环（history 1129/1618，不重议）；M1b 已落地（history 2206）。
+- M1d 设计待讨论（前端架构/Svelte 5/webcore 分层/i18n/AudioWorklet 音频引擎/词级高亮——重大者交用户）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
 
-## 下一动作（M1c-hardening，M1d 暂缓）
+## 下一动作（新 agent 接续 M1d）
 
-1. 读本文件 M1c-hardening 规划 → 第三方审计意见 → history 0329/1129（已定设计）→ 相关源码。
-2. 按 P0（授权/数据完整性）→ P1（核心语义 + OpenAPI + reconcile + 门禁修复）→ P2（AGENTS 协议）推进，单 PR 多 commit，持续维护本文件。
-3. 加固完成 → 审计第九节最低证据清单齐备 → CI 绿 + R4 重测 + 人工残留 sign-off → 恢复"M1c 收尾完成无阻塞" → M1d 设计讨论。
+1. 读 AGENTS.md → 本文件 → roadmap M1 蓝图（M1d 行）→ architecture → kernel-api 契约（SessionEvent/SpeakArgs）
+   → godoword/docs（REST/OpenAPI 面）→ kernel/docs。交叉验证 git log（M1c-hardening=fa59c4e）+ history INDEX（0329 设计/1129 实现/1618 加固）。
+2. M1d 设计先讨论（前端架构重大决策交用户），定案后建分支 feat/m1d-web-ui，单 PR 多 commit，持续维护本文件。
+3. M1d 完成 → CI 绿（前端 lint/build/vitest + 冒烟 SPA 伺服）→ **完整人工感官验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮）→ merge。
+4. **子里程碑收尾定向全表面核对**（审计 D8 纪律）：交接 PR 核对 status/roadmap/architecture/README/wiki/web/OpenAPI/PR 模板单一事实。
 
-## M1c-hardening 规划（加固子里程碑，全部本期修）
+## M1c-hardening（已完成，详见 history 1618，不重议）
 
-**P0 授权/数据完整性（必修 + 两用户负例）**：
-- C1 对象级授权：SessionRepo 生产路径携带校验 user_id（exists/meta/history/append/delete）；audio 经持久关联校验归属；
-  messages/cancel 先验 session 归属；REST 不再丢弃 AuthUser。负例期望 404/403 不泄露存在性。
-- C2 binding/provider 同主：create/update binding 验 provider 归属 + resolve 解密带 user 条件（纵深防御）；跨用户负例确保不解密不调上游。
-- C3 禁用/重置撤销访问：validate_session 联查 active；禁用/重置撤销目标 auth_sessions；管理员状态管理 REST（防唯一管理员失管）+ 旧 cookie 负例。
-- C4 持久化失败关闭：create/读/append 不吞错；前置不满足不调计费上游；不存在 session/DB 失败/continue 中断负例。
+第三方审计 C1-C10/D1-D9 全部本期修复闭环：对象级授权 + binding/provider 同主 + 禁用/重置撤销会话 + 持久化失败关闭（P0）；
+continue 公开配置 + 硬超时/TTS cancel/退出屏障 + 淘汰水位（0003）+ 重置 token 化/IP 限流/SessionEnded/上游重试 + 测试端点计量（P1）；
+OpenAPI 修正 + 全状态面 reconcile + 门禁 D6/D7 修复（test_gate.py 回归 6 例）+ AGENTS 协议加固。
+两用户负例 + 多回合不重复 + 重置令牌单次锚定；CI 7 checks + R4 + 人工残留 sign-off 全过。
 
-**P1 核心语义（M1d 冻结前）**：
-- C5 continue 公开受控配置（create_session 接受 on_disconnect/params）+ detach 饱和降级测试。
-- C6 全路径可响应 cancel（含 TTS 流）+ 硬 timeout（包裹上游）+ detached 退出屏障（跟踪 JoinHandle + WAL checkpoint 取舍明示）。
-- C7 淘汰持久水位/去重（schema 0003：sessions 滚动摘要 + 淘汰水位）+ 多回合 summarize/truncate 测试（同 span 不重复计费/outbox）。
-- C8 对齐已定设计：管理员重置 token 化（tokens 表）+ 限流 IP 维度 + SessionEnded 发射 + 上游重试/退避（本期全修，不延期）。
-- C9 统一计量（provider_models 等纳入 record_call；写入失败语义明示）。
-- D4 OpenAPI 修正（401/403/CSRF、清 503、SSE「path 入/事件 schema 不入」精确）→ M1d 生成 TS 前提。
+## M1d 启动规划（交接棒，设计待讨论）
 
-**P1 reconcile + 门禁修复**：
-- D1/D3/D5 全状态面单一事实（roadmap 里程碑表/README/wiki/user 头注/web 占位页/module.yaml/rustdoc/PR 模板清理命令列 + smoke 描述）。
-- D6/D7 门禁修复（项目规则匹配所有变更文件不只 PROJECT_PREFIXES；crates/*/docs/ 逐模块展开 + 前缀匹配；migrations 纳入 coverage/omission/status；web 纳入 status）
-  + 合成回归测试（kernel-api 跨模块/migration-only/web-only）。
+**范围**（蓝图 M1d，有 UI）：Svelte 骨架 + 设置/会话/认证 UI。web/core 框架无关 TS（OpenAPI→TS 客户端 + SSE 客户端
++ AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ 设置 UI（BYOK provider/binding
++ 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）+ Dockerfile node 构建阶段 + 前端 CI job。
 
-**P2 AGENTS 协议加固（保持短小）**：冲突裁决（git 主线/源码实现事实/status live/history 为什么，冲突标 blocked）；
-里程碑收尾定向全表面核对；gh 降级（gh→Web/REST→显式未核验）；交接 PR 不自指；缺陷≠重议。
+**后端已就绪**（M1c + hardening）：全部 REST（auth/admin/sessions/providers/bindings/config）+ OpenAPI（/api/v1/openapi.json，
+401/403/CSRF 标注一致，M1d 生成 TS）+ SSE 协议（SessionEvent，path 入 OpenAPI/事件 schema 单独文档）+ cookie 会话认证
+（CSRF 自定义头 X-Requested-With）+ 对象级授权（越权 404）+ 音频回放（GET /audio/{id} 裸 PCM + x-sample-rate）+ 词级时间戳。
+**M1d 不改后端契约**（若需契约变更走全量审查）。
 
-**验收**：审计第九节最低证据清单（两用户负例/跨用户 provider 拒绝/禁用旧 cookie 失效/无假成功/continue 公开可用 + detach 降级/
-TTS cancel + 硬 timeout + detached 退出/多回合不重复/OpenAPI 一致/smoke 声明与脚本一致/门禁回归/状态面单一事实/CI + R4 重测 + 人工残留可核对记录）。
+**待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
+/SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。
 
-## M1d 启动规划（加固后讨论，暂缓）
-
-**范围**（蓝图 M1d，有 UI）：Svelte 骨架 + 设置/会话/认证 UI（web/core 框架无关 TS + AudioWorklet + 词级高亮 + i18n zh-CN）
-+ 前端 CI + Dockerfile node 构建。**后端就绪声明撤回**：须待 M1c-hardening 修复授权/OpenAPI/continue 语义后重新评估。
-M1d 设计讨论在加固完成后进行（避免混杂）；完整人工感官验收强制。
+**验收**：CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工感官验收**（视觉交互/TTS 音质/BYOK 配置流/登录流/词级高亮）——
+M1d 是有 UI 里程碑，人工视觉验收强制（区别 M1a/b/c 无 UI）。人工残留按清单纪律（完整命令+通过标准+清理）。
 
 ## M1c 已定案决策（已落地，详见 history 0329/1129，不重议）
 
