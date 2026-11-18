@@ -42,7 +42,13 @@
   **phase 3 完成**：run_turn 执行/投递分离——执行体 spawn tokio task 经有界 mpsc 投递，SSE 订阅 receiver；
   断开（receiver drop）读 on_disconnect：cancel 置标志 / continue 取 detach permit 排空跑完（permit 满降级 cancel）；
   活跃锁归执行体（task 结束释放）；detach semaphore 默认 4（Config max_detached_turns 可配）；cancel_all + 优雅退出接线。
-  断开 continue/cancel 测试（current_thread 确定时序）+ clippy/fmt 干净。下一：phase 4（auth-local crate）。
+  断开 continue/cancel 测试（current_thread 确定时序）+ clippy/fmt 干净。
+  **phase 4 完成**：新 crate auth-local（kind=adapter provides=None，依赖 kernel-api only）——argon2id hash/verify、
+  register（首用户事务锁成管理员：SQLite 单写者/PG advisory xact lock；username 唯一；invite 校验用尽/过期）、
+  verify_login（禁用拒绝）、会话令牌 create/validate/delete（auth_sessions 表，opaque token sha256）、
+  create_invite、list_users/set_user_status/is_admin/admin_reset_password、LocalAuth impl AuthProvider。
+  kernel 0002 迁移（users 增 username + UNIQUE 索引 + auth_sessions 表）；storage 测试适配 2 迁移。
+  auth-local 双后端测试全绿（独立 PG schema）+ clippy/fmt 干净。下一：phase 5（godoword 认证中间件 + REST + 删 dev-bypass）。
 
 ## blocked / 待拍板决策
 

@@ -23,11 +23,18 @@ pub struct Migration {
 }
 
 /// kernel 自有迁移集（M2 教学模块迁移经注册序追加于其后）。
-pub const KERNEL_MIGRATIONS: &[Migration] = &[Migration {
-    version: "0001",
-    name: "init",
-    sql: include_str!("../migrations/0001_init.sql"),
-}];
+pub const KERNEL_MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: "0001",
+        name: "init",
+        sql: include_str!("../migrations/0001_init.sql"),
+    },
+    Migration {
+        version: "0002",
+        name: "auth",
+        sql: include_str!("../migrations/0002_auth.sql"),
+    },
+];
 
 const VERSION_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS _schema_migrations (
     version TEXT PRIMARY KEY,

@@ -47,7 +47,7 @@ async fn migrations_and_schema_crud() {
         let n1 = run_migrations(&store, KERNEL_MIGRATIONS, None)
             .await
             .unwrap();
-        assert_eq!(n1, 1, "{b} 首次应用迁移数");
+        assert_eq!(n1, 2, "{b} 首次应用迁移数");
         let n2 = run_migrations(&store, KERNEL_MIGRATIONS, None)
             .await
             .unwrap();
@@ -55,12 +55,13 @@ async fn migrations_and_schema_crud() {
 
         let versions: Vec<(String, String)> = fetch_all_both!(
             &store,
-            "SELECT version, name FROM _schema_migrations",
+            "SELECT version, name FROM _schema_migrations ORDER BY version",
             (String, String)
         )
         .unwrap();
-        assert_eq!(versions.len(), 1, "{b} 版本表行数");
-        assert_eq!(versions[0].0, "0001", "{b} 版本键");
+        assert_eq!(versions.len(), 2, "{b} 版本表行数");
+        assert_eq!(versions[0].0, "0001", "{b} 版本键 0001");
+        assert_eq!(versions[1].0, "0002", "{b} 版本键 0002");
 
         let now = Utc::now();
         let user_id = Uuid::new_v4();

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/kernel-api", "crates/kernel", "crates/llm-openai", "crates/tts-qwen-audio", "crates/godoword"]
+members = ["crates/kernel-api", "crates/kernel", "crates/llm-openai", "crates/tts-qwen-audio", "crates/auth-local", "crates/godoword"]
 
 [workspace.package]
 version = "0.0.0"
@@ -12,6 +12,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 kernel-api = { path = "crates/kernel-api" }
 kernel = { path = "crates/kernel" }
+auth-local = { path = "crates/auth-local" }
 llm-openai = { path = "crates/llm-openai" }
 tts-qwen-audio = { path = "crates/tts-qwen-audio" }
 aes-gcm = "0.10"
