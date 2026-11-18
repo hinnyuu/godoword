@@ -6,10 +6,11 @@ use kernel_api::{AudioId, ChatMessage, KernelError, SessionId, UserId};
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::seam::{AudioCache, CachedAudio, SessionRepo};
+use crate::seam::{AudioCache, CachedAudio, SessionMeta, SessionRepo};
 
 struct SessionState {
     user: UserId,
+    meta: SessionMeta,
     messages: Vec<ChatMessage>,
 }
 
@@ -28,13 +29,23 @@ impl MemSessions {
 
 #[async_trait]
 impl SessionRepo for MemSessions {
-    async fn create(&self, user: UserId, id: SessionId) -> Result<(), KernelError> {
+    async fn create(
+        &self,
+        user: UserId,
+        id: SessionId,
+        meta: SessionMeta,
+    ) -> Result<(), KernelError> {
         let mut g = self.inner.lock().unwrap();
         g.entry(id).or_insert(SessionState {
             user,
+            meta,
             messages: Vec::new(),
         });
         Ok(())
+    }
+
+    async fn meta(&self, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
+        Ok(self.inner.lock().unwrap().get(&id).map(|s| s.meta.clone()))
     }
 
     async fn exists(&self, id: SessionId) -> Result<bool, KernelError> {

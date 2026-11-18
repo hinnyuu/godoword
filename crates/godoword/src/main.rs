@@ -17,7 +17,10 @@ use axum::{
 use kernel::DbBindingResolver;
 #[cfg(feature = "dev-bypass")]
 use kernel::Runtime;
-use kernel::{run_migrations, Config, MasterKey, MemAudio, MemSessions, KERNEL_MIGRATIONS};
+use kernel::{
+    run_migrations, AudioCache, Config, DbSessions, FsAudio, MasterKey, SessionRepo,
+    KERNEL_MIGRATIONS,
+};
 use kernel_api::{LlmProvider, TtsProvider};
 use std::sync::Arc;
 use tower_http::services::ServeDir;
@@ -44,8 +47,29 @@ async fn main() {
         .expect("数据库迁移失败");
     tracing::info!("存储就绪（{}），本次应用迁移 {applied} 条", store.backend());
 
-    let sessions = Arc::new(MemSessions::new());
-    let audio = Arc::new(MemAudio::new());
+    let sessions: Arc<dyn SessionRepo> = Arc::new(DbSessions::new(store.clone()));
+    let fs_audio = Arc::new(FsAudio::new(cfg.cache_dir()));
+    let audio: Arc<dyn AudioCache> = fs_audio.clone();
+
+    // 音频缓存周期清理（TTL + 容量上限，防 PCM 撑满磁盘；缓存可再生，淘汰只损失旧回放）。
+    {
+        let cache = fs_audio.clone();
+        let ttl = cfg.cache_ttl();
+        let max_bytes = cfg.cache_max_bytes;
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                interval.tick().await;
+                let c = cache.clone();
+                match tokio::task::spawn_blocking(move || c.cleanup(ttl, max_bytes)).await {
+                    Ok(Ok(n)) if n > 0 => tracing::info!("音频缓存清理 {n} 条"),
+                    Ok(Ok(_)) => {}
+                    Ok(Err(e)) => tracing::warn!("音频缓存清理失败：{e}"),
+                    Err(e) => tracing::warn!("音频缓存清理任务失败：{e}"),
+                }
+            }
+        });
+    }
 
     #[cfg(feature = "dev-bypass")]
     let (runtime, user, llm, tts) = {

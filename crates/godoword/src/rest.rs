@@ -9,9 +9,7 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
-use kernel::{
-    AudioCache, Config, ConfigView, MasterKey, MemAudio, MemSessions, Runtime, SessionRepo,
-};
+use kernel::{AudioCache, Config, ConfigView, MasterKey, Runtime, SessionMeta, SessionRepo};
 use kernel_api::{AudioId, LlmProvider, SessionEvent, SessionId, Store, TtsProvider, UserId};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -21,10 +19,10 @@ use uuid::Uuid;
 
 /// 应用状态（M1b：内存会话/音频 + DB 存储基底 + 配置；runtime/适配器仅 dev-bypass 模式存在）。
 pub struct AppState {
-    /// 会话仓储。
-    pub sessions: Arc<MemSessions>,
-    /// 音频缓存。
-    pub audio: Arc<MemAudio>,
+    /// 会话仓储（M1c DB impl）。
+    pub sessions: Arc<dyn SessionRepo>,
+    /// 音频缓存（M1c 文件系统 impl）。
+    pub audio: Arc<dyn AudioCache>,
     /// 运行时（dev-bypass 模式 Some；release M1b None，回合返回 503）。
     pub runtime: Option<Arc<Runtime>>,
     /// 当前用户（M1b dev 固定用户；M1c 真认证）。
@@ -93,7 +91,10 @@ fn to_sse(ev: SessionEvent) -> Event {
 pub async fn create_session(State(st): State<Arc<AppState>>) -> Result<Json<Value>, StatusCode> {
     user_access()?;
     let id = SessionId::new();
-    let _ = st.sessions.create(st.user, id).await;
+    let _ = st
+        .sessions
+        .create(st.user, id, SessionMeta::default())
+        .await;
     Ok(Json(json!({ "id": id.to_string() })))
 }
 

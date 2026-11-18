@@ -4,7 +4,7 @@
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
 - verified: 2026-11-18T03:29+08:00
-- 当前里程碑: **M1b 已合并（9d9c907）→ M1c 设计已定案（本 docs PR 落档 + 全量审查）→ 待启动实现**
+- 当前里程碑: **M1c 实现进行中（feat/m1c-session-auth）——phase 1 完成（会话/音频持久化基底）**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ **M1b（9d9c907）**
 
 ## done
@@ -30,9 +30,12 @@
 
 ## in-flight
 
-- 本 docs PR（分支 docs/m1c-design-decisions）：M1c 设计决策落档（history 0329 三条目 + 触发规则条目）
-  + 全量语义审查（一审 + 二审，设计方向级 supersede 蓝图 hash-cache 触发）+ docs reconciliation。
-  合并后开 feat/m1c-session-auth 实现分支。
+- M1c 实现分支 feat/m1c-session-auth（设计已定案 history 0329，不重议）。
+  **phase 1 完成**：SessionRepo 接缝扩展（SessionMeta/OnDisconnect + create 携带 meta + meta() 读取）；
+  DbSessions（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；FsAudio（/data/cache 原子写 + sidecar
+  + TTL/容量有界周期清理，Config cache_ttl_secs/cache_max_bytes）；main/AppState/REST 转 trait 对象。
+  内存 impl 降为测试替身。双后端测试全绿（session 独立 PG schema 隔离避竞态）+ clippy/fmt 干净。
+  下一：phase 2（上下文预算/淘汰 + outbox + call_log）。
 
 ## blocked / 待拍板决策
 

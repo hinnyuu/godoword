@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::stream::{self, StreamExt};
 use kernel::{
-    AudioCache, BindingResolver, MemAudio, MemSessions, ResolvedBinding, Runtime, SessionRepo,
+    AudioCache, BindingResolver, MemAudio, MemSessions, ResolvedBinding, Runtime, SessionMeta,
+    SessionRepo,
 };
 use kernel_api::{
     AudioEvent, AudioFormat, AudioStream, ChatChunk, ChatRequest, ChatStream, FinishReason,
@@ -176,7 +177,10 @@ async fn turn_speak_full_sequence() {
     let (rt, sessions, audio) = runtime(false, 8);
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
 
     let events: Vec<SessionEvent> = rt
         .run_turn(user, session, "教我こんにちは".to_string())
@@ -247,7 +251,10 @@ async fn tool_cap_guard() {
     let (rt, sessions, _audio) = runtime(true, 2);
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
 
     let events: Vec<SessionEvent> = rt
         .run_turn(user, session, "朗读".to_string())
@@ -294,7 +301,10 @@ async fn unconfigured_binding_errors() {
     );
     let user = UserId::new();
     let session = SessionId::new();
-    sessions.create(user, session).await.unwrap();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
     let events: Vec<SessionEvent> = rt.run_turn(user, session, "hi".to_string()).collect().await;
     assert!(events.iter().any(|e| matches!(e, SessionEvent::Error { code, action: Some(a), .. } if code == "unconfigured" && a == "settings")));
 }
