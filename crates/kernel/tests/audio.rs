@@ -114,3 +114,21 @@ async fn cleanup_missing_dir_ok() {
     let cache = FsAudio::new(temp_dir());
     assert_eq!(cache.cleanup(Duration::ZERO, 0).unwrap(), 0);
 }
+
+#[tokio::test]
+async fn put_sidecar_failure_cleans_orphan_pcm() {
+    let dir = temp_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let cache = FsAudio::new(dir.clone());
+    let user = UserId::new();
+    let id = AudioId::new();
+    // 故障注入（审计 A3）：sidecar 路径占为目录 → write_atomic rename 失败。
+    let json_path = dir.join(format!("{}.json", id.0));
+    std::fs::create_dir(&json_path).unwrap();
+    let res = cache.put(id, sample_audio(4800, user)).await;
+    assert!(res.is_err(), "A3：sidecar 写失败 put 返回 Err");
+    // 孤儿 PCM 已清理（无半写残留，避免 get 读缺 sidecar 致 500）。
+    let pcm_path = dir.join(format!("{}.pcm", id.0));
+    assert!(!pcm_path.exists(), "A3：sidecar 失败后孤儿 PCM 已清理");
+    std::fs::remove_dir_all(&dir).unwrap();
+}

@@ -861,17 +861,32 @@ impl Runtime {
                                                     }
                                                     AudioEvent::End { complete: end } => {
                                                         let pcm = end.unwrap_or_else(|| Bytes::from(complete.clone()));
-                                                        let _ = audio.put(audio_id, CachedAudio {
+                                                        // 缓存写失败关闭（审计 R2）：put 失败不发正常 AudioEnd/成功 ToolResult，
+                                                        // 改发错误语义（live chunk 已流式播放，但持久回放失败须如实报告）。
+                                                        match audio.put(audio_id, CachedAudio {
                                                             pcm,
                                                             words: words_acc.clone(),
                                                             format,
                                                             sample_rate,
                                                             owner: user,
-                                                        }).await;
-                                                        yield SessionEvent::AudioEnd {
-                                                            audio_id,
-                                                            url: format!("/api/v1/audio/{audio_id}"),
-                                                        };
+                                                        }).await {
+                                                            Ok(()) => {
+                                                                yield SessionEvent::AudioEnd {
+                                                                    audio_id,
+                                                                    url: format!("/api/v1/audio/{audio_id}"),
+                                                                };
+                                                            }
+                                                            Err(e) => {
+                                                                ok = false;
+                                                                err = format!("音频缓存写入失败：{e}");
+                                                                yield SessionEvent::Error {
+                                                                    code: "storage".to_string(),
+                                                                    message: err.clone(),
+                                                                    retryable: false,
+                                                                    action: None,
+                                                                };
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

@@ -181,6 +181,92 @@ async fn runtime(always_tool: bool) -> (Runtime, Arc<MemSessions>, Arc<MemAudio>
     (rt, sessions, audio)
 }
 
+/// 故障注入音频缓存（审计 R2）：put 恒失败，验证运行时错误语义（无假成功）。
+struct FailAudio;
+
+#[async_trait]
+impl AudioCache for FailAudio {
+    async fn put(&self, _: kernel_api::AudioId, _: kernel::CachedAudio) -> Result<(), KernelError> {
+        Err(KernelError::Storage("注入：音频缓存写失败".to_string()))
+    }
+    async fn get(
+        &self,
+        _: kernel_api::AudioId,
+        _: UserId,
+    ) -> Result<Option<kernel::CachedAudio>, KernelError> {
+        Ok(None)
+    }
+}
+
+/// 注入自定义音频缓存的运行时（mock LLM/TTS/绑定 + 内存会话）。
+async fn runtime_with_audio(audio: Arc<dyn AudioCache>) -> (Runtime, Arc<MemSessions>) {
+    let sessions = Arc::new(MemSessions::new());
+    let store = Arc::new(Store::Sqlite(
+        sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap(),
+    ));
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let rt = Runtime::new(
+        Arc::new(MockLlm {
+            calls: AtomicU32::new(0),
+            always_tool: false,
+        }),
+        Arc::new(MockTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        audio,
+        store,
+    );
+    (rt, sessions)
+}
+
+#[tokio::test]
+async fn audio_put_failure_no_fake_success() {
+    let (rt, sessions) = runtime_with_audio(Arc::new(FailAudio)).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    let events: Vec<SessionEvent> = rt
+        .run_turn(user, session, "朗读".to_string())
+        .collect()
+        .await;
+    // put 失败：无正常 AudioEnd（无假回放 URL）。
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::AudioEnd { .. })),
+        "R2：put 失败不发 AudioEnd"
+    );
+    // 错误语义：storage Error。
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::Error { code, .. } if code == "storage")),
+        "R2：put 失败发 storage 错误"
+    );
+    // ToolResult ok=false（LLM 见失败），无成功 ToolResult。
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::ToolResult { ok: false, .. })),
+        "R2：put 失败 ToolResult ok=false"
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::ToolResult { ok: true, .. })),
+        "R2：无成功 ToolResult"
+    );
+}
+
 #[tokio::test]
 async fn turn_speak_full_sequence() {
     let (rt, sessions, audio) = runtime(false).await;

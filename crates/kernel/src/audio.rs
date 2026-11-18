@@ -133,9 +133,11 @@ impl AudioCache for FsAudio {
         write_atomic(&self.pcm_path(id), &audio.pcm)
             .await
             .map_err(io_err)?;
-        write_atomic(&self.json_path(id), &json)
-            .await
-            .map_err(io_err)?;
+        if let Err(e) = write_atomic(&self.json_path(id), &json).await {
+            // 半写清理孤儿 PCM（审计 A3）：sidecar 失败时移除已写 PCM，避免 get 读缺 sidecar 致 500。
+            let _ = tokio::fs::remove_file(self.pcm_path(id)).await;
+            return Err(io_err(e));
+        }
         Ok(())
     }
 
