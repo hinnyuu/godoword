@@ -920,5 +920,37 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-18-1129-m1c-implementation.md",
+    "title": "M1c 实现：会话运行时接基底 + 认证 + 管理",
+    "date": "2026-11-18T11:29+08:00",
+    "keywords": [
+      "m1c",
+      "session",
+      "audio",
+      "auth",
+      "argon2",
+      "cookie",
+      "csrf",
+      "continue",
+      "detach",
+      "eviction",
+      "summarize",
+      "outbox",
+      "call_log",
+      "dev-debt"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
