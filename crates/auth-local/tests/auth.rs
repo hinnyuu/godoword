@@ -44,6 +44,35 @@ async fn run_test(store: Arc<Store>) {
     .unwrap();
     assert!(is_admin(&store, admin).await.unwrap(), "{b} 首用户成管理员");
 
+    // 密码策略（审计 R1）：register 拒绝弱密码（空/超短/纯字母/纯数字），接受字母+数字。
+    for weak in ["", "a1", "abcdefgh", "12345678", "abc123"] {
+        assert!(
+            register(&store, "weakuser", weak, None, None, false)
+                .await
+                .is_err(),
+            "{b} 弱密码拒绝：{weak:?}"
+        );
+    }
+    let long = format!("a1{}", "x".repeat(127)); // 129 字符
+    assert!(
+        register(&store, "weakuser", &long, None, None, false)
+            .await
+            .is_err(),
+        "{b} 超长密码拒绝"
+    );
+    // 区分大小写：Abcd1234 与 abcd1234 为不同密码。
+    let case_user = register(&store, "caseuser", "Abcd1234", None, None, false)
+        .await
+        .unwrap();
+    assert!(
+        verify_login(&store, "caseuser", "Abcd1234").await.is_ok(),
+        "{b} 大小写敏感正确密码"
+    );
+    assert!(
+        verify_login(&store, "caseuser", "abcd1234").await.is_err(),
+        "{b} 大小写敏感错密码"
+    );
+
     // username 唯一。
     let dup = register(&store, "admin", "x-pass-12345", None, None, false).await;
     assert!(dup.is_err(), "{b} username 唯一拒绝重复");
@@ -206,6 +235,17 @@ async fn run_test(store: Arc<Store>) {
 
     // 重置令牌 token 化（审计 C8）：单次使用 + 撤销旧会话。
     let rt_token = create_reset_token(&store, user1).await.unwrap();
+    // 弱密码重置拒绝且不消费令牌（审计 R1：校验先于认领，令牌仍可重试）。
+    assert!(
+        reset_with_token(&store, &rt_token, "weak").await.is_err(),
+        "{b} 弱密码重置拒绝"
+    );
+    assert!(
+        reset_with_token(&store, &rt_token, "abcdefgh")
+            .await
+            .is_err(),
+        "{b} 无数字重置拒绝"
+    );
     let u1_sess = create_session(&store, user1, Duration::hours(1))
         .await
         .unwrap();
@@ -248,7 +288,7 @@ async fn run_test(store: Arc<Store>) {
     );
 
     // 清理（级联删 credentials/sessions）。
-    for u in [admin, user1, user4] {
+    for u in [admin, user1, user4, case_user] {
         kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", u.0).unwrap();
     }
     kernel_api::execute_both!(
@@ -291,6 +331,87 @@ async fn auth_local_flow() {
             .await
             .unwrap();
         run_test(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}
+
+/// 并发重置断言（审计 R1）：N 个并发请求持同一令牌，仅一个成功，其余 false；新密码可登录；令牌已用。
+async fn assert_concurrent_reset(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let user = register(&store, "resetme", "orig-pass-123", None, None, false)
+        .await
+        .unwrap();
+    let token = create_reset_token(&store, user).await.unwrap();
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let s = store.clone();
+        let t = token.clone();
+        handles.push(tokio::spawn(async move {
+            reset_with_token(&s, &t, "new-pass-12345").await
+        }));
+    }
+    let mut success = 0;
+    for h in handles {
+        if h.await.unwrap().unwrap() {
+            success += 1;
+        }
+    }
+    assert_eq!(success, 1, "{b} 并发重置仅一次成功（实得 {success}）");
+    assert!(
+        verify_login(&store, "resetme", "new-pass-12345")
+            .await
+            .is_ok(),
+        "{b} 重置后新密码可登录"
+    );
+    assert!(
+        !reset_with_token(&store, &token, "another-pass-123")
+            .await
+            .unwrap(),
+        "{b} 令牌已用拒绝再用"
+    );
+}
+
+#[tokio::test]
+async fn reset_token_concurrent_single_use() {
+    // SQLite 文件库（多连接共享 + WAL 单写者串行，真实并发窗口）。
+    let dir = std::env::temp_dir().join(format!("gw-reset-conc-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_concurrent_reset(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_reset_conc_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_concurrent_reset(Arc::new(Store::Pg(pg))).await;
         sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
             .execute(&admin)
             .await

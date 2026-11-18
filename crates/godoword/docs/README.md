@@ -15,7 +15,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
   cookie HttpOnly/SameSite=Lax/Secure 可配；CSRF 自定义头守卫（`/api/v1` 变更须 `X-Requested-With`，缺则 403）；
   登录限流内存（username + **IP** 双维度，10 次/5 分钟）。`POST /auth/{register,login,logout,reset-password}`、`GET /auth/me`；
   `POST /admin/{reset,invites}`、`GET /admin/users`、`POST /admin/users/{id}/status`（**防自禁/防禁最后管理员**）。
-  **重置 token 化（C8）**：admin/reset 生成令牌 → 用户 POST auth/reset-password 持令牌设密码。
+  **重置 token 化（C8）+ 事务原子单次（R1）**：admin/reset 生成令牌 → 用户 POST auth/reset-password 持令牌设密码
+  （密码策略经 auth-local `validate_password` 统一，弱密码 → 400；重置条件认领事务，并发仅一次成功）。
 - 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params，C5**）、`GET/DELETE /sessions/{id}`（DELETE 发 SessionEnded）、
   `POST /sessions/{id}/messages`（→SSE）、`POST /sessions/{id}/cancel`、`GET /audio/{id}`（均经 AuthUser + **对象级归属校验，越权 404，C1**）。
 - provider/binding CRUD + models/voices 测试端点（`src/settings.rs`，经 AuthUser，**binding 强制 provider 同主 C2**，key 加密不回显，**测试端点计量 C9**）。

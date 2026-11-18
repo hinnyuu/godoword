@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T21:27+08:00
-- 当前里程碑: **M1c 主体加固完成，二审发现剩余收尾项待修复复核（M1d 延后至加固复核完成）→ 下一任专门加固 agent**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ **二审收尾（待加固）**
+- verified: 2026-11-18T22:41+08:00
+- 当前里程碑: **M1c 二审收尾加固实现中（设计分歧已定案 history 2241；M1d 延后至加固复核完成）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审收尾加固（feat/m1c-second-hardening 实现中）**
 
 ## done
 
@@ -42,7 +42,8 @@
 
 ## in-flight
 
-- 无开放实现 PR。二审收尾加固待下一任专门 agent 启动（feat/m1c-second-hardening）。
+- **feat/m1c-second-hardening 实现中**：全量审计核实 R1–R9 属实 + 独立发现 A1–A6；设计分歧已定案（history 2241）。
+  按 P0→P2 修复，每项配失败/并发负例测试。基线全绿（gate/test_gate 6-6/cargo check/kernel+auth-local 测试）。
 
 ## blocked / 待拍板决策
 
@@ -51,20 +52,25 @@
 - M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
 
-## 下一动作（下一任专门加固 agent）
+## 下一动作（实现序列，设计已定案 history 2241）
 
-1. 读 AGENTS.md → 本文件「二审遗留收尾」清单 → history 2127（修复方案 + 文档精炼原则）→ 二审报告
-   （/tmp/godoword_M1c-hardening_二次审计意见.md）→ 相关源码。交叉验证 git log + history INDEX。
-2. 建分支 feat/m1c-second-hardening，按 P0→P1→P2 修复 R1-R9，**每项配并发/失败负例测试**（机械锚定，非散文），
-   单 PR 多 commit，持续维护本文件（完成项即从清单移除）。
-3. 修复完成 → CI 绿（含 test_gate.py + 新并发/失败回归）+ R4 重测 + 人工残留 sign-off + 二审复核确认无新回归
+设计分歧定案：①事务=驱动专属块（沿用 register，不改 kernel-api）；②R4 计费幂等=新表 summary_spans（0004）+ 修迁移原子性；
+③R9=Config.trusted_proxies + XFF 最右不可信跳；④密码=8–128 字符 + 必含字母与数字（建议加特殊字符，区分大小写），
+统一 validate_password；⑤本期纳入 A2/A3/A4，A5（outbox 消费幂等）留 M2，A6 可选。
+
+1. P0：R1 重置事务+密码校验+双后端并发仅一次负例 → R7 管理员串行化+并发互禁负例。
+2. P0：R2 音频失败语义+故障注入（含 A3 孤儿）→ R3 真 abort+join+try_send/关通道+满 mpsc/shutdown 回归（含 A1 永久 busy）。
+3. P0：R4 emit+水位同事务+0004 幂等表（含 A2 迁移原子性）+summarize 多回合/各失败点测试 → R6 delete 原子。
+4. P0/P1：R5 OpenAPI 系统性标注（cookieAuth/CSRF/403/404）+$ref 全解析测试（A4）→ R8 test_gate 接 CI。
+5. P2：R9 sidecar 升级处理+限流器清理+可信代理。
+6. 收尾：全状态面 reconcile + history + CI 绿（含新并发/失败回归）+ R4 重测 + 人工残留 sign-off + 二审复核无新回归
    → 恢复"M1c 收尾完成无阻塞" → M1d 设计讨论。
-4. **文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
+
+**文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
 
 ## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
 
 **P0（恢复无阻塞前必修）**：
-- R1 重置令牌：条件 UPDATE 认领 + 事务（认领→改密→撤销）；密码非空 + 长度校验；双后端并发仅一次成功负例。
 - R2 音频：put 失败 → 错误语义（不发 AudioEnd/成功 ToolResult）+ 故障注入。
 - R3 退出/背压：真 abort+join 后 checkpoint；硬超时后 try_send/关通道（满 mpsc 不消费仍超时退出回归）。
 - R4 淘汰：emit+update 同事务；summarize 计费幂等键去重；emit/update 各失败点 + summarize 多回合行为测试。

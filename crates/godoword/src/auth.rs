@@ -328,7 +328,7 @@ pub async fn reset_password(
 ) -> Result<Json<Value>, StatusCode> {
     let ok = auth_local::reset_with_token(&st.store, &req.token, &req.new_password)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(auth_err_status)?;
     if ok {
         Ok(Json(json!({ "ok": true })))
     } else {
