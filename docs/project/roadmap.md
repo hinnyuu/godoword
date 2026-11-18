@@ -65,7 +65,7 @@
   装进 cargo feature `dev-bypass`（release 永不启用），M1c 删除回归真认证。
 - **fixtures 重录**：M1a 首任务用本地真 key 录制脱敏 fixture（LLM SSE 含 reasoning_content/tool_calls；
   TTS SSE sentence 事件 + base64 PCM + 词级时间戳），入 `crates/<adapter>/tests/fixtures/`，CI 永不用真 key。
-- **OpenAPI 时序**：REST 端点随 M1a/b/c 落 utoipa 标注，M1d 生成 TS；SSE 不入 OpenAPI（单独协议文档）。
+- **OpenAPI 时序**：REST 端点随 M1a/b/c 落 utoipa 标注，M1d 生成 TS；SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 不入（单独协议文档）。
 - **M1 无教学模块**：回合循环用 kernel 默认教师 persona（无模块 persona/无 plan.teacher_prompt），
   sessions.module_id 可空；默认教师模式是否作永久"自由聊天"产品态留 M2 拍板。
 
@@ -111,7 +111,7 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - M1b：`/api/v1/providers` CRUD、`/api/v1/bindings` CRUD、`GET /api/v1/config`（脱敏只读）、
   `GET /providers/{id}/models`、`GET .../voices`（测试按钮）
 - M1c：`/api/v1/auth/{register,login,logout,me}`、`/api/v1/admin/{reset,invites,users}`
-- SSE 不入 OpenAPI；REST 全 utoipa 标注，M1d 生成 TS。
+- SSE /messages path 入 OpenAPI、SessionEvent 事件 schema 不入（单独协议文档）；REST 全 utoipa 标注，M1d 生成 TS。
 
 ## 远期项（未排期）
 

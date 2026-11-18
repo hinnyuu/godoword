@@ -126,9 +126,11 @@ podman bind mount 源目录须自建（与 docker 不同，podman 不自动创�
   truncate/summarize 淘汰、outbox（SessionEvicted/SessionEnded）+ call_log 计量、on_disconnect continue（执行/投递分离 + detach 上限）、
   auth-local（argon2id + 邀请注册首用户管理员 + cookie 会话 + 管理员重置）、组合根认证中间件 + auth/admin REST。
   **dev-bypass 已删除（T1 回归）**，用户级 REST release 开放（未认证 401）。
-  **M1c-hardening（第三方审计加固）**：对象级授权（session/audio/binding 全路径校验归属，越权 404）、持久化失败关闭、
-  binding/provider 同主、禁用/重置撤销会话 + 重置 token 化、淘汰水位制（不重复摘要/outbox）、硬超时 + TTS cancel + 退出屏障（WAL checkpoint）、
+  **M1c-hardening（第三方审计加固）**：对象级授权（session/audio/binding 全路径校验归属，越权 404）、消息持久化失败关闭、
+  binding/provider 同主、禁用/重置撤销会话 + 重置 token 化、淘汰水位制（正常路径不重复）、硬超时 + TTS cancel + 退出等待（WAL checkpoint）、
   上游退避重试、IP 限流、测试端点计量；门禁 D6/D7 修复（项目规则可达 + migrations/web 纳入）+ 合成回归测试。
+  **可靠性边界（二审遗留待加固，见 status 清单/history 2127）**：音频写失败/outbox 与水位原子性/退出 abort/满 mpsc 背压/重置令牌并发/管理员互禁
+  的失败与并发路径尚未闭环，"失败关闭/原子/单次/硬边界"目前仅覆盖正常路径，须二审收尾补齐负例后方可绝对化。
 - 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、Svelte 前端（M1d）、教学模块（M2+）。
 - 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 静态占位（M1d 起 Svelte）；
   outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

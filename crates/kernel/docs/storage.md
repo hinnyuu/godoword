@@ -73,7 +73,7 @@ auth_sessions(token_hash)、auth_sessions(user_id)。
 `backends()` 夹具（SQLite 恒跑 + `TEST_PG_URL` 驱动 PG，未设显式 skip）。schema 表名固定，
 故 CRUD 集中于单测试函数内顺序遍历两后端避并行竞态：
 
-- `migrations_and_schema_crud`：迁移幂等（首次 1/重跑 0）+ 版本表 + users/providers/bindings/sessions/messages
+- `migrations_and_schema_crud`：迁移幂等（首次 3/重跑 0）+ 版本表 + users/providers/bindings/sessions/messages
   CRUD round-trip（uuid/bool/json/bytea/可空/timestamp）+ bindings 哨兵 `*` UNIQUE 拒绝重复。
 - `sqlite_backup_creates_file`：生产路径 `open_sqlite`（文件库）触发 VACUUM INTO 备份，断言备份文件含版本表。
 - `checksum_drift_rejected`：已应用迁移改 SQL → 拒绝（runner 逻辑，独立内存库）。

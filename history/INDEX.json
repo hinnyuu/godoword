@@ -981,5 +981,34 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-18-2127-m1c-second-audit-decisions.md",
+    "title": "M1c 二审收尾决策 + 文档精炼原则",
+    "date": "2026-11-18T21:27+08:00",
+    "keywords": [
+      "m1c",
+      "second-audit",
+      "hardening",
+      "concurrency",
+      "atomicity",
+      "reset-token",
+      "backpressure",
+      "eviction",
+      "openapi",
+      "doc-lean",
+      "discipline"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
