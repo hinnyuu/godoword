@@ -43,11 +43,11 @@ async fn migrations_and_schema_crud() {
                 .unwrap();
         }
 
-        // 迁移幂等：首次应用 3 条，重跑 0 条。
+        // 迁移幂等：首次应用 4 条，重跑 0 条。
         let n1 = run_migrations(&store, KERNEL_MIGRATIONS, None)
             .await
             .unwrap();
-        assert_eq!(n1, 3, "{b} 首次应用迁移数");
+        assert_eq!(n1, 4, "{b} 首次应用迁移数");
         let n2 = run_migrations(&store, KERNEL_MIGRATIONS, None)
             .await
             .unwrap();
@@ -59,10 +59,11 @@ async fn migrations_and_schema_crud() {
             (String, String)
         )
         .unwrap();
-        assert_eq!(versions.len(), 3, "{b} 版本表行数");
+        assert_eq!(versions.len(), 4, "{b} 版本表行数");
         assert_eq!(versions[0].0, "0001", "{b} 版本键 0001");
         assert_eq!(versions[1].0, "0002", "{b} 版本键 0002");
         assert_eq!(versions[2].0, "0003", "{b} 版本键 0003");
+        assert_eq!(versions[3].0, "0004", "{b} 版本键 0004");
 
         let now = Utc::now();
         let user_id = Uuid::new_v4();

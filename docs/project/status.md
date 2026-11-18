@@ -71,7 +71,6 @@
 ## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
 
 **P0（恢复无阻塞前必修）**：
-- R4 淘汰：emit+update 同事务；summarize 计费幂等键去重；emit/update 各失败点 + summarize 多回合行为测试。
 - R5 OpenAPI：注册 CreateSessionReq + cookieAuth + CSRF header + 403/404 + $ref 全解析测试。
 
 **P1（一致性/CI/文档）**：

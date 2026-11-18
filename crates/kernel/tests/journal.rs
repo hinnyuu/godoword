@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use kernel::{
     dispatch_once, emit_progress, pending_events, record_call, run_migrations, CallRecord,
-    OutboxEvent, OutboxHandler, KERNEL_MIGRATIONS,
+    OutboxEvent, OutboxHandler, SessionRepo, KERNEL_MIGRATIONS,
 };
 use kernel_api::{fetch_one_both, KernelError, Store};
 use serde_json::json;
@@ -177,6 +177,153 @@ async fn journal_and_outbox() {
             .await
             .unwrap();
         run_test(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}
+
+/// R4 淘汰原子性失败点断言：emit/update 任一失败整体回滚（不丢事件/不推进水位致重复）。
+async fn assert_evict_atomicity(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let a = Uuid::new_v4();
+    let bb = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, a).await.unwrap();
+    kernel::repo::ensure_user(&store, bb).await.unwrap();
+    let sessions = kernel::DbSessions::new(store.clone());
+    let sid = kernel_api::SessionId::new();
+    sessions
+        .create(kernel_api::UserId(a), sid, kernel::SessionMeta::default())
+        .await
+        .unwrap();
+    let ev_count = |store: Arc<Store>, sid: Uuid| async move {
+        let c: (i64,) = fetch_one_both!(
+            &*store,
+            "SELECT COUNT(*) FROM progress_events WHERE session_id = $1",
+            (i64,),
+            sid
+        )
+        .unwrap();
+        c.0
+    };
+
+    // update 失败（非本用户）→ outbox INSERT 回滚，无孤儿事件，水位不动。
+    let r1 = kernel::evict_session(
+        &store,
+        bb,
+        sid.0,
+        "kernel",
+        Some("x".to_string()),
+        5,
+        &["m1".to_string()],
+    )
+    .await;
+    assert!(r1.is_err(), "{b} R4：非本用户 evict 拒绝");
+    assert_eq!(
+        ev_count(store.clone(), sid.0).await,
+        0,
+        "{b} R4：update 失败 outbox 回滚无孤儿"
+    );
+    let m1 = sessions
+        .meta(kernel_api::UserId(a), sid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m1.evicted_up_to, 0, "{b} R4：update 失败水位不动");
+
+    // emit 失败（user_id FK 不存在）→ 水位 UPDATE 回滚。
+    let ghost = Uuid::new_v4();
+    let r2 = kernel::evict_session(
+        &store,
+        ghost,
+        sid.0,
+        "kernel",
+        Some("y".to_string()),
+        9,
+        &["m2".to_string()],
+    )
+    .await;
+    assert!(r2.is_err(), "{b} R4：emit FK 失败拒绝");
+    let m2 = sessions
+        .meta(kernel_api::UserId(a), sid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m2.evicted_up_to, 0, "{b} R4：emit 失败水位回滚不动");
+    assert_eq!(
+        ev_count(store.clone(), sid.0).await,
+        0,
+        "{b} R4：emit 失败无事件"
+    );
+
+    // happy：原子落库水位 + 摘要 + outbox。
+    kernel::evict_session(
+        &store,
+        a,
+        sid.0,
+        "kernel",
+        Some("z".to_string()),
+        7,
+        &["m3".to_string()],
+    )
+    .await
+    .unwrap();
+    let m3 = sessions
+        .meta(kernel_api::UserId(a), sid)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(m3.evicted_up_to, 7, "{b} R4：happy 水位推进");
+    assert_eq!(m3.summary.as_deref(), Some("z"), "{b} R4：happy 摘要");
+    assert_eq!(
+        ev_count(store.clone(), sid.0).await,
+        1,
+        "{b} R4：happy outbox 一条"
+    );
+}
+
+#[tokio::test]
+async fn evict_session_atomicity() {
+    let sqlite = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::query("PRAGMA foreign_keys=ON")
+        .execute(&sqlite)
+        .await
+        .unwrap();
+    assert_evict_atomicity(Arc::new(Store::Sqlite(sqlite))).await;
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_evict_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_evict_atomicity(Arc::new(Store::Pg(pg))).await;
         sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
             .execute(&admin)
             .await

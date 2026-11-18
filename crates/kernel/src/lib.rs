@@ -28,8 +28,9 @@ pub use context::{
 };
 pub use crypto::MasterKey;
 pub use journal::{
-    dispatch_once, emit_progress, mark_processed, pending_events, record_call, CallRecord,
-    OutboxEvent, OutboxHandler,
+    dispatch_once, emit_progress, evict_session, lookup_summary_span, mark_processed,
+    pending_events, record_call, store_summary_span, summary_span_hash, CallRecord, OutboxEvent,
+    OutboxHandler,
 };
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};

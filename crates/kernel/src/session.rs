@@ -249,24 +249,4 @@ impl SessionRepo for DbSessions {
         .map_err(storage_err)?;
         Ok(())
     }
-
-    async fn update_eviction(
-        &self,
-        user: UserId,
-        id: SessionId,
-        summary: Option<String>,
-        evicted_up_to: i32,
-    ) -> Result<(), KernelError> {
-        execute_both!(
-            &*self.store,
-            "UPDATE sessions SET summary = $1, evicted_up_to = $2, updated_at = $3 WHERE id = $4 AND user_id = $5",
-            summary,
-            evicted_up_to,
-            Utc::now(),
-            id.0,
-            user.0
-        )
-        .map_err(storage_err)?;
-        Ok(())
-    }
 }

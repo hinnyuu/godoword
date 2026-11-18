@@ -7,7 +7,8 @@
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
 - `Runtime`（`src/runtime.rs`）：回合循环。解析绑定 → 读会话 meta.params → 上下文装配（token 预算 + truncate/summarize 淘汰，
-  **水位制**：仅处理 seq>evicted_up_to 新历史，滚动摘要前置，淘汰 span 入 outbox 一次）→ 流式 LLM → 发 delta → 内联执行 speak
+  **水位制**：仅处理 seq>evicted_up_to 新历史，滚动摘要前置；**淘汰 outbox+水位同事务原子，审计 R4**；
+  **summarize 计费幂等**：span_hash 命中 summary_spans 复用 fragment 免重复 LLM 计费）→ 流式 LLM → 发 delta → 内联执行 speak
   → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量 → run-end。
   **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
   （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。**对象级授权**：sessions 全路径携带 user_id（审计 C1）。
@@ -21,6 +22,8 @@
   **缓存写失败关闭（审计 R2）**：put 失败不发正常 AudioEnd/成功 ToolResult，改发 storage Error + ToolResult ok=false。
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退）；
   call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
+  **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
+  **`summary_spans` 计费幂等**（summary_span_hash/lookup/store_summary_span）：span 消息 ID 集哈希键，命中复用 fragment 免重复计费。
 - 错误归一化：`ProviderError` → `SessionEvent::Error`（auth/quota→action:settings、rate_limit/network 可重试等）。
 
 ## 内部接缝（非契约，零返工设计）
@@ -29,10 +32,10 @@
 
 - `BindingResolver`：解析 (user,module,cap,role) → `ResolvedBinding{conn,model,params}`。M1a env impl 在
   godoword（dev-bypass feature）；M1b/c DB 5 级 fallback + 解密。
-- `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete/update_eviction，
+- `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete，
   **全路径携带 user_id 对象级授权**（审计 C1）+ append 失败关闭（审计 C4）。`DbSessions` 生产默认（双兼容 SQL，seq 单活跃锁内分配，级联删）；
-  `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**）、
-  `OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
+  `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**，水位/摘要经
+  `evict_session` 原子更新，R4）、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
 - `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
   `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界）；
   `MemAudio` 测试替身。**默认新鲜合成**；
@@ -41,8 +44,9 @@
 ## 存储基底（M1b）
 
 `src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接 + `checkpoint` 退出 WAL 屏障）+ `src/migrate.rs`（自定义双后端迁移 runner：
-版本表 + checksum 防漂移 + 迁移前备份）+ `migrations/0001_init.sql`（11 表）+ `0002_auth.sql`（users.username + auth_sessions）
-+ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）。
+版本表 + checksum 防漂移 + 迁移前备份 + **每条迁移同事务原子，审计 A2**）+ `migrations/0001_init.sql`（11 表）
++ `0002_auth.sql`（users.username + auth_sessions）+ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）
++ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
 
 ## 加密（M1b）

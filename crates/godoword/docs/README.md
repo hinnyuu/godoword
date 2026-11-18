@@ -7,7 +7,7 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 幂等 entrypoint + 存储基底 + DB 绑定解析 + 会话 REST/SSE + 认证/管理 REST + 配置只读：
 
 - 启动序（`src/main.rs`）：`Config::load` → `init::init_data_dir`（自适应降权 + 建 /data 子目录）
-  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001+0002+0003，迁移前备份）
+  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001–0004，迁移前备份 + 每条迁移同事务原子 A2）
   → 适配器 + DbBindingResolver + Runtime（**无条件构建**）→ 监听（`into_make_service_with_connect_info` 供 IP 限流）。
   后台 task：音频缓存周期清理 + outbox dispatcher 骨架。退出屏障：`runtime.shutdown`（cancel + 有界等待 + 超时 abort+join，R3）+ WAL checkpoint（真屏障）。
 - `/healthz`、`/readyz`、`/api/v1/meta`（milestone=M1c）、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、静态占位页。

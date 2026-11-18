@@ -18,7 +18,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::context::assemble_truncate;
-use crate::journal::{emit_progress, record_call, CallRecord};
+use crate::journal::{
+    evict_session, lookup_summary_span, record_call, store_summary_span, summary_span_hash,
+    CallRecord,
+};
 use crate::persona::DEFAULT_TEACHER_PERSONA;
 use crate::seam::{AudioCache, BindingResolver, CachedAudio, SessionRepo, StoredMessage};
 use crate::speak::prepare_speak;
@@ -575,15 +578,48 @@ impl Runtime {
             );
             if !assembled.evicted.is_empty() {
                 let mut rolling = meta.summary.clone();
-                // summarize 淘汰（opt-in）：压缩 evicted span 并入滚动摘要，失败回退 truncate。
+                // summarize 淘汰（opt-in）+ 计费幂等（审计 R4）：span_hash 命中复用 fragment 免重复 LLM 计费；
+                // 未命中则 LLM 压缩 → 落 fragment（独立提交）→ 并入滚动摘要。失败回退 truncate。
                 if params.eviction == kernel_api::Eviction::Summarize {
-                    if let Some(fragment) =
-                        summarize_span(&llm, &bindings, &store, user, session, run_id, &assembled.evicted)
-                            .await
-                    {
+                    let span_hash = summary_span_hash(&assembled.evicted);
+                    let fragment = match lookup_summary_span(&store, &span_hash).await {
+                        Ok(Some(f)) => Some(f),
+                        Ok(None) => {
+                            let f = summarize_span(
+                                &llm, &bindings, &store, user, session, run_id, &assembled.evicted,
+                            )
+                            .await;
+                            if let Some(frag) = &f {
+                                if let Err(e) =
+                                    store_summary_span(&store, &span_hash, session.0, frag).await
+                                {
+                                    yield SessionEvent::Error {
+                                        code: "storage".to_string(),
+                                        message: e.to_string(),
+                                        retryable: false,
+                                        action: None,
+                                    };
+                                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                                    return;
+                                }
+                            }
+                            f
+                        }
+                        Err(e) => {
+                            yield SessionEvent::Error {
+                                code: "storage".to_string(),
+                                message: e.to_string(),
+                                retryable: false,
+                                action: None,
+                            };
+                            yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                            return;
+                        }
+                    };
+                    if let Some(frag) = fragment {
                         rolling = Some(match rolling {
-                            Some(old) => format!("{old}\n{fragment}"),
-                            None => fragment,
+                            Some(old) => format!("{old}\n{frag}"),
+                            None => frag,
                         });
                     }
                 }
@@ -593,7 +629,6 @@ impl Runtime {
                     .map(|m| m.seq)
                     .max()
                     .unwrap_or(meta.evicted_up_to);
-                // 淘汰 span 入 outbox 一次（水位推进后下一回合不再重复，审计 C7）。
                 let module_id = meta
                     .module_id
                     .as_ref()
@@ -601,19 +636,17 @@ impl Runtime {
                     .unwrap_or_else(|| "kernel".to_string());
                 let ids: Vec<String> =
                     assembled.evicted.iter().map(|m| m.id.to_string()).collect();
-                let _ = emit_progress(
+                // 原子落库（审计 R4）：session-evicted outbox + 水位/滚动摘要同事务，失败整体回滚不丢不重。
+                if let Err(e) = evict_session(
                     &store,
                     user.0,
-                    Some(session.0),
+                    session.0,
                     &module_id,
-                    "session-evicted",
-                    json!([]),
-                    json!({ "message_ids": ids }),
+                    rolling.clone(),
+                    new_watermark,
+                    &ids,
                 )
-                .await;
-                if let Err(e) = sessions
-                    .update_eviction(user, session, rolling.clone(), new_watermark)
-                    .await
+                .await
                 {
                     yield SessionEvent::Error {
                         code: "storage".to_string(),

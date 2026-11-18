@@ -130,23 +130,6 @@ impl SessionRepo for MemSessions {
         }
         Ok(())
     }
-
-    async fn update_eviction(
-        &self,
-        user: UserId,
-        id: SessionId,
-        summary: Option<String>,
-        evicted_up_to: i32,
-    ) -> Result<(), KernelError> {
-        let mut g = self.inner.lock().unwrap();
-        if let Some(s) = g.get_mut(&id) {
-            if s.user == user {
-                s.meta.summary = summary;
-                s.meta.evicted_up_to = evicted_up_to;
-            }
-        }
-        Ok(())
-    }
 }
 
 /// 内存音频缓存。

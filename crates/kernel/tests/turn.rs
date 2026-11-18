@@ -4,14 +4,14 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::stream::{self, StreamExt};
 use kernel::{
-    run_migrations, AudioCache, BindingResolver, MemAudio, MemSessions, OnDisconnect,
+    run_migrations, AudioCache, BindingResolver, DbSessions, MemAudio, MemSessions, OnDisconnect,
     ResolvedBinding, Runtime, SessionMeta, SessionRepo, KERNEL_MIGRATIONS,
 };
 use kernel_api::{
-    AudioEvent, AudioFormat, AudioStream, ChatChunk, ChatRequest, ChatStream, FinishReason,
-    KernelError, LlmFeatures, LlmProvider, ModelInfo, ProviderConn, ProviderError, SessionEvent,
-    SessionId, SessionParams, Store, ToolCall, TtsProvider, TtsRequest, TtsUsage, Usage, UserId,
-    VoiceInfo, WordTimestamp,
+    AudioEvent, AudioFormat, AudioStream, ChatChunk, ChatRequest, ChatStream, Eviction,
+    FinishReason, KernelError, LlmFeatures, LlmProvider, ModelInfo, ProviderConn, ProviderError,
+    SessionEvent, SessionId, SessionParams, Store, ToolCall, TtsProvider, TtsRequest, TtsUsage,
+    Usage, UserId, VoiceInfo, WordTimestamp,
 };
 use secrecy::SecretString;
 use serde_json::json;
@@ -420,7 +420,6 @@ async fn unconfigured_binding_errors() {
 
 #[tokio::test]
 async fn turn_metering_and_eviction() {
-    let sessions = Arc::new(MemSessions::new());
     let audio = Arc::new(MemAudio::new());
     let db_dir = std::env::temp_dir().join(format!("gw-turn-meter-{}", Uuid::new_v4()));
     let store = Arc::new(
@@ -431,6 +430,8 @@ async fn turn_metering_and_eviction() {
     run_migrations(&store, KERNEL_MIGRATIONS, None)
         .await
         .unwrap();
+    // DbSessions（生产路径）：会话状态与 outbox 同 Store，evict_session 原子落库。
+    let sessions = Arc::new(DbSessions::new(store.clone()));
     let rt = Runtime::new(
         Arc::new(MockLlm {
             calls: AtomicU32::new(0),
@@ -692,4 +693,221 @@ async fn shutdown_aborts_stuck_tasks() {
         matches!(events2.first(), Some(SessionEvent::RunStart { .. })),
         "R3：shutdown abort+join 后活跃锁释放"
     );
+}
+
+/// summarize 计数 LLM（审计 R4）：系统提示含"压缩"者计为 summarize 调用（教师 persona 不含此词）。
+struct SummarizeLlm {
+    summarize_calls: AtomicU32,
+}
+
+#[async_trait]
+impl LlmProvider for SummarizeLlm {
+    fn id(&self) -> &'static str {
+        "summarize-llm"
+    }
+    fn features(&self) -> LlmFeatures {
+        LlmFeatures {
+            tool_calling: false,
+            reasoning: false,
+            streaming: true,
+        }
+    }
+    async fn list_models(&self, _: &ProviderConn) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![])
+    }
+    async fn chat_stream(
+        &self,
+        _: &ProviderConn,
+        req: ChatRequest,
+    ) -> Result<ChatStream, ProviderError> {
+        let is_summary = req
+            .messages
+            .first()
+            .map(|m| m.content.contains("压缩"))
+            .unwrap_or(false);
+        let text = if is_summary {
+            self.summarize_calls.fetch_add(1, Ordering::SeqCst);
+            "摘要片段"
+        } else {
+            "回复"
+        };
+        Ok(Box::pin(stream::iter(vec![
+            Ok(ChatChunk::TextDelta(text.to_string())),
+            Ok(ChatChunk::Finish(FinishReason::Stop)),
+        ])))
+    }
+}
+
+async fn runtime_summarize() -> (
+    Runtime,
+    Arc<DbSessions>,
+    Arc<Store>,
+    Arc<SummarizeLlm>,
+    std::path::PathBuf,
+) {
+    let db_dir = std::env::temp_dir().join(format!("gw-summarize-{}", Uuid::new_v4()));
+    let store = Arc::new(
+        kernel::open_sqlite(&db_dir.join("db").join("t.sqlite"))
+            .await
+            .unwrap(),
+    );
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let sessions = Arc::new(DbSessions::new(store.clone()));
+    let llm = Arc::new(SummarizeLlm {
+        summarize_calls: AtomicU32::new(0),
+    });
+    let rt = Runtime::new(
+        llm.clone(),
+        Arc::new(MockTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        Arc::new(MemAudio::new()),
+        store.clone(),
+    );
+    (rt, sessions, store, llm, db_dir)
+}
+
+fn hist_msg(content: String) -> kernel_api::ChatMessage {
+    kernel_api::ChatMessage {
+        role: "user".to_string(),
+        content,
+        reasoning: None,
+        tool_calls: None,
+        tool_call_id: None,
+    }
+}
+
+/// R4：summarize 多回合行为——各回合新 span 各摘要一次，水位推进，滚动摘要累积，outbox 消息 ID 不重复。
+#[tokio::test]
+async fn summarize_multi_turn_no_dup() {
+    let (rt, sessions, store, llm, db_dir) = runtime_summarize().await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    kernel::repo::ensure_user(&store, user.0).await.unwrap();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                params: SessionParams {
+                    context_budget_tokens: 5,
+                    eviction: Eviction::Summarize,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    for i in 0..3 {
+        sessions
+            .append(user, session, hist_msg(format!("历史{i}啊啊啊啊")))
+            .await
+            .unwrap();
+    }
+    let _e1: Vec<SessionEvent> = rt
+        .run_turn(user, session, "新消息".to_string())
+        .collect()
+        .await;
+    assert_eq!(
+        llm.summarize_calls.load(Ordering::SeqCst),
+        1,
+        "R4：首回合 summarize 一次"
+    );
+    let m1 = sessions.meta(user, session).await.unwrap().unwrap();
+    assert!(m1.evicted_up_to > 0, "R4：水位推进");
+    assert!(
+        m1.summary.as_deref().unwrap().contains("摘要片段"),
+        "R4：滚动摘要含片段"
+    );
+    // 第二回合：新增历史 → 新 span 淘汰 → summarize 再一次。
+    for i in 0..3 {
+        sessions
+            .append(user, session, hist_msg(format!("新历史{i}呃呃呃呃")))
+            .await
+            .unwrap();
+    }
+    let _e2: Vec<SessionEvent> = rt
+        .run_turn(user, session, "再一条".to_string())
+        .collect()
+        .await;
+    assert_eq!(
+        llm.summarize_calls.load(Ordering::SeqCst),
+        2,
+        "R4：第二回合新 span summarize 一次（累计 2）"
+    );
+    let details: Vec<(serde_json::Value,)> = kernel_api::fetch_all_both!(
+        &*store,
+        "SELECT detail FROM progress_events WHERE kind = 'session-evicted'",
+        (serde_json::Value,)
+    )
+    .unwrap();
+    assert!(details.len() >= 2, "R4：两回合各发淘汰事件");
+    let mut seen = std::collections::HashSet::new();
+    for (d,) in details {
+        for id in d["message_ids"].as_array().unwrap() {
+            assert!(
+                seen.insert(id.as_str().unwrap().to_string()),
+                "C7/R4：消息 ID 不重复入 outbox"
+            );
+        }
+    }
+    drop(store);
+    std::fs::remove_dir_all(&db_dir).unwrap();
+}
+
+/// R4：summarize 计费幂等——span_hash 命中已摘要 fragment 则复用，不重复调 LLM 计费。
+#[tokio::test]
+async fn summarize_billing_idempotent_reuse() {
+    let (rt, sessions, store, llm, db_dir) = runtime_summarize().await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    kernel::repo::ensure_user(&store, user.0).await.unwrap();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                params: SessionParams {
+                    context_budget_tokens: 5,
+                    eviction: Eviction::Summarize,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    for i in 0..3 {
+        sessions
+            .append(user, session, hist_msg(format!("历史{i}啊啊啊啊")))
+            .await
+            .unwrap();
+    }
+    // 预置该 span 的摘要 fragment（模拟上回合已摘要落库，evict 曾失败水位未推进）。
+    let hist = sessions.history_with_ids(user, session).await.unwrap();
+    let span_hash = kernel::summary_span_hash(&hist);
+    kernel::store_summary_span(&store, &span_hash, session.0, "预置摘要片段")
+        .await
+        .unwrap();
+    // 本回合淘汰同一 span → lookup 命中 → 不调 LLM summarize（免重复计费）。
+    let _e: Vec<SessionEvent> = rt
+        .run_turn(user, session, "新消息".to_string())
+        .collect()
+        .await;
+    assert_eq!(
+        llm.summarize_calls.load(Ordering::SeqCst),
+        0,
+        "R4：span_hash 命中复用，不重复计费"
+    );
+    let m = sessions.meta(user, session).await.unwrap().unwrap();
+    assert!(
+        m.summary.as_deref().unwrap().contains("预置摘要片段"),
+        "R4：复用预置 fragment"
+    );
+    assert!(m.evicted_up_to > 0, "R4：水位推进");
+    drop(store);
+    std::fs::remove_dir_all(&db_dir).unwrap();
 }
