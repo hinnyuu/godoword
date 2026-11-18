@@ -116,15 +116,16 @@ bind 目录文件永远归宿主用户。默认双栈监听 `[::]:8080`（兼容
 podman bind mount 源目录须自建（与 docker 不同，podman 不自动创建）。
 生产文档给 quadlet（podman≥4.4）+ 反代 TLS；快速上手给 podman run + docker-compose。
 
-## 当前状态与 roadmap 差异（M1b）
+## 当前状态与 roadmap 差异（M1c）
 
 - 已落地：文档体系、关系图谱门禁、CI 流水线、kernel-api 契约 trait（含 speak 工具契约）、
-  kernel 回合循环（内部接缝 + 内存会话/音频 impl + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、
-  组合根会话 REST + SSE。**M1b 存储基底**：Store pool 初始化（SQLite WAL+外键 / PG 外接）、自定义双后端迁移 runner
-  （版本表 + checksum + 迁移前备份）、完整 kernel schema（11 表）、主密钥 AES-256-GCM 加密、DbBindingResolver
-  （5 级 fallback + 解密，生产路径）、配置加载（env>file>默认 + 预设 + 脱敏视图）、自适应降权 + 幂等 entrypoint。
-  M1a 垂直切片经本地真 key 全链路验证；M1b entrypoint 经本地实证（rootful 降权 + 幂等重启 + 密钥复用 + 备份）。
-- 未实现：会话/音频持久化（DB/文件系统 impl，M1c）、认证/用量计量落地（M1c）、provider/binding CRUD REST（M1b phase 6）、
-  Svelte 前端（M1d）、教学模块（M2+）。会话/音频仍内存态 + dev-bypass 开发旁路（release 不含，用户级 REST 待 M1c 认证）。
-- 已知简化：token 估算用字符启发式（roadmap 换 tokenizer）；web 为静态占位（M1d 起 Svelte）；
-  上下文当前全量历史（预算/淘汰 M1c）；on_disconnect 当前仅 cancel（continue M1c）。
+  kernel 回合循环（内部接缝 + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、组合根会话 REST + SSE。
+  **M1b 存储基底**：Store pool（SQLite WAL+外键 / PG）、双后端迁移 runner（版本表 + checksum + 备份）、kernel schema、
+  主密钥 AES-256-GCM、DbBindingResolver（5 级 fallback + 解密）、配置加载、自适应降权 + 幂等 entrypoint。
+  **M1c 会话运行时接基底 + 认证**：DbSessions/FsAudio（会话/音频持久化，内存 impl 降测试替身）、上下文预算 +
+  truncate/summarize 淘汰、outbox（SessionEvicted）+ call_log 计量、on_disconnect continue（执行/投递分离 + detach 上限）、
+  auth-local（argon2id + 邀请注册首用户管理员 + cookie 会话 + 管理员重置）、组合根认证中间件 + auth/admin REST。
+  **dev-bypass 已删除（T1 回归）**，用户级 REST release 开放（未认证 401）。M1c 经本地真 key 全链路（走真认证）+ auth 流实证。
+- 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、Svelte 前端（M1d）、教学模块（M2+）。
+- 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 静态占位（M1d 起 Svelte）；
+  outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

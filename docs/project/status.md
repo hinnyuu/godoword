@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T03:29+08:00
-- 当前里程碑: **M1c 实现进行中（feat/m1c-session-auth）——phase 1 完成（会话/音频持久化基底）**
+- verified: 2026-11-18T11:29+08:00
+- 当前里程碑: **M1c 实现完成（feat/m1c-session-auth，PR #10）——六 phase 全落地，待 CI 绿 + 人工残留 sign-off + merge**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ **M1b（9d9c907）**
 
 ## done
@@ -53,7 +53,10 @@
   cookie HttpOnly/SameSite=Lax/Secure 可配、CSRF 自定义头守卫中间件、登录限流内存 10 次/5 分钟、
   auth REST register/login/logout/me + admin REST reset/invites/users）；AppState 转 per-request（runtime/适配器非 optional，移除 user）；
   **删除 dev-bypass（T1 回归：dev.rs/feature/GODOWORD_DEV_*）**，适配器非 optional，Runtime 无条件构建，用户级 REST release 开放（未认证 401）。
-  本地 auth 流端到端实证：首用户成管理员/邀请注册/非管理员 403/登出失效/CSRF 403/限流 429 全过。下一：phase 6（冒烟脚本 + 真 key + 文档/history + 审查）。
+  本地 auth 流端到端实证：首用户成管理员/邀请注册/非管理员 403/登出失效/CSRF 403/限流 429 全过。
+  **phase 6 完成**：冒烟脚本 503→401 + auth 流 + cookie_secure=false；M1c 实现 history（1129）+ 模块 docs/wiki +
+  architecture/roadmap/storage 当前态更新；本地真 key 全链路（走真认证 register→provider/binding→回合 finish=stop + speak + 转录 4 消息）实证。
+  **M1c 六 phase 全落地**，dev-debt T1/T2 回归。待 CI 绿（image/smoke）+ 人工残留 sign-off + merge → M1d。
 
 ## blocked / 待拍板决策
 

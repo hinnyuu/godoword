@@ -1,8 +1,8 @@
 # 部署快速开始
 
-> 面向部署者。M1b 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
-> + provider/binding/config REST。对话需 dev-bypass 开发模式（release 不含）；账户与配置界面随 M1c–M1d 落地。
-> 架构见 [架构](../../docs/project/architecture.md)。
+> 面向部署者。M1c 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
+> + provider/binding/config REST + 本地账户认证（auth-local）。用户级 REST 经 cookie 会话认证（未认证 401）；
+> 图形配置界面随 M1d 落地。架构见 [架构](../../docs/project/architecture.md)。
 
 ## 前置
 
@@ -127,7 +127,8 @@ env 覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODO
 
 ## 说明
 
-- M1b 镜像含健康/就绪检查、会话 REST/SSE、provider/binding/config REST、OpenAPI（`/api/v1/openapi.json`）与静态占位页。
-- 回合对话与用户级 REST 需 dev-bypass 开发模式（release 镜像不含，用户级端点返回 503）；账户/认证 M1c、配置界面 M1d。
+- M1c 镜像含健康/就绪检查、会话 REST/SSE、provider/binding/config REST、本地账户认证（auth/admin REST）、OpenAPI（`/api/v1/openapi.json`）与静态占位页。
+- 回合对话与用户级 REST 经 cookie 会话认证（未认证返回 401）；注册首个用户自动成管理员，邀请码注册后续用户；配置界面 M1d。
+  本地/HTTP 测试设 `GODOWORD_COOKIE_SECURE=false`（生产反代 TLS 下保持默认 true）。
 - 生产部署 quadlet systemd 单元 + 反向代理 TLS 见 [deploy/README](../../deploy/README.md)。
 - SELinux 主机 bind mount 需 `:Z` 标签（容器内无法自动修复，权限拒绝时日志会提示）；quadlet 需 podman≥4.4。
