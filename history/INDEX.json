@@ -1010,5 +1010,34 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-18-2241-m1c-second-hardening-design.md",
+    "title": "M1c 二审收尾加固：全量审计核实 + 设计分歧定案",
+    "date": "2026-11-18T22:41+08:00",
+    "keywords": [
+      "m1c",
+      "second-hardening",
+      "transaction",
+      "reset-token",
+      "password-policy",
+      "eviction",
+      "idempotency",
+      "backpressure",
+      "openapi",
+      "trusted-proxy",
+      "audit"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
