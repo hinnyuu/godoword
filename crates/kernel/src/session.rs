@@ -15,7 +15,7 @@ use kernel_api::{
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::seam::{OnDisconnect, SessionMeta, SessionRepo};
+use crate::seam::{OnDisconnect, SessionMeta, SessionRepo, StoredMessage};
 
 /// DB 会话仓储（Store 注入）。
 pub struct DbSessions {
@@ -49,6 +49,18 @@ struct SessionRow {
     module_id: Option<String>,
     on_disconnect: String,
     params_json: Option<Value>,
+}
+
+/// messages 行含 id/seq（淘汰 span 引用消息 ID 用）。
+#[derive(sqlx::FromRow)]
+struct MessageIdRow {
+    id: Uuid,
+    seq: i32,
+    role: String,
+    content: String,
+    reasoning: Option<String>,
+    tool_calls: Option<Value>,
+    tool_call_id: Option<String>,
 }
 
 #[async_trait]
@@ -125,6 +137,30 @@ impl SessionRepo for DbSessions {
                 reasoning: r.reasoning,
                 tool_calls: r.tool_calls,
                 tool_call_id: r.tool_call_id,
+            })
+            .collect())
+    }
+
+    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+        let rows: Vec<MessageIdRow> = fetch_all_both!(
+            &*self.store,
+            "SELECT id, seq, role, content, reasoning, tool_calls, tool_call_id FROM messages WHERE session_id = $1 ORDER BY seq",
+            MessageIdRow,
+            id.0
+        )
+        .map_err(storage_err)?;
+        Ok(rows
+            .into_iter()
+            .map(|r| StoredMessage {
+                id: r.id,
+                seq: r.seq,
+                message: ChatMessage {
+                    role: r.role,
+                    content: r.content,
+                    reasoning: r.reasoning,
+                    tool_calls: r.tool_calls,
+                    tool_call_id: r.tool_call_id,
+                },
             })
             .collect())
     }

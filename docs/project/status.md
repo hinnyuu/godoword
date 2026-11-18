@@ -31,11 +31,14 @@
 ## in-flight
 
 - M1c 实现分支 feat/m1c-session-auth（设计已定案 history 0329，不重议）。
-  **phase 1 完成**：SessionRepo 接缝扩展（SessionMeta/OnDisconnect + create 携带 meta + meta() 读取）；
+  **phase 1 完成**：SessionRepo 接缝扩展（SessionMeta/OnDisconnect + create 携带 meta + meta()/history_with_ids）；
   DbSessions（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；FsAudio（/data/cache 原子写 + sidecar
-  + TTL/容量有界周期清理，Config cache_ttl_secs/cache_max_bytes）；main/AppState/REST 转 trait 对象。
-  内存 impl 降为测试替身。双后端测试全绿（session 独立 PG schema 隔离避竞态）+ clippy/fmt 干净。
-  下一：phase 2（上下文预算/淘汰 + outbox + call_log）。
+  + TTL/容量有界周期清理）；main/AppState/REST 转 trait 对象。内存 impl 降为测试替身（T2 余部回归）。
+  **phase 2 完成**：context（字符启发式 token 估算 + truncate 装配）；runtime 每会话 params + summarize 淘汰
+  （Summarizer role + 失败回退）+ 淘汰 span 入 outbox（SessionEvicted，module_id 哨兵 kernel）+ call_log 计量
+  （LLM/TTS/summarize，adapter_id 取 trait id）；journal（record_call/emit_progress/pending/dispatch_once）
+  + outbox dispatcher 骨架（main 空注册表，M2 消费）。双后端测试全绿（session/journal 独立 PG schema 隔离；
+  计量测试用文件库 + ensure_user 避外键违约）+ clippy/fmt 干净。下一：phase 3（continue 运行时重构）。
 
 ## blocked / 待拍板决策
 

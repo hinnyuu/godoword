@@ -71,6 +71,22 @@ async fn main() {
         });
     }
 
+    // outbox dispatcher 骨架（M1c 无教学模块消费者；M2 注册模块 handle_event 消费 progress_events）。
+    {
+        let store = store.clone();
+        let handlers: std::collections::HashMap<String, Arc<dyn kernel::OutboxHandler>> =
+            std::collections::HashMap::new();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                if let Err(e) = kernel::dispatch_once(&store, &handlers, 100).await {
+                    tracing::warn!("outbox 投递失败：{e}");
+                }
+            }
+        });
+    }
+
     #[cfg(feature = "dev-bypass")]
     let (runtime, user, llm, tts) = {
         let llm = Arc::new(llm_openai::OpenAiProvider::new());
@@ -82,6 +98,7 @@ async fn main() {
             resolver,
             sessions.clone(),
             audio.clone(),
+            store.clone(),
         );
         let user = dev::dev_user();
         dev::seed(&store, &master, user).await;

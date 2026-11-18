@@ -5,13 +5,14 @@ use async_trait::async_trait;
 use kernel_api::{AudioId, ChatMessage, KernelError, SessionId, UserId};
 use std::collections::HashMap;
 use std::sync::Mutex;
+use uuid::Uuid;
 
-use crate::seam::{AudioCache, CachedAudio, SessionMeta, SessionRepo};
+use crate::seam::{AudioCache, CachedAudio, SessionMeta, SessionRepo, StoredMessage};
 
 struct SessionState {
     user: UserId,
     meta: SessionMeta,
-    messages: Vec<ChatMessage>,
+    messages: Vec<StoredMessage>,
 }
 
 /// 内存会话仓储。
@@ -58,6 +59,16 @@ impl SessionRepo for MemSessions {
             .lock()
             .unwrap()
             .get(&id)
+            .map(|s| s.messages.iter().map(|m| m.message.clone()).collect())
+            .unwrap_or_default())
+    }
+
+    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError> {
+        Ok(self
+            .inner
+            .lock()
+            .unwrap()
+            .get(&id)
             .map(|s| s.messages.clone())
             .unwrap_or_default())
     }
@@ -65,7 +76,12 @@ impl SessionRepo for MemSessions {
     async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError> {
         let mut g = self.inner.lock().unwrap();
         if let Some(s) = g.get_mut(&id) {
-            s.messages.push(msg);
+            let seq = (s.messages.len() + 1) as i32;
+            s.messages.push(StoredMessage {
+                id: Uuid::new_v4(),
+                seq,
+                message: msg,
+            });
         }
         Ok(())
     }

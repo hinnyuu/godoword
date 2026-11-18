@@ -73,6 +73,17 @@ pub struct SessionMeta {
     pub params: SessionParams,
 }
 
+/// 持久化消息（含 DB id/seq，供淘汰 span 引用消息 ID 入 outbox detail）。
+#[derive(Debug, Clone)]
+pub struct StoredMessage {
+    /// 消息 DB id。
+    pub id: uuid::Uuid,
+    /// 会话内序号。
+    pub seq: i32,
+    /// 消息体。
+    pub message: ChatMessage,
+}
+
 /// 会话仓储接缝。M1a 内存实现，M1c DB 实现。
 #[async_trait]
 pub trait SessionRepo: Send + Sync {
@@ -89,6 +100,8 @@ pub trait SessionRepo: Send + Sync {
     async fn exists(&self, id: SessionId) -> Result<bool, KernelError>;
     /// 读历史消息（上下文装配用）。
     async fn history(&self, id: SessionId) -> Result<Vec<ChatMessage>, KernelError>;
+    /// 读历史消息含 id/seq（淘汰 span 引用消息 ID 用）。
+    async fn history_with_ids(&self, id: SessionId) -> Result<Vec<StoredMessage>, KernelError>;
     /// 追加消息（持久化转录）。
     async fn append(&self, id: SessionId, msg: ChatMessage) -> Result<(), KernelError>;
     /// 列出用户会话。

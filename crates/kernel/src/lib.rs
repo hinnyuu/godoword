@@ -6,7 +6,9 @@
 mod audio;
 mod binding;
 mod config;
+mod context;
 mod crypto;
+mod journal;
 mod memory;
 mod migrate;
 mod persona;
@@ -20,7 +22,15 @@ mod storage;
 pub use audio::FsAudio;
 pub use binding::DbBindingResolver;
 pub use config::{Config, ConfigView, ProviderPreset, RegistrationMode};
+pub use context::{
+    assemble_truncate, estimate_message_tokens, estimate_messages_tokens, estimate_tokens,
+    AssembledContext,
+};
 pub use crypto::MasterKey;
+pub use journal::{
+    dispatch_once, emit_progress, mark_processed, pending_events, record_call, CallRecord,
+    OutboxEvent, OutboxHandler,
+};
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
 pub use persona::DEFAULT_TEACHER_PERSONA;
@@ -28,7 +38,7 @@ pub use repo::{Binding, Provider};
 pub use runtime::Runtime;
 pub use seam::{
     AudioCache, BindingResolver, CachedAudio, OnDisconnect, ResolvedBinding, SessionMeta,
-    SessionRepo,
+    SessionRepo, StoredMessage,
 };
 pub use session::DbSessions;
 pub use storage::{open_pg, open_sqlite, ping};
