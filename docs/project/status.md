@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T11:29+08:00
-- 当前里程碑: **M1c 实现完成（feat/m1c-session-auth，PR #10）——六 phase 全落地，待 CI 绿 + 人工残留 sign-off + merge**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ **M1b（9d9c907）**
+- verified: 2026-11-18T12:48+08:00
+- 当前里程碑: **M1c 已合并（3c4dc0b）→ M1d 待启动（交接新 agent）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ **M1c（3c4dc0b）**
 
 ## done
 
@@ -27,83 +27,54 @@
   **不改 kernel-api 契约**。本地真 key 全链路 + entrypoint 幂等实证。dev-debt **T3 回归**、T2 绑定部分回归。详见 history 2206。
 - M1b 治理搭车（history 2302）：**人工残留清单纪律化**（conventions + gates 自查第 9 项）——逐项完整命令（具体 tag）
   + 通过标准 + 清理，覆盖全部残留项。源于 M1b 验收批评。
+- **M1c 设计落档（1b98fa3，PR #9）**：六设计决策 + 音频显式白名单（supersede 蓝图指纹 hash）+ 角色扮演横切基础设施分层
+  （history 0329 三条目）；全量审查触发规则扩展（契约级 + 设计方向级 + 二审）；一审 + 二审全量 reconciliation（核对矩阵）。
+- **M1c 会话运行时接基底 + 认证 + 管理（3c4dc0b，PR #10 已合并，R4 main 重测 success，SELinux/quadlet/docker sign-off）**：
+  DbSessions/FsAudio（会话/音频持久化，T2 回归）+ 上下文预算/truncate+summarize 淘汰 + outbox（SessionEvicted，kernel 哨兵）
+  + call_log 计量 + continue 执行/投递分离（task+mpsc，detach 上限）+ auth-local（argon2id + 邀请注册首用户管理员 + cookie 会话
+  + CSRF + 限流 + 管理员重置）+ godoword 认证中间件 + auth/admin REST + **删 dev-bypass（T1 回归）**。kernel 0002 迁移
+  （users.username + auth_sessions）。**不改 kernel-api 契约**。本地真 key 走真认证全链路 + auth 流端到端实证。详见 history 1129。
 
 ## in-flight
 
-- M1c 实现分支 feat/m1c-session-auth（设计已定案 history 0329，不重议）。
-  **phase 1 完成**：SessionRepo 接缝扩展（SessionMeta/OnDisconnect + create 携带 meta + meta()/history_with_ids）；
-  DbSessions（sessions/messages 双兼容 SQL，seq 单活跃锁内分配，级联删）；FsAudio（/data/cache 原子写 + sidecar
-  + TTL/容量有界周期清理）；main/AppState/REST 转 trait 对象。内存 impl 降为测试替身（T2 余部回归）。
-  **phase 2 完成**：context（字符启发式 token 估算 + truncate 装配）；runtime 每会话 params + summarize 淘汰
-  （Summarizer role + 失败回退）+ 淘汰 span 入 outbox（SessionEvicted，module_id 哨兵 kernel）+ call_log 计量
-  （LLM/TTS/summarize，adapter_id 取 trait id）；journal（record_call/emit_progress/pending/dispatch_once）
-  + outbox dispatcher 骨架（main 空注册表，M2 消费）。双后端测试全绿（session/journal 独立 PG schema 隔离；
-  计量测试用文件库 + ensure_user 避外键违约）+ clippy/fmt 干净。
-  **phase 3 完成**：run_turn 执行/投递分离——执行体 spawn tokio task 经有界 mpsc 投递，SSE 订阅 receiver；
-  断开（receiver drop）读 on_disconnect：cancel 置标志 / continue 取 detach permit 排空跑完（permit 满降级 cancel）；
-  活跃锁归执行体（task 结束释放）；detach semaphore 默认 4（Config max_detached_turns 可配）；cancel_all + 优雅退出接线。
-  断开 continue/cancel 测试（current_thread 确定时序）+ clippy/fmt 干净。
-  **phase 4 完成**：新 crate auth-local（kind=adapter provides=None，依赖 kernel-api only）——argon2id hash/verify、
-  register（首用户事务锁成管理员：SQLite 单写者/PG advisory xact lock；username 唯一；invite 校验用尽/过期）、
-  verify_login（禁用拒绝）、会话令牌 create/validate/delete（auth_sessions 表，opaque token sha256）、
-  create_invite、list_users/set_user_status/is_admin/admin_reset_password、LocalAuth impl AuthProvider。
-  kernel 0002 迁移（users 增 username + UNIQUE 索引 + auth_sessions 表）；storage 测试适配 2 迁移。
-  auth-local 双后端测试全绿（独立 PG schema）+ clippy/fmt 干净。
-  **phase 5 完成**：godoword auth 模块（per-request AuthUser/AdminUser extractor cookie→validate_session、
-  cookie HttpOnly/SameSite=Lax/Secure 可配、CSRF 自定义头守卫中间件、登录限流内存 10 次/5 分钟、
-  auth REST register/login/logout/me + admin REST reset/invites/users）；AppState 转 per-request（runtime/适配器非 optional，移除 user）；
-  **删除 dev-bypass（T1 回归：dev.rs/feature/GODOWORD_DEV_*）**，适配器非 optional，Runtime 无条件构建，用户级 REST release 开放（未认证 401）。
-  本地 auth 流端到端实证：首用户成管理员/邀请注册/非管理员 403/登出失效/CSRF 403/限流 429 全过。
-  **phase 6 完成**：冒烟脚本 503→401 + auth 流 + cookie_secure=false；M1c 实现 history（1129）+ 模块 docs/wiki +
-  architecture/roadmap/storage 当前态更新；本地真 key 全链路（走真认证 register→provider/binding→回合 finish=stop + speak + 转录 4 消息）实证。
-  **M1c 六 phase 全落地**，dev-debt T1/T2 回归。待 CI 绿（image/smoke）+ 人工残留 sign-off + merge → M1d。
+- 本交接 docs PR（分支 docs/m1c-accepted-m1d-handoff）：status 更新到 M1c 已合并 + M1d 启动规划。
+  合并后新 agent 从 main 接续 M1d。
 
 ## blocked / 待拍板决策
 
-- 无当前阻塞。M1c 设计决策已定案（history 0329，不重议）；M1b 设计已落地（history 2206）。
-- 远期留 M2 拍板：无模块默认教师模式是否作永久"自由聊天"产品态（dev-debt T4）；角色音色档案实体形态（M2）。
+- 无当前阻塞。M1c 设计已定案并落地（history 0329/1129，不重议）；M1b 已落地（history 2206）。
+- M1d 设计待讨论（前端架构/Svelte 5/webcore 分层/i18n/AudioWorklet 音频引擎/词级高亮——重大者交用户）。
+- 远期留 M2 拍板：无模块默认教师模式是否作永久"自由聊天"产品态（dev-debt T4）；角色音色档案实体形态 + 白名单音频复用（M2）。
 
-## 下一动作（设计落档合并后接续 M1c 实现）
+## 下一动作（新 agent 接续 M1d）
 
-1. 读本文件 M1c 启动规划（设计已定案）→ history 0329 三条目（M1c 决策/音频白名单/角色扮演）+ 触发规则条目
-   → roadmap M1 蓝图 → architecture → kernel-api 契约 → kernel/docs → godoword/docs。交叉验证 git log + history INDEX。
-2. 建分支 feat/m1c-session-auth，按上方 phase 推进，单 PR 多 commit，持续维护本文件。已定案决策不重议。
-3. M1c 完成 → CI 绿（含 storage 双后端 + auth 流冒烟）→ 人工残留 sign-off（清单纪律）→ merge。
+1. 读 AGENTS.md → 本文件 → roadmap M1 蓝图（M1d 行）→ architecture → kernel-api 契约（SessionEvent/SpeakArgs）
+   → godoword/docs（REST/OpenAPI 面）→ kernel/docs。交叉验证 git log（M1c=3c4dc0b）+ history INDEX（0329 设计/1129 实现）。
+2. M1d 设计先讨论（前端架构重大决策交用户），定案后建分支 feat/m1d-web-ui，单 PR 多 commit，持续维护本文件。
+3. M1d 完成 → CI 绿（前端 lint/build/vitest + 冒烟 SPA 伺服）→ **完整人工感官验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮）→ merge。
 
-## M1c 启动规划（交接棒，设计已定案）
+## M1d 启动规划（交接棒，设计待讨论）
 
-**范围**（蓝图 M1c）：会话运行时接基底 + 认证 + 管理（无 UI）。回归 dev-debt **T1**（删除 dev-bypass）、
-**T2 余部**（会话/音频内存→DB/文件系统）。无 UI → 无人工视觉验收（完整人工感官验收在 M1d）。
+**范围**（蓝图 M1d，有 UI）：Svelte 骨架 + 设置/会话/认证 UI。web/core 框架无关 TS（OpenAPI→TS 客户端 + SSE 客户端
++ AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ 设置 UI（BYOK provider/binding
++ 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置）+ Dockerfile node 构建阶段 + 前端 CI job。
 
-**设计决策已定案**（详见 history 2026-11-18-0329 三条目 + 触发规则条目，不重议）：
-①不改 kernel-api 契约（auth-local 实现 authenticate seam + crate 函数注册/邀请/重置；extra_routes 留 M4 OIDC；
-内部接缝 SessionRepo/AudioCache 扩展非契约）。②continue 执行/投递分离（tokio task + 有界 mpsc，活跃锁归 task，
-detach semaphore 默认 4 可配、try_acquire 失败降级 cancel）。③音频**默认新鲜合成** + 文件系统回放存储（随机 AudioId）
-+ 缓存有界（TTL 30 天/容量 1GB 可配 + 周期清理）；**显式白名单复用 + 静态资产 M2**（取代指纹 hash 推断）。
-④认证方案 A（auth_sessions 表 0002 + opaque token cookie，Secure 可配默认 true，SameSite=Lax + 自定义头 CSRF，
-登录限流内存计数，首用户事务锁，argon2id，管理员重置 token 化）。⑤全量 summarize（Summarizer role + 失败回退 truncate + mock）。
-⑥outbox（kernel 生命周期事件 module_id 哨兵 `kernel`）+ call_log（adapter_id 取 trait id()）+ dispatcher 骨架（M2 消费）。
+**后端已就绪**（M1c）：全部 REST（auth/admin/sessions/providers/bindings/config）+ OpenAPI（/api/v1/openapi.json，M1d 生成 TS）
++ SSE 协议（SessionEvent，不入 OpenAPI，单独协议文档）+ cookie 会话认证（CSRF 自定义头 X-Requested-With）+ 音频回放（GET /audio/{id} 裸 PCM
++ x-sample-rate 头）+ 词级时间戳（WordTimestamps 事件）。**M1d 不改后端契约**（若需契约变更走全量审查）。
 
-**执行 phase**（单 PR 多 commit，持续维护本文件）：
-1. DB `SessionRepo`（sessions/messages 表 M1b 已建，增读 on_disconnect/params/module_id；seq 单活跃锁内
-   COALESCE(MAX(seq),0)+1 i32）+ 文件系统 `FsAudio`（`/data/cache/<id>.pcm` + sidecar，原子写，TTL+容量有界）
-   替换内存生产默认（新鲜合成随机 AudioId）；内存 impl 仅留测试。双后端测试（backends() 夹具）。
-2. 上下文装配/预算/淘汰（truncate 默认 / summarize opt-in）+ 淘汰前 span 入 outbox（SessionEvicted）
-   + call_log 计量（所有上游调用）+ dispatcher 骨架。
-3. on_disconnect continue（task + mpsc 执行/投递分离，detach 上限）+ cancel 非回归。
-4. 新 crate `auth-local`：argon2id + users/local_credentials/invites/tokens/auth_sessions 逻辑 + invite 注册
-   （首用户事务锁成管理员）+ cookie/CSRF/登录限流 + 管理员重置 token 化。schema 0002 增 auth_sessions。
-5. godoword 认证中间件（替换 `user_access` 门，per-request AuthUser extractor）+ auth/admin REST
-   + **删除 dev-bypass（T1）** + 适配器转非 optional + 用户级 REST release 开放（未认证 401）。
-6. 冒烟 auth 流 curl（503→401 + 注册首用户→登录→CRUD→会话）+ 会话持久化 + 文档/history。
+**待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
+/SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。
 
-**已定案不重议**：契约姿态/continue/音频白名单/认证 A/全量 summarize/outbox 边界（history 0329）。
-角色扮演分层（横切基础设施 + 内核角色音色档案实体 M2 + 克隆 provider 侧/独立模块产 TTS API）M2 方向，
-M1c 音频机制无关其形态、零返工。schema 0001 不动（checksum 防漂移），0002 增 auth_sessions；角色音色档案实体 M2（0003+）。
+**验收**：CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工感官验收**（视觉交互/TTS 音质/BYOK 配置流/登录流/词级高亮）——
+M1d 是有 UI 里程碑，人工视觉验收强制（区别 M1a/b/c 无 UI）。人工残留按清单纪律（完整命令+通过标准+清理）。
 
-**验收**：CI auth 流 + 会话持久化双后端 + 淘汰/outbox（workspace storage required check）+ 冒烟 auth 流 curl；
-本地真 key 完整对话（走真认证 register→provider/binding→回合）+ 淘汰 + 进度脚本；**无人工视觉**（M1d）。
-人工残留按清单纪律（完整命令+通过标准+清理）。
+## M1c 已定案决策（已落地，详见 history 0329/1129，不重议）
+
+①不改 kernel-api 契约（内部接缝扩展）。②continue 执行/投递分离（task+mpsc，detach 上限默认 4）。③音频默认新鲜合成
++ 文件系统回放 + 缓存有界；显式白名单复用 + 静态资产 M2（取代指纹 hash）。④认证 A（auth_sessions 0002 + cookie Secure 可配
++ SameSite=Lax + CSRF 自定义头 + 限流 + 首用户事务锁 + argon2id）。⑤全量 summarize（失败回退 truncate）。⑥outbox kernel 哨兵
++ call_log + dispatcher 骨架（M2 消费）。角色扮演横切基础设施（地基原语 + 模块编排 + 内核角色音色档案实体 M2 + 克隆 provider 侧）。
 
 ## M1b 已定案决策（已落地，详见 history 2206，不重议）
 
@@ -115,8 +86,8 @@ M1c 音频机制无关其形态、零返工。schema 0001 不动（checksum 防�
 
 | # | 临时取舍 | 引入 | 回归于 | 回归断言 | 状态 |
 |---|---|---|---|---|---|
-| T1 | env dev key 旁路 + 固定 dev user | M1a | **M1c** | dev-bypass feature 及 GODOWORD_DEV_* 从非测试代码删除 | 待回归 |
-| T2 | 内存 impl 作生产默认 | M1a | M1b/**M1c** | 生产默认换 DB/文件系统；内存 impl 仅留测试 | 绑定已回归（M1b）；会话/音频待 M1c |
+| T1 | env dev key 旁路 + 固定 dev user | M1a | **M1c** | dev-bypass feature 及 GODOWORD_DEV_* 从非测试代码删除 | **已回归（M1c）** |
+| T2 | 内存 impl 作生产默认 | M1a | M1b/**M1c** | 生产默认换 DB/文件系统；内存 impl 仅留测试 | **已回归（M1b 绑定/M1c 会话音频）** |
 | T3 | 容器 root 运行（无降权/初始化） | M1a | M1b | 自适应降权 + 幂等 entrypoint 上线 | **已回归（M1b）** |
 | T4 | 无模块默认教师模式 | M1a | M2 决议 | M2 定永久产品态或退役 | 待 M2 |
 
