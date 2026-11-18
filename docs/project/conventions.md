@@ -52,7 +52,7 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 ## 提交与验收流程
 
 - 严格 conventional commits；squash merge，PR 标题 conventional。
-- 分支开发 → PR → CI 全绿（含 docs-gate 与**容器冒烟测试**）→ 构建推送
+- 分支开发 → PR → CI 全绿（含 docs-gate【主门禁 + 索引 freshness + **门禁逻辑回归 test_gate.py**，审计 R8】与**容器冒烟测试**）→ 构建推送
   `ghcr.io/hinnyuu/godoword:pr-N`/`sha-xxxx` → CI 自动跑冒烟 → **人工对残留清单 sign-off** →
   squash merge 进 main → main 构建 `:latest`，release 打 semver。
 - main 分支保护：必须 PR + 检查全绿。
