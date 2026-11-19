@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 54 条。
+共 55 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -58,3 +58,4 @@
 - [M1d P2 实现：后端扩展 + OpenAPI schema 补全 + 契约级全量审查](2026-11-19-2230-m1d-p2-backend.md) — 2026-11-19T22:30+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, auth-local · keywords: m1d, backend, migration, virtual-path, preferences, folders, openapi, utoipa, contract, full-audit, change-password
 - [M1d P3 实现：web/core 领域核心接线（api/sse/session/theme/i18n/prefs）](2026-11-19-2310-m1d-p3-web-core.md) — 2026-11-19T23:10+08:00 · change · accepted · scope: project, godoword · keywords: m1d, frontend, web-core, openapi-fetch, openapi-typescript, sse, theme, i18n, prefs, freshness
 - [M1d P4 实现：shell 基础 + 认证/管理/引导 UI + core 服务层](2026-11-19-2345-m1d-p4-shell-auth.md) — 2026-11-19T23:45+08:00 · change · accepted · scope: project, godoword · keywords: m1d, frontend, shell, svelte, auth, admin, onboarding, router, i18n, services, intoparams
+- [M1d P5 实现：设置 UI（provider/绑定/音色试听/主题/偏好）](2026-11-20-0010-m1d-p5-settings.md) — 2026-11-20T00:10+08:00 · change · accepted · scope: project, godoword · keywords: m1d, frontend, settings, provider, binding, voice-preview, theme, preferences

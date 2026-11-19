@@ -1304,5 +1304,29 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0010-m1d-p5-settings.md",
+    "title": "M1d P5 实现：设置 UI（provider/绑定/音色试听/主题/偏好）",
+    "date": "2026-11-20T00:10+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "settings",
+      "provider",
+      "binding",
+      "voice-preview",
+      "theme",
+      "preferences"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

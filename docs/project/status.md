@@ -34,7 +34,7 @@
 | P2 | 后端扩展：kernel-api 5 类型 ToSchema（**utoipa 耦合→契约级全量审查**）+ 0005 迁移 + path/preferences/folders/sessions-meta + auth-local change_password/UserInfo + godoword REST + schema 补全 + 双后端测试 | **代码+测试 SQLite 绿+契约审查矩阵完成；待 CI PG 双后端/cargo-deny** |
 | P3 | web/core：api（openapi-fetch+生成类型）/sse/session/theme/i18n/prefs + vitest + 类型 freshness | **完成（vitest 32/tsc/svelte-check/build 绿；CI freshness 锚已加）** |
 | P4 | web/shell 认证/管理/引导 UI | **代码就绪（core 服务层 + i18n/auth/prefs store + hash 路由 + Login/Register/Reset/Admin/Onboarding；svelte-check/build 绿）；待人工浏览器认证流确认** |
-| P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | 待启动 |
+| P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | **代码就绪（Settings：provider CRUD+预设+测试连接+音色试听播放+绑定卡片/高级矩阵+主题预设/强调色/自定义 CSS+偏好开关；svelte-check/build 绿）；待人工确认** |
 | P6 | web/shell 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage 脚注） | 待启动 |
 | P7 | Dockerfile node 阶段 + axum SPA fallback + 前端 CI job + 冒烟扩展 | 待启动 |
 | P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | 待启动 |
