@@ -135,12 +135,16 @@ impl RateLimiter {
     pub fn new() -> Self {
         Self::default()
     }
-    /// 尝试一次（true 允许 / false 超限）。超容量时先清理过期窗口。
+    /// 尝试一次（true 允许 / false 超限）。超容量先清过期窗口；仍满则新键 fail-closed（保密禁，审计 N5）。
     pub fn check(&self, key: &str) -> bool {
         let mut g = self.inner.lock().unwrap();
         let now = Instant::now();
         if g.len() >= self.max_entries {
             self.prune_locked(&mut g, now);
+        }
+        // 容量满且为新键 → fail-closed 拒绝（绝不淘汰窗口内活跃封禁，审计 N5：防洪泛逐出目标封禁绕过）。
+        if g.len() >= self.max_entries && !g.contains_key(key) {
+            return false;
         }
         let entry = g.entry(key.to_string()).or_insert((0, now));
         if now.duration_since(entry.1) > self.window {
@@ -152,18 +156,9 @@ impl RateLimiter {
         entry.0 += 1;
         true
     }
-    /// 清理过期窗口；仍超容量则按窗口起点淘汰最旧至半容量（审计 R9.2）。
+    /// 仅清理过期窗口；**窗口内活跃封禁绝不淘汰**（审计 N5：容量满时新键 fail-closed，而非逐出活跃项）。
     fn prune_locked(&self, g: &mut HashMap<String, (u32, Instant)>, now: Instant) {
         g.retain(|_, (_, start)| now.duration_since(*start) <= self.window);
-        if g.len() >= self.max_entries {
-            let mut keys: Vec<(String, Instant)> =
-                g.iter().map(|(k, (_, s))| (k.clone(), *s)).collect();
-            keys.sort_by_key(|(_, s)| *s);
-            let remove = g.len() - self.max_entries / 2;
-            for (k, _) in keys.into_iter().take(remove) {
-                g.remove(&k);
-            }
-        }
     }
     /// 当前键数（测试/观测用）。
     #[cfg(test)]
@@ -511,8 +506,33 @@ mod tests {
             rl.check(&format!("k{i}"));
         }
         assert_eq!(rl.len(), 16);
-        rl.check("overflow"); // 触发 prune → 硬容量淘汰最旧至半容量
-        assert!(rl.len() <= 16, "R9.2：容量上限（实得 {}）", rl.len());
+        // 容量满 → 新键 fail-closed（不插入，N5）。
+        assert!(!rl.check("overflow"), "N5：容量满新键拒绝");
+        assert!(rl.len() <= 16, "N5：容量上限（实得 {}）", rl.len());
+    }
+
+    #[test]
+    fn rate_limiter_flood_preserves_active_ban() {
+        let rl = RateLimiter {
+            inner: Mutex::new(HashMap::new()),
+            window: Duration::from_secs(300),
+            max_entries: 8,
+        };
+        // 封禁 target（10 次允许，第 11 次拒绝）。
+        for _ in 0..10 {
+            assert!(rl.check("target"));
+        }
+        assert!(!rl.check("target"), "target 被封禁");
+        // 洪泛大量不同新键填满容量（新键 fail-closed，不逐出活跃项）。
+        for i in 0..100 {
+            rl.check(&format!("flood{i}"));
+        }
+        assert!(rl.len() <= 8, "N5：容量上限");
+        // target 活跃封禁仍在（洪泛未重置其计数）。
+        assert!(
+            !rl.check("target"),
+            "N5：洪泛后 target 仍封禁（活跃计数不被逐出重置）"
+        );
     }
 
     #[test]
