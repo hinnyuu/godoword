@@ -7,7 +7,7 @@
 | 里程碑 | 内容 | 版本 | 状态 |
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
-| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 进行中（M1a/M1b/M1c 完成，M1d 待启动） |
+| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 进行中（M1a/M1b/M1c 完成，M1d 设计已定案待实施） |
 | M2 | teach-assess + teach-gojuon（placement → plan → 自适应课程，黄金路径全通） | — | 未开始 |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
@@ -45,7 +45,7 @@
 | M1a | 适配器 + 回合循环 + SSE 出声（垂直切片，无持久化/无认证/无 UI）：新 crate `llm-openai`（LlmProvider 全实现）、`tts-qwen-audio`（TtsProvider 全实现，DashScope 原生协议）、`kernel` 最小回合循环（内部接缝 + speak 规格执行 + 基础守护 + SSE）；godoword feature 注册 + 会话 REST + dev 旁路 | CI fixture 黄金 + 回合循环 mock + 守护；本地真 key 出声脚本；冒烟结构性；**无人工视觉** | 完成 |
 | M1b | kernel 存储基底 + 部署初始化（无 UI）：Store pool 初始化 + 迁移编排（自动备份）+ 完整 kernel schema + 加密（主密钥 AES-256-GCM）+ 绑定解析 DB impl + 配置加载（env>file>默认 + 预设）+ **自适应降权 + 幂等 entrypoint** + provider/binding REST + schema 前瞻 | CI 双后端迁移/CRUD/加密/绑定/配置；冒烟完整 uid/卷矩阵；人工残留 SELinux(Fedora)；**无人工视觉** | 完成 |
 | M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存（音频默认新鲜合成 + 文件系统回放 + 缓存有界）+ 上下文装配/淘汰（水位制）/淘汰前 span 入 outbox（LLM 提取 M2）+ call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2id + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置 token 化；godoword 认证中间件 + auth/admin REST。**M1c-hardening 加固**：对象级授权 + 持久化失败关闭 + 硬超时/退出屏障 + 上游重试（第三方审计 C1-C9） | CI auth 流 + 会话持久化双后端 + 淘汰/outbox + 两用户越权负例；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 完成（含加固） |
-| M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + **高自定义/可美化 UI**（用户可定制界面，核心需求见 [README 产品愿景](../../README.md#产品愿景与核心需求)）+ 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 未开始 |
+| M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + **高自定义/可美化 UI**（用户可定制界面，核心需求见 [README 产品愿景](../../README.md#产品愿景与核心需求)）+ 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 设计已定案（实施待启动） |
 
 依赖链 M1a → M1b → M1c → M1d（线性，每段把前段接入）。
 
@@ -113,6 +113,68 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - M1c：`/api/v1/auth/{register,login,logout,me}`、`/api/v1/admin/{reset,invites,users}`
 - SSE /messages path 入 OpenAPI、SessionEvent 事件 schema 不入（单独协议文档）；REST 全 utoipa 标注，M1d 生成 TS。
 
+## M1d 实施蓝图
+
+> 本节是 M1d 的实施蓝图（计划，非当前代码事实）；决策依据见 [history M1d 设计](../../history/2026-11-19-2049-m1d-design.md)。
+> 需求驱动多轮讨论定案（Q1–Q17），具体实现事实随代码落入各模块 `docs/`。
+
+### 范围与姿态
+
+完整图形界面（认证/管理/引导/设置/会话 + 主题引擎 + 高自定义 WebUI）。后端 REST 面扩展 +
+**一次有界 kernel-api 耦合变更**（5 个 REST-facing 类型加 `utoipa::ToSchema` derive + utoipa 有意耦合）→
+**契约级全量语义审查**。trait 签名/协议 serde 形状不变。单实施 PR 多 phase（音频 spike 前置），status 逐 phase 维护。
+**布局拖拽/组件重排永久放弃**（长期稳定优先，不入 roadmap）。
+
+### 关键设计决策
+
+- **会话文件夹 = 虚拟路径**：`sessions.path TEXT`（NULL=未分类）存文件夹链（`/日语/五十音`），路径即身份，前端 trie 渲染；
+  会话以标题（首条用户消息截断）为叶子，会话名不进 path。**嵌套 M1d 即做**（trie 渲染 + 前缀批量改写 + 子串检查，天然无环）。
+  空文件夹持久登记表 `session_folders(user_id,module_id,path,UNIQUE(user_id,module_id,path))`（path NOT NULL 避 NULL-UNIQUE 陷阱）。
+  **模块 chroot**：module 隐式根命名空间（非可见路径段），M1 无模块=哨兵 `default`，M2 每模块一套树。
+  删非空文件夹→子会话上移一层（绝不级联删会话）。服务端 NFC 归一化（日语浊音陷阱）+ 校验；
+  **上限固定常量**（深度≤8/段≤64 字符/全路径≤1024，不进 config）；校验仅写入时，已存数据永不回溯失效（放宽安全/收紧需 grandfather）。
+  前缀匹配 Rust 侧（不用 LIKE，守 JSON 整取纪律）。
+- **偏好跨设备随账户**：`user_preferences(user_id PK,prefs_json,updated_at)` + GET/PUT REST（符 history 0530 用户级配置仅 DB+webui）。
+- **音频**：默认手动点播 + 自动播放开关；音色试听计量端点；回放时间戳出口 `GET /audio/{id}/meta`（补 P25 回放高亮需求）；
+  AudioWorklet 风险前置 spike（AudioContext sampleRate:24000 + 环形缓冲 + 高亮播放时钟）。
+- **设置页**：简化三卡片（默认 LLM/TTS+音色/可选摘要模型）+ 高级折叠完整绑定矩阵。
+- **认证**：自助改密（验旧密→统一策略→撤销其他会话保留当前）+ 显示名编辑；重置独立公开页。
+- **类型生成**：openapi-typescript + openapi-fetch，生成类型提交 + CI freshness diff；后端补全 OpenAPI schema（B，单一事实源防漂移）。
+- **前端分层**（history 0330）：web/core 框架无关 TS（api/sse/audio/session/theme/i18n/prefs，vitest 重测）+
+  web/shell Svelte 5 runes SPA（组件轻测，视觉人工）；领域逻辑不进组件；不引外部状态库；
+  SSE fetch ReadableStream + eventsource-parser；i18n svelte-i18n zh-CN 首发；主题 CSS 变量引擎；
+  路由 history 模式 + axum ServeDir index.html fallback（修 SPA 深链 404）。
+- **用量**：M1d 仅回合级 usage 脚注（看板 M2）；**响应式**含移动视口（人工真机验收）；首次使用引导清单。
+
+### REST 扩展面（M1d，均 AuthUser + 对象级归属，不动 trait 签名）
+
+- `GET/PUT /api/v1/preferences`；`GET/POST /folders`、`PUT/DELETE /folders/{id}`
+- `GET /sessions?folder=&page=`（元数据：title/created_at/last_active/message_count/path）、`PUT /sessions/{id}/path`、`GET /sessions/{id}`（+path）
+- `GET /audio/{id}/meta`（words/format/sample_rate）；`POST /providers/{id}/preview`（试听→audio_id，计量）
+- `POST /auth/change-password`；`PUT /auth/me`
+- 0005 迁移：user_preferences + session_folders + sessions.path。schema 补全：kernel-api 5 类型 + auth-local UserInfo + godoword 新 DTO ToSchema。
+
+### Phase 拆分（commit 级，风险前置，上下文耗尽友好）
+
+| Phase | 内容 |
+|---|---|
+| P0 | 设计落档 PR（roadmap 蓝图 + history + status + glossary + conventions 前端纪律） |
+| P1 | 音频 spike（web/core audio 引擎 + worklet 出声 + 高亮同步，本地真 key + 移动浏览器实测，跑通再铺 UI） |
+| P2 | 后端扩展（kernel-api ToSchema + 0005 + path/preferences/folders/sessions-meta + auth-local + REST + schema 补全 + 双后端测试 + 契约级全量审查） |
+| P3 | web/core（api/sse/session/theme/i18n/prefs + vitest + 类型 freshness） |
+| P4 | web/shell 认证/管理/引导 UI |
+| P5 | web/shell 设置 UI（provider/绑定/试听/主题/偏好） |
+| P6 | web/shell 会话 UI（对话 + 文件夹树 + 音频卡片 + 高亮 live/回放 + usage） |
+| P7 | Dockerfile node 阶段 + SPA fallback + 前端 CI job + 冒烟扩展 |
+| P8 | 验收（CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目） |
+
+### 验收策略
+
+CI 前端 lint/svelte-check/build/vitest + openapi 类型 freshness + rust + storage 双后端 + 冒烟（SPA 伺服 + 深链 fallback + 新 schema）+
+docs-gate/test_gate + commitlint + secrets + cargo-deny（含 unicode-normalization）。本地真 key 完整产品流。
+**完整人工感官验收**（视觉/TTS 音质/BYOK 流/登录重置流/词级高亮 live+回放/移动视口 AudioWorklet 真机/自动播放手势/主题自定义）；
+Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人工残留按清单纪律（逐项命令+具体 tag+标准+清理）。
+
 ## 远期项（未排期）
 
 - tokenizer 计数替代字符启发式估算（适配器按模型族提供 count_tokens）
@@ -135,7 +197,11 @@ tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/ma
 - 信封加密（per-user data key）、主密钥轮换工具
 - RP-initiated logout（OIDC 会话联动）
 
-## 当前差异（M1a/M1b/M1c 完成，M1d 待做）
+## 当前差异（M1a/M1b/M1c 完成，M1d 设计已定案待实施）
+
+- **M1d 设计闭环**（history 2049，蓝图见上）：需求驱动多轮讨论定案 Q1–Q17；虚拟路径会话文件夹（嵌套 M1d 即做）+
+  偏好跨设备 + 主题引擎（布局拖拽永久放弃）+ 音色试听 + 回放时间戳出口 + 自助改密；
+  **含一次有界 kernel-api utoipa 耦合变更（5 类型 ToSchema）→契约级全量审查**。实施待启动（P0 落档→P1 音频 spike→…）。
 
 - M1 拆分为 M1a–M1d 四子里程碑（见上蓝图），垂直切片先行；speak 规格落 kernel-api 契约（决策 A）；
   开发态临时取舍登记回归机制。**M1a 完成**：适配器 + 回合循环 + SSE 出声。**M1b 完成**：存储基底 + 加密 + 绑定 DB + 配置 + 自适应降权。

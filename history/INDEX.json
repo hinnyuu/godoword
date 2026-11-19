@@ -1164,5 +1164,36 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-19-2049-m1d-design.md",
+    "title": "M1d 设计决策（需求驱动多轮讨论定案 + 实施蓝图）",
+    "date": "2026-11-19T20:49+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "svelte",
+      "design",
+      "virtual-path",
+      "folder",
+      "theme",
+      "openapi",
+      "utoipa",
+      "contract",
+      "audio",
+      "preferences"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

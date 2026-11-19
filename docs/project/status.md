@@ -3,141 +3,100 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T17:57+08:00
-- 当前里程碑: **M1c 收尾完成无阻塞（多轮审计加固 PR #15 已合并 a2bdf17，R4 main 重测绿，人工 sign-off + 六轮复核通过）→ M1d 待启动设计讨论**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **多轮审计收尾加固（a2bdf17，PR #15 已合并验收）→ M1d 待启动**
+- verified: 2026-11-19T20:49+08:00
+- 当前里程碑: **M1d 设计已定案（Q1–Q17 闭环，history 2049）→ P0 设计落档 PR 进行中 → P1 音频 spike 待启动**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ 多轮审计收尾（a2bdf17）→ 验收+产品愿景（9d15342）→ **M1d 设计落档（本 PR）→ M1d 实施**
 
 ## done
 
-- M0：脚手架 + 四类文档体系 + 关系图谱门禁 + CI（含容器冒烟）+ kernel-api 契约 + hello 服务；
-  人工验收全过（Fedora 44 SELinux/quadlet、真实 Debian 13 docker 含 compose）。
-- M1 前置（bf952a3）：存储契约 C 方案 + 纪律➀CI 真测双后端（storage required check）+ 纪律➁方言点设计掉；
-  serde 黄金测试；axum/sqlx 耦合声明；R4 same-tree+main 重测；契约级全量审查制度化；SQLite CVE 风险接受。
-- M1 前置小 PR（f8ff64c）：双后端 workspace 级 + gate 纳入 tests/ + gitleaks 校验和 + agent 交接基础设施。
-- M1 拆分蓝图（bde1ba8）：M1a–M1d 四子里程碑，垂直切片先行；speak 落契约（决策 A）；内部接缝；
-  bindings 哨兵 `*`；dev-bypass feature；开发态回归机制。详见 [roadmap](roadmap.md#m1-拆分蓝图)。
-- **M1a 垂直切片（20efa24，PR #5）**：llm-openai + tts-qwen-audio 适配器全实现（fixture 黄金 + 本地真 key 活体）；
-  kernel 最小回合循环（内部接缝 + 内存 impl + 默认 persona + 守护 + cancel）；speak 契约入 kernel-api（审查矩阵 history 1828）；
-  godoword 会话 REST + SSE + dev-bypass。本地真 key 全链路实证。修 tool_calls 回喂归一化 bug。
-- M1a 依赖合规（history 1844）：CDLA-Permissive-2.0 白名单 + chrono unmaintained（RUSTSEC-2026-0543）书面风险接受。
-- **M1b 存储基底 + 部署初始化（9d9c907，PR #7 已合并，release 重测冒烟 success，Fedora SELinux/quadlet sign-off）**：
-  完整 kernel schema（11 表）+ 自定义双后端迁移 runner（版本表/checksum/迁移前备份）+ 主密钥 AES-256-GCM
-  + DbBindingResolver（5 级 fallback + 解密，生产路径）+ providers/bindings 仓储 CRUD + 配置（env>file>默认 + 预设 + 脱敏）
-  + 自适应降权 + 幂等 entrypoint + provider/binding/config REST + models/voices 测试端点 + utoipa OpenAPI + 冒烟完整 uid/卷矩阵（PASS=29）。
-  **不改 kernel-api 契约**。本地真 key 全链路 + entrypoint 幂等实证。dev-debt **T3 回归**、T2 绑定部分回归。详见 history 2206。
-- M1b 治理搭车（history 2302）：**人工残留清单纪律化**（conventions + gates 自查第 9 项）——逐项完整命令（具体 tag）
-  + 通过标准 + 清理，覆盖全部残留项。源于 M1b 验收批评。
-- **M1c 设计落档（1b98fa3，PR #9）**：六设计决策 + 音频显式白名单（supersede 蓝图指纹 hash）+ 角色扮演横切基础设施分层
-  （history 0329 三条目）；全量审查触发规则扩展（契约级 + 设计方向级 + 二审）；一审 + 二审全量 reconciliation（核对矩阵）。
-- **M1c 会话运行时接基底 + 认证 + 管理（3c4dc0b，PR #10 已合并，R4 main 重测 success，SELinux/quadlet/docker sign-off）**：
-  DbSessions/FsAudio（会话/音频持久化，T2 回归）+ 上下文预算/truncate+summarize 淘汰 + outbox（SessionEvicted，kernel 哨兵）
-  + call_log 计量 + continue 执行/投递分离（task+mpsc，detach 上限）+ auth-local（argon2id + 邀请注册首用户管理员 + cookie 会话
-  + CSRF + 限流 + 管理员重置）+ godoword 认证中间件 + auth/admin REST + **删 dev-bypass（T1 回归）**。kernel 0002 迁移
-  （users.username + auth_sessions）。**不改 kernel-api 契约**。本地真 key 走真认证全链路 + auth 流端到端实证。详见 history 1129。
-- **M1c-hardening 第三方审计驱动加固（fa59c4e，PR #12 已合并，R4 main 重测 success，SELinux/quadlet/docker sign-off）**：
-  独立第三方 agent 审计发现"实现存在 ≠ 授权边界/数据完整性/交接真实性完成"，主开发者定案全部本期修。
-  P0 对象级授权（session/audio/binding 全路径校验归属，越权 404）+ binding/provider 同主 + 禁用/重置撤销会话 + 持久化失败关闭；
-  P1 continue 公开配置 + 硬超时/TTS cancel/退出屏障（WAL checkpoint）+ 淘汰水位（0003）+ 重置 token 化/IP 限流/SessionEnded/上游重试 + 测试端点计量；
-  OpenAPI 修正 + 全状态面 reconcile + **门禁 D6/D7 修复 + 合成回归 6 例** + AGENTS 协议加固。两用户负例 + 多回合不重复 + 重置令牌单次锚定。详见 history 1618。
-- **M1c 多轮审计收尾加固（a2bdf17，PR #15 已合并，R4 main 重测 success，部署矩阵/TTS 音质 sign-off，六轮复核通过）**：
-  二审 R1–R9（重置事务+密码策略/音频失败关闭/退出 abort+背压/淘汰原子+计费幂等/OpenAPI/SessionEnded/管理员串行化/test_gate CI/运维精化）
-  + 三审 N1–N7（OpenAPI 操作级 security 矩阵/end_session 唯一认领/summarize 失败/重置防放大+rows/限流保密禁/shutdown 拒新回合/缺 sidecar）
-  + 四审 H1/H2（shutdown 生命周期同锁/Finish 非 Stop 失败）+ 五审 EOF（仅 Stop 成功，三失败通道穷举）。各配失败/并发负例（双后端）。
-  **不改 kernel-api 契约**。真 key 活体全链路 + summarize 淘汰活体实证。详见 history 2241/0003/1324/1529/1626。
-- **M1c 验收文档复核（本 PR）**：超规格全量 docs/wiki 复核——确认加固信息已记录；**补强产品核心需求显著度**
-  （README 产品愿景 + wiki/user 愿景 + architecture 定位 + roadmap M1d 高自定义 WebUI），防多轮开发后核心需求被稀释。详见 history 1757。
+- M0 / M1 前置 / M1a / M1b / M1c / M1c-hardening / M1c 多轮审计收尾 / 验收+产品愿景复核：
+  全部合并验收完成（详见 history INDEX 与 [roadmap](roadmap.md)；加固叙事沉 history，live 文档只记当前事实）。
+  后端基础就绪无阻塞：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳/上下文淘汰/outbox/call_log。
+- **M1d 设计闭环（history 2049，本 PR 落档）**：需求驱动多轮讨论（agent 审计级全量阅读 + 隔离实例实验确证线缆 →
+  Round 1 核心体验 → Round 2 旅程细节 → Q11 虚拟路径专轮 → Round 3 技术设计），Q1–Q17 全部主开发者裁决。
+  蓝图入 [roadmap M1d 实施蓝图](roadmap.md#m1d-实施蓝图)。基线实测全绿（gate/test_gate 6-6/fmt/clippy/96 测试）。
 
 ## in-flight
 
-- 无开放实现 PR。M1c 收尾完成无阻塞；本 docs PR（产品愿景补强 + 验收交接）合并后启动 M1d 设计讨论。
+- **P0 设计落档 PR**（分支 docs/m1d-design）：roadmap M1d 蓝图 + history 2049 + glossary 新术语 + conventions 前端纪律 + 本 status。
+  待 CI 绿 + 合并 → 启动 P1。
+
+## M1d 实施跟踪（phase 级，详细交接）
+
+> 蓝图见 [roadmap](roadmap.md#m1d-实施蓝图)；决策 Why 见 [history 2049](../../history/2026-11-19-2049-m1d-design.md)。
+> 单实施 PR 多 phase（P1–P8），音频 spike 前置；每 phase 边界可交接，status 持续维护。
+
+| Phase | 内容 | 状态 |
+|---|---|---|
+| P0 | 设计落档（roadmap/history/glossary/conventions/status） | **进行中（本 PR）** |
+| P1 | 音频 spike：web/core audio 引擎 + AudioWorklet 出声 + 词级高亮同步，本地真 key + 移动浏览器实测 | 待启动 |
+| P2 | 后端扩展：kernel-api 5 类型 ToSchema（**utoipa 耦合→契约级全量审查**）+ 0005 迁移 + path/preferences/folders/sessions-meta + auth-local change_password/UserInfo + godoword REST + schema 补全 + 双后端测试 | 待启动 |
+| P3 | web/core：api（openapi-fetch+生成类型）/sse/session/theme/i18n/prefs + vitest + 类型 freshness | 待启动 |
+| P4 | web/shell 认证/管理/引导 UI | 待启动 |
+| P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | 待启动 |
+| P6 | web/shell 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage 脚注） | 待启动 |
+| P7 | Dockerfile node 阶段 + axum SPA fallback + 前端 CI job + 冒烟扩展 | 待启动 |
+| P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | 待启动 |
+
+### M1d 已定案决策（不重议，详见 history 2049）
+
+- **产品**：音频默认手动+自动播放开关；音色试听计量端点；设置三卡片+高级矩阵；主题引擎+高级 CSS（**布局拖拽永久放弃**）；
+  偏好跨设备随账户；引导清单；on_disconnect 偏好级默认+逐会话覆盖（明示消耗额度）；自助改密+显示名编辑；
+  回合级 usage（看板 M2）；响应式含移动真机验收；错误按 code 分流。
+- **会话文件夹=虚拟路径**：sessions.path 文件夹链（路径即身份，trie 渲染，会话名不进 path）；**嵌套 M1d 即做**；
+  空文件夹登记表 session_folders（UNIQUE(user,module,path)，path NOT NULL）；**模块 chroot**（哨兵 default）；
+  删非空→子会话上移一层（绝不级联删会话）；NFC 归一化（日语浊音陷阱）+ 服务端校验；
+  **上限固定常量**（深度≤8/段≤64/全路径≤1024，不进 config，校验仅写入时已存数据永不回溯失效）；前缀匹配 Rust 侧（不用 LIKE）。
+- **技术**：openapi-typescript+openapi-fetch，生成类型提交+CI freshness；**后端补全 schema（B，单一事实源）**；
+  音频风险前置 spike；web/core 框架无关+shell Svelte 5 runes（领域逻辑不进组件，不引状态库）；
+  SSE fetch+eventsource-parser；i18n svelte-i18n zh-CN；主题 CSS 变量；路由 history+ServeDir index.html fallback；
+  core 重测+组件轻测+视觉人工。
+
+### M1d 后端扩展清单（P2，均不动 trait 签名）
+
+- 0005 迁移：`user_preferences(user_id PK,prefs_json,updated_at)` + `session_folders(id,user_id,module_id,path,UNIQUE(user_id,module_id,path))` + `sessions.path TEXT`。
+- REST：`GET/PUT /preferences`；`GET/POST /folders`、`PUT/DELETE /folders/{id}`；`GET /sessions?folder=&page=`（元数据 title/created_at/last_active/message_count/path）+ `PUT /sessions/{id}/path` + `GET /sessions/{id}`（+path）；`GET /audio/{id}/meta`（回放时间戳出口）；`POST /providers/{id}/preview`（试听）；`POST /auth/change-password` + `PUT /auth/me`。
+- **契约变更（B）**：kernel-api 加 utoipa 依赖 + ModelInfo/VoiceInfo/ChatMessage/WordTimestamp/AudioFormat ToSchema derive；
+  contract.md 耦合声明 axum/sqlx **+utoipa**；**契约级全量语义审查矩阵**（P2/P8）。SSE SessionEvent/Usage 不入 OpenAPI。
+- auth-local：UserInfo ToSchema + change_password（验旧密→validate_password→撤销其他会话保留当前，事务）。
+- 新依赖：unicode-normalization（NFC，cargo-deny 许可证核验）；前端 svelte5/vite/openapi-typescript/openapi-fetch/eventsource-parser/svelte-i18n/vitest 等。
 
 ## blocked / 待拍板决策
 
-- **M1c 无阻塞**（多轮审计加固合并验收完成）。M1d 启动设计讨论待主开发者发起（前端构建工具/Svelte 5 runes/web 分层/OpenAPI→TS/SSE 重连/AudioWorklet/词级高亮/i18n/前端测试/Dockerfile node 阶段，重大者交用户）。
-- 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用；**六轮复核非阻断观察**（summarize usage Finish 后或漏记/主循环与 summarize Finish 处理不对称/断言助手可增强）留 M2 一致性检查统一处理。
+- **无阻塞**。M1d 设计全部定案（Q1–Q17），实施待 P0 合并后启动。
+- 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用；六轮复核非阻断观察
+  （summarize usage Finish 后或漏记/主循环与 summarize Finish 处理不对称/断言助手增强）+ outbox 消费幂等（A5）一致性检查。
 
 ## 下一动作
 
-- **M1d 设计讨论**（待主开发者发起）：范围/待讨论设计/验收见下「M1d 启动规划」。后端基础就绪无阻塞。
-- M2 一致性检查留档：六轮复核非阻断观察（summarize usage/主循环 Finish 对称/断言增强）+ outbox 消费幂等（A5）+ 角色音色档案实体 + 白名单音频复用。
+1. **P0 收尾**：本设计 PR CI 绿 + 合并（docs-only，人工残留=无）。
+2. **P1 音频 spike**（风险前置）：web/core AudioWorklet 引擎出声 + 词级高亮，本地真 key + 移动浏览器实测，跑通再铺 UI。
+3. P2 后端扩展（含契约级全量审查）→ P3–P7 → P8 验收。
 
-**文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
-
-## M1c 多轮审计收尾（已完成合并验收，详见 history 2241/0003/1324/1529/1626，不重议）
-
-二审 R1–R9 + 三审 N1–N7 + 四审 H1/H2 + 五审 EOF 全部修复闭环（PR #15 a2bdf17）：重置事务单次+统一密码策略、
-音频失败关闭、退出 abort+join+背压硬边界+生命周期同锁、淘汰原子+summarize 计费幂等+仅 Stop 成功（流 Err/非 Stop Finish/无 Finish EOF 三通道穷举）、
-SessionEnded 唯一认领、管理员禁用串行化、OpenAPI 操作级 security 矩阵+$ref 全解析、test_gate CI、sidecar 兼容+限流保密禁+可信代理 XFF。
-各配失败/并发负例（auth/journal/storage 双后端，runtime 回合 SQLite）；CI 7/7 + R4 main 重测 + 部署矩阵/TTS 音质 sign-off + 六轮复核通过。
-**不改 kernel-api 契约**。真 key 活体全链路 + summarize 淘汰活体实证。
-
-## M1c-hardening（已完成，详见 history 1618，不重议）
-
-第三方审计 C1-C10/D1-D9 全部本期修复闭环：对象级授权 + binding/provider 同主 + 禁用/重置撤销会话 + 持久化失败关闭（P0）；
-continue 公开配置 + 硬超时/TTS cancel/退出屏障 + 淘汰水位（0003）+ 重置 token 化/IP 限流/SessionEnded/上游重试 + 测试端点计量（P1）；
-OpenAPI 修正 + 全状态面 reconcile + 门禁 D6/D7 修复（test_gate.py 回归 6 例）+ AGENTS 协议加固。
-两用户负例 + 多回合不重复 + 重置令牌单次锚定；CI 7 checks + R4 + 人工残留 sign-off 全过。
-
-## M1d 启动规划（M1c 已收尾无阻塞，设计待主开发者发起讨论）
-
-**范围**（蓝图 M1d，有 UI）：Svelte 骨架 + 设置/会话/认证 UI。web/core 框架无关 TS（OpenAPI→TS 客户端 + SSE 客户端
-+ AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ **高自定义/可美化 UI**（核心需求）
-+ 设置 UI（BYOK provider/binding + 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）
-+ Dockerfile node 构建阶段 + 前端 CI job。
-
-**后端基础就绪无阻塞**（M1c + hardening + 多轮审计收尾合并验收）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
-**OpenAPI 完整性已修（R5/N1：CreateSessionReq 注册 + 操作级 cookieAuth/CSRF/403/404 + $ref 全解析测试），M1d 可生成 TS 客户端**。
-M1d 不改后端契约（若需契约变更走全量审查）。
-
-**待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
-/SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。
-
-**验收**：CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工感官验收**（视觉交互/TTS 音质/BYOK 配置流/登录流/词级高亮）——
-M1d 是有 UI 里程碑，人工视觉验收强制（区别 M1a/b/c 无 UI）。人工残留按清单纪律（完整命令+通过标准+清理）。
-
-## M1c 已定案决策（已落地，详见 history 0329/1129，不重议）
-
-①不改 kernel-api 契约（内部接缝扩展）。②continue 执行/投递分离（task+mpsc，detach 上限默认 4）。③音频默认新鲜合成
-+ 文件系统回放 + 缓存有界；显式白名单复用 + 静态资产 M2（取代指纹 hash）。④认证 A（auth_sessions 0002 + cookie Secure 可配
-+ SameSite=Lax + CSRF 自定义头 + 限流 + 首用户事务锁 + argon2id）。⑤全量 summarize（失败回退 truncate）。⑥outbox kernel 哨兵
-+ call_log + dispatcher 骨架（M2 消费）。角色扮演横切基础设施（地基原语 + 模块编排 + 内核角色音色档案实体 M2 + 克隆 provider 侧）。
-
-## M1b 已定案决策（已落地，详见 history 2206，不重议）
-
-①DbBindingResolver 唯一生产绑定路径，dev-bypass 收窄（固定 dev user + env 种入 DB）保留至 M1c；release 用户级 REST 把守至 M1c。
-②迁移备份方案 a（SQLite VACUUM INTO / PG 跳过告警）+ 版本表 + checksum + 内嵌。③自适应降权（rootless 保持 0 / rootful 降属主或 chown 1000）。
-④选型 aes-gcm+rand/nix/toml/utoipa，主密钥 raw 32/hex 64。⑤不改 kernel-api 契约，服务放 kernel 内部 + godoword。
+**文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；产品本质保持显著。
+M1d 因内容较多，status 按主开发者要求做 phase 级详细跟踪（决策指针指 history，不复制叙事）。
 
 ## 开发态临时取舍登记（dev-debt，须回归）
 
-| # | 临时取舍 | 引入 | 回归于 | 回归断言 | 状态 |
-|---|---|---|---|---|---|
-| T1 | env dev key 旁路 + 固定 dev user | M1a | **M1c** | dev-bypass feature 及 GODOWORD_DEV_* 从非测试代码删除 | **已回归（M1c）** |
-| T2 | 内存 impl 作生产默认 | M1a | M1b/**M1c** | 生产默认换 DB/文件系统；内存 impl 仅留测试 | **已回归（M1b 绑定/M1c 会话音频）** |
-| T3 | 容器 root 运行（无降权/初始化） | M1a | M1b | 自适应降权 + 幂等 entrypoint 上线 | **已回归（M1b）** |
-| T4 | 无模块默认教师模式 | M1a | M2 决议 | M2 定永久产品态或退役 | 待 M2 |
+| # | 临时取舍 | 引入 | 回归于 | 状态 |
+|---|---|---|---|---|
+| T1 | env dev key 旁路 + 固定 dev user | M1a | M1c | **已回归** |
+| T2 | 内存 impl 作生产默认 | M1a | M1b/M1c | **已回归** |
+| T3 | 容器 root 运行 | M1a | M1b | **已回归** |
+| T4 | 无模块默认教师模式 | M1a | M2 决议 | 待 M2 |
 
-机制：dev-bypass feature release 永不启用 + 代码 `// DEV-DEBT: T<n>` 标记 + 每里程碑验收核对逾期阻塞。
-永久架构（接缝 trait + 内存测试替身）非债务。详见 [roadmap](roadmap.md#开发态临时取舍回归机制)。
+## 近期关键上下文（M1d 交接用）
 
-## 近期关键上下文
-
-- 存储：共享 SQL 守双兼容 SQL 子集；`query!` 仅驱动专属，共享用运行时 query_as + 薄分发宏（execute_both! 等）。
-  **双兼容类型映射**：PG INTEGER↔i32（非 i64）；COUNT(*)↔i64；SQLite VACUUM INTO 须 raw_sql + 字面量文件名（详见 kernel/docs/storage.md）。
-- 全量语义审查触发：契约级变更（trait/Store/协议类型/speak 规格）**或 supersede 蓝图/architecture 假设的设计方向变更**
-  （history 0329 触发规则）+ 核对矩阵；设计方向级须趁上下文二审复核。
-- **M1c 设计已定案**（history 0329 三条目，不重议）：不改契约 + continue（task+mpsc，detach 上限）+ 音频默认新鲜合成
-  + 文件系统回放存储 + 缓存有界（**显式白名单复用 + 静态资产 M2，取代指纹 hash**）+ 认证 A（auth_sessions 0002）
-  + 全量 summarize + outbox（module_id 哨兵 `kernel`）/call_log。**角色扮演**横切声音基础设施（地基原语 + 模块编排，
-  内核角色音色档案实体 M2，克隆 provider 侧），M1c 音频机制无关其形态、零返工。
-- kernel 内部接缝（SessionRepo/BindingResolver/AudioCache）已立（M1a）；**M1b BindingResolver 转 DB**；
-  SessionRepo/AudioCache DB/文件系统 impl M1c，回合循环不重写。
-- kernel M1b 模块：storage（pool+ping）/migrate（runner）/crypto（MasterKey）/repo（providers/bindings CRUD）/binding（DbBindingResolver）/config。
-  godoword：init（降权+entrypoint）/settings（provider/binding REST）/openapi/rest（user_access 门 M1c 替换）。
-- speak 契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）已在 kernel-api；kernel 运行时 prepare_speak 执行。
-- API 实测事实：LLM OpenAI 兼容 /compatible-mode/v1（reasoning_content/tool_calls 按 index 组装，回喂须 function 形 + arguments 字符串）；
-  TTS DashScope 原生 SpeechSynthesizer（X-DashScope-SSE: enable，sentence 事件，base64 PCM，词级时间戳跨帧去重，音色 longanlingxin/longanlufeng）。
-- 风险接受：SQLite CVE RUSTSEC-2026-0459 + chrono unmaintained RUSTSEC-2026-0543（均用户认可，roadmap 跟踪，deny.toml 注释）。
-- 本机 2H2G：重构建走 CI，本机 cargo check/test jobs≤2（dev 二进制构建 jobs=1 可行）；cargo-deny 本机未装（以 CI 为准）；
-  GitHub 网络抖动容忍重试；**本机 PG 测试用内网镜像库 uhub.service.ucloud.cn/hinnyuu/postgres:16**（devenv.md，不入仓库）。
-- 治理：人工残留清单纪律（history 2302）；治理克制——当前最稀缺的是真实 kernel 实现，非更完善治理（外部评审共识）。
+- **审计发现已纳入 M1d**：回放时间戳出口（GET /audio/{id} 仅 PCM，words 在 sidecar 未暴露→P25 回放高亮缺口，M1d 补 /audio/{id}/meta）；
+  会话列表仅 id（M1c 设计已延期 M1d，补元数据）；SPA 深链 404（ServeDir 无 fallback，P7 修）；
+  OpenAPI 弱类型响应（B 补全 schema）；Dockerfile:20 陈旧注释（P7 顺手修）；错误消息嵌套重复"未配置绑定：未配置绑定："（UI 文案打磨）。
+- **SSE 线缆实测**：`event: <kebab 名>` + `data: <纯载荷 JSON>`（无信封）；POST→SSE 故前端用 fetch 流式解析（非 EventSource）。
+  认证 cookie godoword_session（HttpOnly/Lax）+ 变更须 X-Requested-With 头；未认证 401 越权 404。
+- **存储**：共享 SQL 守双兼容 SQL 子集；双兼容类型映射 PG INTEGER↔i32 / COUNT(*)↔i64；VACUUM INTO 须 raw_sql+字面量。
+  路径前缀匹配在 Rust 侧（不用 LIKE，免转义，守 JSON 整取纪律）；文件夹改名/移动=单事务批量改写。
+- **契约审查触发**：M1d 的 kernel-api utoipa 耦合新增属契约级→全量 docs+wiki 审查 + 核对矩阵（P2/P8）；
+  升级 axum/sqlx/utoipa 视为契约变更（contract.md 声明）。
+- 本机 2H2G：重构建走 CI，本机 cargo check/test jobs≤2；npm 慢前端构建优先 CI；cargo-deny 本机未装以 CI 为准；
+  GitHub 网络抖动容忍重试；本机 PG 测试用内网镜像 uhub.service.ucloud.cn/hinnyuu/postgres:16（devenv.md，不入仓库）。
+- 测试 key 仅经 env（/root/.config/agents/shared/env，QWEN_TOKEN_PLAN_KEY），严禁入仓库/文档/日志；CI 永不用真 key。
+- 治理：人工残留清单纪律（history 2302，逐项命令+具体 tag+标准+清理）；治理克制（最稀缺的是真实实现，非更完善治理）。

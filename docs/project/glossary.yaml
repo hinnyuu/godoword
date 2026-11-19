@@ -106,3 +106,21 @@ terms:
   - canonical: 回放
     banned: []
     definition: 某次合成的音频再放一遍（per-synthesis AudioId，GET /audio/{id}），与复用（跨请求省合成）区分
+  - canonical: 虚拟路径
+    banned: []
+    definition: 会话文件夹的路径即身份模型（sessions.path，如 /日语/五十音），NFC 归一化 + 固定上限（深度≤8/段≤64/全路径≤1024），前端 trie 渲染（M1d）
+  - canonical: 会话文件夹
+    banned: []
+    definition: 虚拟路径表达的会话分组，登记表 session_folders 持久空文件夹，模块 chroot 命名空间，删非空文件夹子会话上移一层（M1d）
+  - canonical: 命名空间
+    banned: []
+    definition: 会话文件夹的模块隐式根（chroot），module_id 创建时固定杜绝跨模块移动；M1 无模块用哨兵 default（M1d）
+  - canonical: 主题引擎
+    banned: []
+    definition: CSS 自定义属性 + 预设 + 用户自定义变量/高级 CSS 的 WebUI 美化体系，偏好跨设备随账户（M1d）
+  - canonical: 用户偏好
+    banned: []
+    definition: user_preferences 表 + GET/PUT REST，跨设备随账户（theme/auto_play/on_disconnect_default/密度/字号等），用户级配置仅 DB+webui（M1d）
+  - canonical: 音色试听
+    banned: []
+    definition: 设置页选音色时合成一句试听（POST /providers/{id}/preview，固定短文本+可选自定义，走用户 key 计量），BYOK 选音色闭环（M1d）

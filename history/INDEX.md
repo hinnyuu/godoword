@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 49 条。
+共 50 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -53,3 +53,4 @@
 - [M1c 第四次复核收尾（H1/H2）+ 测试同源偏差增强](2026-11-19-1529-m1c-fourth-review-fixes.md) — 2026-11-19T15:29+08:00 · change · accepted · scope: project, kernel, godoword · keywords: m1c, fourth-review, shutdown-lifecycle, lock, finish-reason, summarize, openapi-matrix
 - [M1c 第五次复核收尾：summarize 无 Finish 静默 EOF](2026-11-19-1626-m1c-fifth-review-eof.md) — 2026-11-19T16:26+08:00 · change · accepted · scope: project, kernel · keywords: m1c, fifth-review, summarize, eof, saw-stop, finish-reason
 - [M1c 多轮审计收尾合并验收 + 超规格产品需求文档复核](2026-11-19-1757-m1c-acceptance-product-vision.md) — 2026-11-19T17:57+08:00 · change · accepted · scope: project · keywords: m1c, acceptance, merge, product-vision, doc-review, core-requirements, m1d-handoff
+- [M1d 设计决策（需求驱动多轮讨论定案 + 实施蓝图）](2026-11-19-2049-m1d-design.md) — 2026-11-19T20:49+08:00 · decision · accepted · scope: project, kernel, kernel-api, godoword, auth-local · keywords: m1d, frontend, svelte, design, virtual-path, folder, theme, openapi, utoipa, contract, audio, preferences

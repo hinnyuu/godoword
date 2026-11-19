@@ -108,6 +108,21 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 CI `storage` job 跑 **workspace 级** `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试
 自动获双后端——无需维护 crate 清单。rust job 的 workspace 测试未设 `TEST_PG_URL`（验代码健康，PG 侧 skip）。
 
+## 前端纪律（M1d 起）
+
+承 [history 技术栈决策](../../history/2026-11-16-0330-rust-svelte-stack.md) 与
+[M1d 设计](../../history/2026-11-19-2049-m1d-design.md)：
+
+- **分层**：`web/core` 框架无关 TS（API 客户端/类型、SSE 客户端、音频引擎、会话/路径域逻辑、主题引擎、i18n、偏好），
+  `web/shell` Svelte 5 SPA（runes）视图层，`web/modules/<id>` 教学模块前端（M2+）。换框架时 core 存活、视图按模块增量重写。
+- **领域逻辑不进组件**：域逻辑（路径 trie/NFC/校验、SSE 帧解析、音频排队、主题变量合并）在 core 纯 TS，shell 以 runes 绑定。
+- **契约类型单一事实源**：后端 OpenAPI（utoipa）→ openapi-typescript 生成类型，**生成文件提交入仓库 + CI freshness diff**
+  （重生成比对，类比 history INDEX）；后端补全 schema（含 kernel-api REST-facing 类型 ToSchema），不手写重复类型。
+- **i18n**：UI 字符串 zh-CN 首发，**第一天外部化**（svelte-i18n），en 后置。
+- **测试分层**：core vitest 重测（域逻辑 + 脱敏 fixture round-trip 锚定线缆）+ 组件轻测 + **视觉/音质/交互人工感官验收**
+  （M1d 强制）；E2E 自动化后置 roadmap。
+- **音频风险前置**：AudioWorklet 引擎先 spike 跑通出声 + 词级高亮 + 移动浏览器，再铺 UI（承 M1a 风险前置原则）。
+
 ## 全量语义审查（制度化）
 
 两类变更除机械门禁外**强制全量 docs+wiki 语义审查**：
