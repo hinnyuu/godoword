@@ -1,8 +1,9 @@
 //! OpenAPI 文档聚合（utoipa）。M1c 落 REST 标注，M1d 由此生成 TS 客户端。
 //! SSE 精确表述（审计 D4）：`/messages` **path 入** OpenAPI，`SessionEvent` **事件 schema 不入**（单独协议文档维护）。
 //! models/voices 响应暂以通用 object 标注（ModelInfo/VoiceInfo 为 kernel-api 契约类型，精确 schema 待契约演进补）。
-//! **完整性（审计 R5）**：CreateSessionReq 注册；`build_openapi` 集中注入 cookieAuth securityScheme + 全局 security
-//! + 所有 /api/v1 变更操作 CSRF `X-Requested-With` header + 403；单元测试锚定所有本地 `$ref` 可解析。
+//! **完整性（审计 R5/N1）**：CreateSessionReq 注册；`build_openapi` 注入 cookieAuth securityScheme + **操作级 security 矩阵**
+//! （公开 operation security:[]、受保护 cookieAuth，不用根级全局以免误伤公开端点）+ 所有 /api/v1 变更操作 CSRF
+//! `X-Requested-With` header + 403；单元测试锚定所有本地 `$ref` 可解析 + 独立公开操作矩阵。
 
 use axum::Json;
 use serde_json::{json, Value};
@@ -294,6 +295,38 @@ mod tests {
             "N1：公开操作数（healthz/register/login 等）"
         );
         assert!(protected_count >= 10, "N1：受保护操作数");
+        // 独立精确公开操作表（第四次复核建议：避免与生产 is_public 同源偏差——若误把受保护端点加入
+        // is_public，此独立表会断言失败）。
+        let expected_public: std::collections::HashSet<(&str, &str)> = [
+            ("/healthz", "get"),
+            ("/readyz", "get"),
+            ("/api/v1/meta", "get"),
+            ("/api/v1/config", "get"),
+            ("/api/v1/openapi.json", "get"),
+            ("/api/v1/auth/register", "post"),
+            ("/api/v1/auth/login", "post"),
+            ("/api/v1/auth/reset-password", "post"),
+            ("/api/v1/auth/logout", "post"),
+        ]
+        .into_iter()
+        .collect();
+        for (path, item) in paths {
+            for method in ["get", "post", "put", "delete", "patch"] {
+                let Some(op) = item.get(method) else { continue };
+                let sec = op.get("security").and_then(|s| s.as_array()).unwrap();
+                if expected_public.contains(&(path.as_str(), method)) {
+                    assert!(sec.is_empty(), "独立表：{method} {path} 应公开 security:[]");
+                } else {
+                    assert!(
+                        sec.iter().any(|s| s.get("cookieAuth").is_some()),
+                        "独立表：{method} {path} 应受保护 cookieAuth"
+                    );
+                }
+            }
+        }
+        for (p, m) in &expected_public {
+            assert!(doc["paths"][p][m].is_object(), "独立表：{m} {p} 须登记");
+        }
         // openapi.json 自身登记（公开）。
         assert!(
             doc["paths"]["/api/v1/openapi.json"]["get"].is_object(),

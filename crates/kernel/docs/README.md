@@ -15,14 +15,14 @@
 - 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，默认 120s，审计 C6；
   超时后 **try_send 非阻塞**投递，满 mpsc 不消费亦不永久阻塞，任务结束释放活跃锁，审计 R3/A1）、
   每会话单活跃回合锁（`ActiveGuard` 归执行体）；detach semaphore 默认 4；**上游退避重试**（LLM/TTS 可重试错误 bounded 2，审计 C8）；
-  TTS 流响应 cancel；`shutdown` 退出屏障（**置 shutting_down 拒新回合，N6** + cancel + 有界等待 + **超时 abort+join**，审计 R3）
-  + `checkpoint`（SQLite WAL，真写入屏障）；硬超时满 mpsc 终态 try_send 不可投递则记日志、流关闭（硬边界优先，N6）。
+  TTS 流响应 cancel；`shutdown` 退出屏障（**tasks 锁内置标志+取快照，与 run_turn 锁内复检+spawn+注册互斥，H1** + cancel
+  + 有界等待 + **超时 abort+join**，审计 R3）+ `checkpoint`（SQLite WAL，真写入屏障）；硬超时满 mpsc 终态 try_send 不可投递则记日志、流关闭（硬边界优先，N6）。
 - speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
   （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定）；音频流迭代内联于循环，
   live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
   **缓存写失败关闭（审计 R2）**：put 失败不发正常 AudioEnd/成功 ToolResult，改发 storage Error + ToolResult ok=false。
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退；
-  **流中途失败不固化部分摘要，审计 N3**）；
+  **流中途失败或非 Stop 结束（Error/Length/ContentFilter/Cancelled）均不固化部分摘要，审计 N3/H2**）；
   call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
   **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
   **`end_session`（审计 R6/N2）**：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插 session-ended outbox

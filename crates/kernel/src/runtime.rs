@@ -235,6 +235,13 @@ async fn summarize_span(
         match item {
             Ok(ChatChunk::TextDelta(t)) => summary.push_str(&t),
             Ok(ChatChunk::Usage(u)) => usage = Some(u),
+            Ok(ChatChunk::Finish(fr)) => {
+                // 非正常结束视为失败（审计 H2）：Error/Length（截断）/ContentFilter/Cancelled 均不固化部分摘要，
+                // 按 truncate 回退。仅 Stop 为完整成功（llm-openai 未知 finish reason 映射 Error，真实路径）。
+                if !matches!(fr, FinishReason::Stop) {
+                    err = Some("summarize 非正常结束".to_string());
+                }
+            }
             Ok(_) => {}
             Err(e) => {
                 err = Some(provider_error_code(&e).to_string());
@@ -342,14 +349,17 @@ impl Runtime {
         }
     }
 
-    /// 优雅退出屏障（审计 C6/R3/N6）：**置退出标志（拒新回合）** → 置取消标志 → 有界等待 detached 任务落盘
-    /// → **超时者 abort 并 join**（drop future 于 await 点取消，sqlx 事务 drop 回滚不留半提交）→ 全部终止后返回。
-    /// 调用方随后做 WAL checkpoint（SQLite）才是严格写入屏障（无任务并发写）。
+    /// 优雅退出屏障（审计 C6/R3/N6/H1）：**tasks 锁内置退出标志 + 取任务快照**（与 run_turn 检查+注册互斥）
+    /// → 置取消标志 → 有界等待 detached 任务落盘 → **超时者 abort 并 join**（drop future 于 await 点取消，
+    /// sqlx 事务 drop 回滚不留半提交）→ 全部终止后返回。调用方随后 WAL checkpoint 才是严格写入屏障。
     pub async fn shutdown(&self, grace: Duration) {
-        self.shutting_down.store(true, Ordering::SeqCst);
+        // 生命周期临界区（审计 H1）：置标志 + 取快照同一锁内（锁内不 await），杜绝 run_turn 快照后登记新任务。
+        let mut handles: Vec<tokio::task::JoinHandle<()>> = {
+            let mut g = self.tasks.lock().unwrap();
+            self.shutting_down.store(true, Ordering::SeqCst);
+            std::mem::take(&mut *g)
+        };
         self.cancel_all();
-        let mut handles: Vec<tokio::task::JoinHandle<()>> =
-            std::mem::take(&mut *self.tasks.lock().unwrap());
         let wait = async {
             for h in handles.iter_mut() {
                 let _ = h.await;
@@ -383,6 +393,16 @@ impl Runtime {
         }
     }
 
+    /// 已登记任务数（测试/观测用，审计 H1 生命周期不变量断言）。
+    pub fn pending_task_count(&self) -> usize {
+        self.tasks.lock().unwrap().len()
+    }
+
+    /// 活跃回合数（测试/观测用，审计 H1）。
+    pub fn active_count(&self) -> usize {
+        self.active.lock().unwrap().len()
+    }
+
     /// 跑一个回合，返回 SessionEvent 流（SSE）。执行/投递分离：回合 spawn 为 tokio task 经有界 mpsc
     /// 投递，SSE 订阅 receiver。客户端断开（receiver drop）→ 读 on_disconnect：cancel 置取消标志 /
     /// continue 取 detach permit 后排空跑完（permit 满则降级 cancel）。活跃锁归执行体（task 结束释放）。
@@ -394,79 +414,82 @@ impl Runtime {
     ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<SessionEvent>(256);
         let run_id = RunId::new();
-        let shutting_down = self.shutting_down.load(Ordering::SeqCst);
-        // 退出期间拒绝新回合（审计 N6）：不 spawn/登记新任务，流直接发 shutting_down 终态。
-        if !shutting_down {
-            let exec = self.run_turn_stream(user, session, user_text, run_id);
-            let sessions = self.sessions.clone();
-            let cancels = self.cancels.clone();
-            let detach = self.detach.clone();
-            let turn_timeout = self.turn_timeout;
-            let tasks = self.tasks.clone();
-
-            let handle = tokio::spawn(async move {
-                let mut exec = Box::pin(exec);
-                let mut decided = false;
-                let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
-                let poll = async {
-                    while let Some(ev) = exec.next().await {
-                        if tx.send(ev).await.is_err() && !decided {
-                            // 客户端断开：决策一次（cancel / continue）。
-                            decided = true;
-                            let on_disc = sessions
-                                .meta(user, session)
-                                .await
-                                .ok()
-                                .flatten()
-                                .map(|m| m.on_disconnect)
-                                .unwrap_or_default();
-                            let mut cancel = true;
-                            if on_disc == crate::seam::OnDisconnect::Continue {
-                                if let Ok(p) = detach.clone().try_acquire_owned() {
-                                    _detach_permit = Some(p);
-                                    cancel = false; // continue：排空跑完
+        let shutting_down = self.shutting_down.clone();
+        let tasks = self.tasks.clone();
+        let exec = self.run_turn_stream(user, session, user_text, run_id);
+        let sessions = self.sessions.clone();
+        let cancels = self.cancels.clone();
+        let detach = self.detach.clone();
+        let turn_timeout = self.turn_timeout;
+        // 生命周期临界区（审计 H1）：复检退出标志 + spawn + 注册同一 tasks 锁内（锁内不 await），
+        // 与 shutdown 置标志+取快照互斥——任务先注册必被快照取到，或先见退出标志拒绝。
+        let accepted = {
+            let mut g = tasks.lock().unwrap();
+            if shutting_down.load(Ordering::SeqCst) {
+                false
+            } else {
+                let handle = tokio::spawn(async move {
+                    let mut exec = Box::pin(exec);
+                    let mut decided = false;
+                    let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
+                    let poll = async {
+                        while let Some(ev) = exec.next().await {
+                            if tx.send(ev).await.is_err() && !decided {
+                                // 客户端断开：决策一次（cancel / continue）。
+                                decided = true;
+                                let on_disc = sessions
+                                    .meta(user, session)
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .map(|m| m.on_disconnect)
+                                    .unwrap_or_default();
+                                let mut cancel = true;
+                                if on_disc == crate::seam::OnDisconnect::Continue {
+                                    if let Ok(p) = detach.clone().try_acquire_owned() {
+                                        _detach_permit = Some(p);
+                                        cancel = false; // continue：排空跑完
+                                    }
                                 }
-                            }
-                            if cancel {
-                                if let Some(flag) = cancels.lock().unwrap().get(&session) {
-                                    flag.store(true, Ordering::Relaxed);
+                                if cancel {
+                                    if let Some(flag) = cancels.lock().unwrap().get(&session) {
+                                        flag.store(true, Ordering::Relaxed);
+                                    }
                                 }
                             }
                         }
+                    };
+                    // 硬超时（审计 C6/R3/A1/N6）：超时则 exec drop 中止上游。**try_send 非阻塞**投递 timeout + RunEnd——
+                    // 满 mpsc（receiver 存活但不消费）亦不永久阻塞；任务随即结束 → exec drop → ActiveGuard 释放活跃锁。
+                    // 满队列终态策略（N6）：终态不可投递时记录日志，流随后关闭（客户端见 close 即知回合结束，硬边界优先）。
+                    if tokio::time::timeout(turn_timeout, poll).await.is_err() {
+                        if tx
+                            .try_send(SessionEvent::Error {
+                                code: "timeout".to_string(),
+                                message: "回合硬超时".to_string(),
+                                retryable: false,
+                                action: None,
+                            })
+                            .is_err()
+                        {
+                            tracing::warn!("回合硬超时终态不可投递（mpsc 满），流将关闭");
+                        }
+                        let _ = tx.try_send(SessionEvent::RunEnd {
+                            run_id,
+                            finish_reason: FinishReason::Error,
+                        });
                     }
-                };
-                // 硬超时（审计 C6/R3/A1/N6）：超时则 exec drop 中止上游。**try_send 非阻塞**投递 timeout + RunEnd——
-                // 满 mpsc（receiver 存活但不消费）亦不永久阻塞；任务随即结束 → exec drop → ActiveGuard 释放活跃锁。
-                // 满队列终态策略（N6）：终态不可投递时记录日志，流随后关闭（客户端见 close 即知回合结束，硬边界优先）。
-                if tokio::time::timeout(turn_timeout, poll).await.is_err() {
-                    if tx
-                        .try_send(SessionEvent::Error {
-                            code: "timeout".to_string(),
-                            message: "回合硬超时".to_string(),
-                            retryable: false,
-                            action: None,
-                        })
-                        .is_err()
-                    {
-                        tracing::warn!("回合硬超时终态不可投递（mpsc 满），流将关闭");
-                    }
-                    let _ = tx.try_send(SessionEvent::RunEnd {
-                        run_id,
-                        finish_reason: FinishReason::Error,
-                    });
-                }
-                // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
-            });
-            // 注册任务供退出屏障（审计 C6）；清理已完成 handle 防累积。
-            {
-                let mut g = tasks.lock().unwrap();
+                    // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
+                });
+                // 注册任务供退出屏障（审计 C6/H1）；清理已完成 handle 防累积。锁内完成。
                 g.retain(|h| !h.is_finished());
                 g.push(handle);
+                true
             }
-        }
+        };
 
         async_stream::stream! {
-            if shutting_down {
+            if !accepted {
                 yield SessionEvent::Error {
                     code: "shutting_down".to_string(),
                     message: "服务正在退出，拒绝新回合".to_string(),
