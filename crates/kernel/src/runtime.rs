@@ -231,16 +231,19 @@ async fn summarize_span(
     let mut summary = String::new();
     let mut usage: Option<Usage> = None;
     let mut err: Option<String> = None;
+    let mut saw_stop = false;
     while let Some(item) = stream.next().await {
         match item {
             Ok(ChatChunk::TextDelta(t)) => summary.push_str(&t),
             Ok(ChatChunk::Usage(u)) => usage = Some(u),
             Ok(ChatChunk::Finish(fr)) => {
-                // 非正常结束视为失败（审计 H2）：Error/Length（截断）/ContentFilter/Cancelled 均不固化部分摘要，
-                // 按 truncate 回退。仅 Stop 为完整成功（llm-openai 未知 finish reason 映射 Error，真实路径）。
-                if !matches!(fr, FinishReason::Stop) {
+                // 仅实际收到 Stop 才算完整成功（审计 H2/第五次复核）：非 Stop（Error/Length/ContentFilter/
+                // Cancelled/ToolCalls）失败；首个 Finish 后停读，避免 Stop 后继续处理额外文本。
+                saw_stop = matches!(fr, FinishReason::Stop);
+                if !saw_stop {
                     err = Some("summarize 非正常结束".to_string());
                 }
+                break;
             }
             Ok(_) => {}
             Err(e) => {
@@ -248,6 +251,11 @@ async fn summarize_span(
                 break;
             }
         }
+    }
+    // 无 Finish 的静默 EOF 亦失败（审计第五次复核）：llm-openai [DONE]/自然 EOF 可不发 Finish，
+    // 部分文本 + 无 Stop 不得固化。success = saw_stop && !err && !empty。
+    if !saw_stop && err.is_none() {
+        err = Some("summarize 流未以 Stop 结束".to_string());
     }
     let failed = err.is_some();
     let status = if failed { "error" } else { "ok" };
@@ -266,7 +274,7 @@ async fn summarize_span(
         ),
     )
     .await;
-    // 中途失败不得固化部分摘要（审计 N3）：err 或空 → None，调用方按 truncate 回退，不存储/复用部分 fragment。
+    // 失败/未完整结束不得固化部分摘要（审计 N3/H2/第五次）：调用方按 truncate 回退，不存储/复用部分 fragment。
     if failed || summary.is_empty() {
         return None;
     }

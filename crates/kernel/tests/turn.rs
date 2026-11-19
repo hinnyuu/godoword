@@ -1161,9 +1161,9 @@ async fn shutdown_run_turn_lifecycle_invariant() {
     }
 }
 
-/// 非正常结束 summarize LLM（审计 H2）：summarize 发部分文本后 Finish(指定非 Stop reason)。
+/// 非正常结束 summarize LLM（审计 H2）：summarize 发部分文本后 Finish(指定 reason)。
 struct BadFinishLlm {
-    summarize_calls: AtomicU32,
+    summarize_calls: Arc<AtomicU32>,
     finish: FinishReason,
 }
 
@@ -1207,7 +1207,53 @@ impl LlmProvider for BadFinishLlm {
     }
 }
 
-async fn assert_bad_finish_no_persist(finish: FinishReason) {
+/// 静默 EOF summarize LLM（审计第五次复核）：summarize 发部分文本后直接 EOF，无任何 Finish。
+struct EofLlm {
+    summarize_calls: Arc<AtomicU32>,
+}
+
+#[async_trait]
+impl LlmProvider for EofLlm {
+    fn id(&self) -> &'static str {
+        "eof-llm"
+    }
+    fn features(&self) -> LlmFeatures {
+        LlmFeatures {
+            tool_calling: false,
+            reasoning: false,
+            streaming: true,
+        }
+    }
+    async fn list_models(&self, _: &ProviderConn) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![])
+    }
+    async fn chat_stream(
+        &self,
+        _: &ProviderConn,
+        req: ChatRequest,
+    ) -> Result<ChatStream, ProviderError> {
+        let is_summary = req
+            .messages
+            .first()
+            .map(|m| m.content.contains("压缩"))
+            .unwrap_or(false);
+        if is_summary {
+            self.summarize_calls.fetch_add(1, Ordering::SeqCst);
+            // 部分文本后直接 EOF，无 Finish（llm-openai [DONE]/自然 EOF 真实路径）。
+            Ok(Box::pin(stream::iter(vec![Ok(ChatChunk::TextDelta(
+                "部分摘要".to_string(),
+            ))])))
+        } else {
+            Ok(Box::pin(stream::iter(vec![
+                Ok(ChatChunk::TextDelta("回复".to_string())),
+                Ok(ChatChunk::Finish(FinishReason::Stop)),
+            ])))
+        }
+    }
+}
+
+/// 断言 summarize 失败/未完整结束不固化部分摘要（真实 SQLite + DbSessions + 生产淘汰链）。
+async fn assert_summarize_no_persist(llm: Arc<dyn LlmProvider>, calls: Arc<AtomicU32>) {
     let db_dir = std::env::temp_dir().join(format!("gw-badfin-{}", Uuid::new_v4()));
     let store = Arc::new(
         kernel::open_sqlite(&db_dir.join("db").join("t.sqlite"))
@@ -1218,12 +1264,8 @@ async fn assert_bad_finish_no_persist(finish: FinishReason) {
         .await
         .unwrap();
     let sessions = Arc::new(DbSessions::new(store.clone()));
-    let llm = Arc::new(BadFinishLlm {
-        summarize_calls: AtomicU32::new(0),
-        finish,
-    });
     let rt = Runtime::new(
-        llm.clone(),
+        llm,
         Arc::new(MockTts),
         Arc::new(MockBindings),
         sessions.clone(),
@@ -1258,20 +1300,16 @@ async fn assert_bad_finish_no_persist(finish: FinishReason) {
         .run_turn(user, session, "新消息".to_string())
         .collect()
         .await;
-    assert_eq!(
-        llm.summarize_calls.load(Ordering::SeqCst),
-        1,
-        "H2：summarize 调用一次"
-    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "summarize 调用一次");
     let spans: (i64,) =
         kernel_api::fetch_one_both!(&*store, "SELECT COUNT(*) FROM summary_spans", (i64,)).unwrap();
     assert_eq!(
         spans.0, 0,
-        "H2：非正常结束不固化部分摘要（summary_spans 空）"
+        "失败/未完整结束不固化部分摘要（summary_spans 空）"
     );
     let m = sessions.meta(user, session).await.unwrap().unwrap();
-    assert!(m.summary.is_none(), "H2：失败回退 truncate（无滚动摘要）");
-    assert!(m.evicted_up_to > 0, "H2：水位仍推进");
+    assert!(m.summary.is_none(), "失败回退 truncate（无滚动摘要）");
+    assert!(m.evicted_up_to > 0, "水位仍推进");
     assert!(
         matches!(
             events.last(),
@@ -1280,18 +1318,37 @@ async fn assert_bad_finish_no_persist(finish: FinishReason) {
                 ..
             })
         ),
-        "H2：失败回退后回合正常完成"
+        "失败回退后回合正常完成"
     );
     drop(store);
     std::fs::remove_dir_all(&db_dir).unwrap();
 }
 
 #[tokio::test]
-async fn summarize_finish_error_no_partial_persist() {
-    assert_bad_finish_no_persist(FinishReason::Error).await;
+async fn summarize_non_stop_finish_no_partial_persist() {
+    // 表驱动：所有非 Stop Finish 均不固化（审计 H2/第五次复核）。
+    for finish in [
+        FinishReason::Error,
+        FinishReason::Length,
+        FinishReason::ContentFilter,
+        FinishReason::Cancelled,
+        FinishReason::ToolCalls,
+    ] {
+        let calls = Arc::new(AtomicU32::new(0));
+        let llm = Arc::new(BadFinishLlm {
+            summarize_calls: calls.clone(),
+            finish,
+        });
+        assert_summarize_no_persist(llm, calls).await;
+    }
 }
 
 #[tokio::test]
-async fn summarize_finish_length_no_partial_persist() {
-    assert_bad_finish_no_persist(FinishReason::Length).await;
+async fn summarize_eof_no_finish_no_partial_persist() {
+    // 部分文本 + 无 Finish 静默 EOF（审计第五次复核）。
+    let calls = Arc::new(AtomicU32::new(0));
+    let llm = Arc::new(EofLlm {
+        summarize_calls: calls.clone(),
+    });
+    assert_summarize_no_persist(llm, calls).await;
 }

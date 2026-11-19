@@ -22,7 +22,8 @@
   live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
   **缓存写失败关闭（审计 R2）**：put 失败不发正常 AudioEnd/成功 ToolResult，改发 storage Error + ToolResult ok=false。
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退；
-  **流中途失败或非 Stop 结束（Error/Length/ContentFilter/Cancelled）均不固化部分摘要，审计 N3/H2**）；
+  **仅实际收到 Finish(Stop) 才算成功——流 Err / 非 Stop Finish（Error/Length/ContentFilter/Cancelled/ToolCalls）/ 无 Finish 静默 EOF
+  均不固化部分摘要，审计 N3/H2/第五次**）；
   call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
   **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
   **`end_session`（审计 R6/N2）**：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插 session-ended outbox
