@@ -52,6 +52,12 @@ class PrefsStore {
     this.prefs = await savePreferences(next);
     this.apply();
   }
+
+  /** 登出重置（清用户偏好，回默认主题）。 */
+  reset(): void {
+    this.prefs = {};
+    this.apply();
+  }
 }
 
 export const prefs = new PrefsStore();

@@ -37,7 +37,7 @@
 | P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | **代码就绪（Settings：provider CRUD+预设+测试连接+音色试听播放+绑定卡片/高级矩阵+主题预设/强调色/自定义 CSS+偏好开关；svelte-check/build 绿）；待人工确认** |
 | P6 | web/shell 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage 脚注） | **完成（ChatView/SessionSidebar/Home/Sessions；svelte-check/build 绿；P8 首轮修复后会话懒创建）** |
 | P7 | Dockerfile node 阶段 + axum SPA fallback + 前端 CI job + 冒烟扩展 | **完成（CI image node 构建 pass + 冒烟 SPA 伺服断言 pass；hash 路由免 fallback）** |
-| P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | **CI 全 8 绿（image node 构建+冒烟 SPA）；首轮 4 缺陷+二轮对话空气泡（runes 代理引用）/测试反馈位置已修（history 0130/0210）；产品流复验中** |
+| P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | **CI 全 8 绿；三轮验收修复（4 缺陷/对话 runes/偏好登录加载，history 0130/0210/0240）；Markdown 延期 roadmap；产品流复验中** |
 
 ### M1d 已定案决策（不重议，详见 history 2049）
 

@@ -31,10 +31,15 @@
 
   const publicRoutes = ['/login', '/register', '/reset'];
 
-  // 启动加载用户 + 偏好（一次）。
+  // 启动加载用户（一次）。
   $effect(() => {
     void auth.load();
-    void prefs.load();
+  });
+
+  // 偏好随登录态加载（登录后重载服务端偏好；登出由 logout 重置）。
+  // 修复：仅在挂载加载会在未登录时 401→默认，登录后不重载→主题丢失。
+  $effect(() => {
+    if (auth.user) void prefs.load();
   });
 
   // 认证门：未登录访问受保护路由 → 跳登录。
@@ -46,6 +51,7 @@
 
   async function logout() {
     await auth.logout();
+    prefs.reset();
     push('/login');
   }
 

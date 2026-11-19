@@ -298,7 +298,7 @@
     </div>
     <label class="css-label">
       {$_('settings.customCss')}
-      <textarea bind:value={customCss} onblur={applyCustomCss} rows="3"></textarea>
+      <textarea bind:value={customCss} onblur={applyCustomCss} rows="3" placeholder={'示例：.msg.assistant { border-radius: 16px; }\n:root { --gw-radius: 12px; }'}></textarea>
     </label>
   </div>
 

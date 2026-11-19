@@ -1403,5 +1403,29 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0240-m1d-p8-prefs-fix.md",
+    "title": "M1d P8 验收修复第三轮（主题偏好登录后丢失 + CSS 样例 + Markdown 延期）",
+    "date": "2026-11-20T02:40+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "preferences",
+      "theme",
+      "login",
+      "markdown",
+      "roadmap"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
