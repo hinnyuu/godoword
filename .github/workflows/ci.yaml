@@ -99,6 +99,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --no-audit --no-fund
+      - name: OpenAPI 生成类型 freshness（重生成比对 committed schema.d.ts）
+        run: |
+          npm run gen:api -w @godoword/core
+          git diff --exit-code web/core/src/api/schema.d.ts
       - name: core 类型检查 + 单测
         run: |
           npm run lint -w @godoword/core

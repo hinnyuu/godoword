@@ -120,8 +120,8 @@ CI `storage` job 跑 **workspace 级** `cargo test --workspace`（设 `TEST_PG_U
   （重生成比对，类比 history INDEX）；后端补全 schema（含 kernel-api REST-facing 类型 ToSchema），不手写重复类型。
 - **i18n**：UI 字符串 zh-CN 首发，**第一天外部化**（svelte-i18n），en 后置。
 - **测试分层**：core vitest 重测（域逻辑 + 脱敏 fixture round-trip 锚定线缆）+ 组件轻测 + **视觉/音质/交互人工感官验收**
-  （M1d 强制）；E2E 自动化后置 roadmap。CI `frontend` job：npm ci + core tsc + vitest + shell svelte-check + vite build
-  （openapi 生成类型 freshness P3 起）；重构建走 CI（本机 npm 慢）。
+  （M1d 强制）；E2E 自动化后置 roadmap。CI `frontend` job：OpenAPI 生成类型 freshness（gen + git diff --exit-code）+
+  npm ci + core tsc + vitest + shell svelte-check + vite build；重构建走 CI（本机 npm 慢）。
 - **音频风险前置**：AudioWorklet 引擎先 spike 跑通出声 + 词级高亮 + 移动浏览器，再铺 UI（承 M1a 风险前置原则）。
 
 ## 全量语义审查（制度化）

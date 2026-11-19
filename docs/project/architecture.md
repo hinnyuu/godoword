@@ -125,8 +125,10 @@ podman bind mount 源目录须自建（与 docker 不同，podman 不自动创�
 Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，history 0330）。npm workspaces 两层：
 
 - **web/core**（框架无关 TS，换框架存活）：音频引擎（PCM 解码/词级高亮/PcmQueue 纯逻辑 + AudioWorklet 处理器 +
-  AudioEngine 浏览器侧，vitest 重测纯逻辑）；P3 增 api（openapi-fetch + 生成类型）/sse（fetch + eventsource-parser）/
-  session（路径 trie/NFC/校验）/theme/i18n/prefs。领域逻辑不进组件。
+  AudioEngine 浏览器侧，vitest 重测纯逻辑）；**P3 已落** api（openapi-fetch + openapi-typescript 生成 schema.d.ts 提交 +
+  CI freshness diff，CSRF middleware + 401 钩子）/sse（fetch ReadableStream + eventsource-parser + SessionEvent 判别联合）/
+  session（路径 trie/NFC 镜像/校验）/theme（CSS 变量引擎 + 预设）/i18n（zh-CN catalog）/prefs（load/save 域函数）。
+  领域逻辑不进组件——shell 调 core 域函数（封装 api 细节，CSRF header param 等），不裸调 api。
 - **web/shell**（Svelte 5 runes 视图层）：路由/组件/主题 UI；组件轻测，视觉人工验收。
   主题引擎地基：语义 CSS 变量（:root + data-theme 明暗），用户自定义变量经 prefs 注入（跨设备）。
 - **web/modules/<id>**：教学模块前端（M2+）。

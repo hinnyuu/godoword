@@ -1251,5 +1251,31 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-19-2310-m1d-p3-web-core.md",
+    "title": "M1d P3 实现：web/core 领域核心接线（api/sse/session/theme/i18n/prefs）",
+    "date": "2026-11-19T23:10+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "web-core",
+      "openapi-fetch",
+      "openapi-typescript",
+      "sse",
+      "theme",
+      "i18n",
+      "prefs",
+      "freshness"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

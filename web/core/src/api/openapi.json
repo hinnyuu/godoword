@@ -1,0 +1,3024 @@
+{
+    "components": {
+        "schemas": {
+            "AudioFormat": {
+                "description": "\u97f3\u9891\u7f16\u7801\u3002",
+                "enum": [
+                    "pcm",
+                    "wav",
+                    "mp3",
+                    "opus"
+                ],
+                "type": "string"
+            },
+            "AudioMetaResp": {
+                "description": "\u97f3\u9891\u5143\u6570\u636e\u54cd\u5e94\uff08\u56de\u653e\u8bcd\u7ea7\u9ad8\u4eae\u51fa\u53e3\uff09\u3002",
+                "properties": {
+                    "format": {
+                        "$ref": "#/components/schemas/AudioFormat"
+                    },
+                    "sample_rate": {
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": "integer"
+                    },
+                    "words": {
+                        "items": {
+                            "$ref": "#/components/schemas/WordTimestamp"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "words",
+                    "format",
+                    "sample_rate"
+                ],
+                "type": "object"
+            },
+            "Binding": {
+                "description": "binding \u57df\u7c7b\u578b\uff1acapability/role \u4e3a lowercase \u5b57\u7b26\u4e32\uff08llm/tts/stt\uff1bdefault/summarizer/extractor/assessor\uff09\u3002",
+                "properties": {
+                    "capability": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "module_id": {
+                        "type": "string"
+                    },
+                    "params_json": {},
+                    "provider_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "user_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "user_id",
+                    "module_id",
+                    "capability",
+                    "role",
+                    "provider_id",
+                    "model",
+                    "params_json",
+                    "created_at",
+                    "updated_at"
+                ],
+                "type": "object"
+            },
+            "ChangePasswordReq": {
+                "description": "\u81ea\u52a9\u6539\u5bc6\u8bf7\u6c42\u3002",
+                "properties": {
+                    "new_password": {
+                        "type": "string"
+                    },
+                    "old_password": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "old_password",
+                    "new_password"
+                ],
+                "type": "object"
+            },
+            "ChatMessage": {
+                "description": "\u804a\u5929\u6d88\u606f\u3002",
+                "properties": {
+                    "content": {
+                        "type": "string"
+                    },
+                    "reasoning": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "role": {
+                        "type": "string"
+                    },
+                    "tool_call_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "tool_calls": {}
+                },
+                "required": [
+                    "role",
+                    "content"
+                ],
+                "type": "object"
+            },
+            "ConfigView": {
+                "description": "\u914d\u7f6e\u8131\u654f\u53ea\u8bfb\u89c6\u56fe\uff08REST \u5e8f\u5217\u5316\uff09\u3002",
+                "properties": {
+                    "data_dir": {
+                        "type": "string"
+                    },
+                    "database_backend": {
+                        "type": "string"
+                    },
+                    "listen": {
+                        "type": "string"
+                    },
+                    "provider_presets": {
+                        "items": {
+                            "$ref": "#/components/schemas/ProviderPreset"
+                        },
+                        "type": "array"
+                    },
+                    "registration_mode": {
+                        "$ref": "#/components/schemas/RegistrationMode"
+                    },
+                    "trusted_proxies": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "listen",
+                    "data_dir",
+                    "database_backend",
+                    "registration_mode",
+                    "provider_presets",
+                    "trusted_proxies"
+                ],
+                "type": "object"
+            },
+            "CreateBindingReq": {
+                "description": "\u65b0\u5efa binding \u8bf7\u6c42\u3002",
+                "properties": {
+                    "capability": {
+                        "type": "string"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "module_id": {
+                        "description": "\u6a21\u5757 id\uff1b\u7701\u7565\u6216 `*` \u8868\u5168\u6a21\u5757\u9ed8\u8ba4\u3002",
+                        "type": "string"
+                    },
+                    "params": {},
+                    "provider_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "role": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "capability",
+                    "role",
+                    "provider_id",
+                    "model"
+                ],
+                "type": "object"
+            },
+            "CreateFolderReq": {
+                "description": "\u65b0\u5efa\u6587\u4ef6\u5939\u8bf7\u6c42\u3002",
+                "properties": {
+                    "path": {
+                        "description": "\u865a\u62df\u8def\u5f84\uff08\u5982 /\u65e5\u8bed/\u4e94\u5341\u97f3\uff09\u3002",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "path"
+                ],
+                "type": "object"
+            },
+            "CreateProviderReq": {
+                "description": "\u65b0\u5efa provider \u8bf7\u6c42\u3002",
+                "properties": {
+                    "adapter_id": {
+                        "type": "string"
+                    },
+                    "base_url": {
+                        "type": "string"
+                    },
+                    "extra": {},
+                    "key": {
+                        "description": "\u7528\u6237 API key\uff08\u52a0\u5bc6\u5b58\u50a8\uff0c\u4e0d\u56de\u663e\uff09\u3002",
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "adapter_id",
+                    "label",
+                    "base_url",
+                    "key"
+                ],
+                "type": "object"
+            },
+            "CreateSessionReq": {
+                "description": "\u521b\u5efa\u4f1a\u8bdd\u8bf7\u6c42\uff08\u53ef\u9009\u914d\u7f6e\u65ad\u5f00\u884c\u4e3a\u4e0e\u8fd0\u884c\u65f6\u53c2\u6570\uff0c\u5ba1\u8ba1 C5\uff1acontinue \u516c\u5f00\u53ef\u914d\uff09\u3002",
+                "properties": {
+                    "on_disconnect": {
+                        "description": "\u65ad\u5f00\u884c\u4e3a cancel/continue\uff08\u9ed8\u8ba4 cancel\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "params": {
+                        "description": "\u8fd0\u884c\u65f6\u53c2\u6570\uff08\u9884\u7b97/\u6dd8\u6c70/\u5de5\u5177\u4e0a\u9650\uff0c\u9ed8\u8ba4\u503c\u89c1 SessionParams\uff1bJSON \u5bf9\u8c61\uff09\u3002"
+                    }
+                },
+                "type": "object"
+            },
+            "Folder": {
+                "description": "\u6587\u4ef6\u5939\u57df\u7c7b\u578b\uff08\u767b\u8bb0\u8868\u884c\uff09\u3002",
+                "properties": {
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "module_id": {
+                        "type": "string"
+                    },
+                    "path": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "user_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "user_id",
+                    "module_id",
+                    "path",
+                    "created_at",
+                    "updated_at"
+                ],
+                "type": "object"
+            },
+            "FolderListResp": {
+                "description": "\u6587\u4ef6\u5939\u5217\u8868\u54cd\u5e94\u3002",
+                "properties": {
+                    "folders": {
+                        "items": {
+                            "$ref": "#/components/schemas/Folder"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "folders"
+                ],
+                "type": "object"
+            },
+            "InviteReq": {
+                "description": "\u521b\u5efa\u9080\u8bf7\u7801\u8bf7\u6c42\u3002",
+                "properties": {
+                    "max_uses": {
+                        "format": "int32",
+                        "type": "integer"
+                    }
+                },
+                "type": "object"
+            },
+            "LoginReq": {
+                "description": "\u767b\u5f55\u8bf7\u6c42\u3002",
+                "properties": {
+                    "password": {
+                        "type": "string"
+                    },
+                    "username": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "username",
+                    "password"
+                ],
+                "type": "object"
+            },
+            "MessageReq": {
+                "description": "\u56de\u5408\u6d88\u606f\u8bf7\u6c42\u4f53\u3002",
+                "properties": {
+                    "text": {
+                        "description": "\u7528\u6237\u6d88\u606f\u6587\u672c\u3002",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "text"
+                ],
+                "type": "object"
+            },
+            "ModelInfo": {
+                "description": "\u6a21\u578b\u4fe1\u606f\uff08list_models \u8fd4\u56de\uff09\u3002",
+                "properties": {
+                    "display_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ],
+                "type": "object"
+            },
+            "MoveSessionReq": {
+                "description": "\u79fb\u52a8\u4f1a\u8bdd\u8bf7\u6c42\uff08path=null \u56de\u672a\u5206\u7c7b\uff09\u3002",
+                "properties": {
+                    "path": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "type": "object"
+            },
+            "Preferences": {
+                "description": "\u7528\u6237\u504f\u597d\uff08typed \u5df2\u77e5\u952e\uff1b\u672a\u77e5\u952e serde \u5ffd\u7565\uff0c\u6269\u5c55\u52a0\u5b57\u6bb5\u514d\u8fc1\u79fb\u2014\u2014JSON \u6574\u53d6\uff09\u3002",
+                "properties": {
+                    "auto_play": {
+                        "description": "\u97f3\u9891\u81ea\u52a8\u64ad\u653e\uff08\u9ed8\u8ba4\u624b\u52a8\uff09\u3002",
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    },
+                    "custom_css": {
+                        "description": "\u9ad8\u7ea7\u81ea\u5b9a\u4e49 CSS\uff08scoped \u6ce8\u5165\uff0c\u4e00\u952e\u91cd\u7f6e\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "density": {
+                        "description": "\u5bc6\u5ea6\uff08compact/comfortable\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "font_size": {
+                        "description": "\u5b57\u53f7\uff08px\uff09\u3002",
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": [
+                            "integer",
+                            "null"
+                        ]
+                    },
+                    "on_disconnect_default": {
+                        "description": "\u4f1a\u8bdd\u65ad\u5f00\u884c\u4e3a\u5168\u5c40\u9ed8\u8ba4\uff08cancel/continue\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "sidebar_collapsed": {
+                        "description": "\u4fa7\u680f\u6298\u53e0\u6001\u3002",
+                        "type": [
+                            "boolean",
+                            "null"
+                        ]
+                    },
+                    "theme": {
+                        "description": "\u4e3b\u9898\u9884\u8bbe id\uff08\u5982 light/dark/\u81ea\u5b9a\u4e49\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "theme_vars": {
+                        "description": "\u7528\u6237\u81ea\u5b9a\u4e49\u4e3b\u9898\u53d8\u91cf\uff08CSS \u53d8\u91cf\u540d\u2192\u503c\uff09\u3002"
+                    }
+                },
+                "type": "object"
+            },
+            "PreviewReq": {
+                "description": "\u97f3\u8272\u8bd5\u542c\u8bf7\u6c42\u3002",
+                "properties": {
+                    "model": {
+                        "type": "string"
+                    },
+                    "text": {
+                        "description": "\u53ef\u9009\u81ea\u5b9a\u4e49\u6587\u672c\uff08\u7f3a\u7701\u56fa\u5b9a\u77ed\u6587\u672c\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "voice": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "model",
+                    "voice"
+                ],
+                "type": "object"
+            },
+            "PreviewResp": {
+                "description": "\u97f3\u8272\u8bd5\u542c\u54cd\u5e94\uff08\u5408\u6210\u97f3\u9891 id\uff0c\u7ecf GET /audio/{id} + /meta \u64ad\u653e/\u9ad8\u4eae\uff09\u3002",
+                "properties": {
+                    "audio_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "audio_id"
+                ],
+                "type": "object"
+            },
+            "Provider": {
+                "description": "provider \u57df\u7c7b\u578b\uff08\u4e0d\u542b key\uff09\uff1a\u65e2\u662f DB \u884c\u4e5f\u662f REST \u5e8f\u5217\u5316\u4f53\u3002",
+                "properties": {
+                    "adapter_id": {
+                        "type": "string"
+                    },
+                    "base_url": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "extra_json": {},
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "user_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "user_id",
+                    "adapter_id",
+                    "label",
+                    "base_url",
+                    "created_at",
+                    "updated_at"
+                ],
+                "type": "object"
+            },
+            "ProviderPreset": {
+                "description": "provider \u9884\u8bbe\uff08\u914d\u7f6e\u6587\u4ef6\u5b9a\u4e49\uff0c\u4e0d\u542b key\uff09\u3002",
+                "properties": {
+                    "adapter_id": {
+                        "description": "\u9002\u914d\u5668 id\uff08\u5982 llm-openai / tts-qwen-audio\uff09\u3002",
+                        "type": "string"
+                    },
+                    "base_url": {
+                        "description": "\u7aef\u70b9 base_url\u3002",
+                        "type": "string"
+                    },
+                    "capability": {
+                        "description": "\u80fd\u529b\u63d0\u793a\uff08llm/tts\uff0c\u53ef\u9009\uff09\u3002",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "description": "\u9884\u8bbe\u6807\u8bc6\u3002",
+                        "type": "string"
+                    },
+                    "label": {
+                        "description": "\u663e\u793a\u540d\u3002",
+                        "type": "string"
+                    },
+                    "suggested_models": {
+                        "description": "\u5efa\u8bae\u6a21\u578b\u5217\u8868\u3002",
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "id",
+                    "adapter_id",
+                    "label",
+                    "base_url"
+                ],
+                "type": "object"
+            },
+            "RegisterReq": {
+                "description": "\u6ce8\u518c\u8bf7\u6c42\u3002",
+                "properties": {
+                    "display_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "invite_code": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "password": {
+                        "type": "string"
+                    },
+                    "username": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "username",
+                    "password"
+                ],
+                "type": "object"
+            },
+            "RegistrationMode": {
+                "description": "\u6ce8\u518c\u6a21\u5f0f\uff08\u9ed8\u8ba4 invite\uff0c\u9996\u7528\u6237\u4f8b\u5916\u6210\u7ba1\u7406\u5458\uff1bM1c \u8ba4\u8bc1\u843d\u5730\uff09\u3002",
+                "enum": [
+                    "invite",
+                    "open",
+                    "disabled"
+                ],
+                "type": "string"
+            },
+            "RenameFolderReq": {
+                "description": "\u6539\u540d/\u79fb\u52a8\u6587\u4ef6\u5939\u8bf7\u6c42\u3002",
+                "properties": {
+                    "path": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "path"
+                ],
+                "type": "object"
+            },
+            "ResetPasswordReq": {
+                "description": "\u7528\u6237\u6301\u4ee4\u724c\u91cd\u7f6e\u5bc6\u7801\u8bf7\u6c42\u3002",
+                "properties": {
+                    "new_password": {
+                        "type": "string"
+                    },
+                    "token": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "token",
+                    "new_password"
+                ],
+                "type": "object"
+            },
+            "ResetReq": {
+                "description": "\u7ba1\u7406\u5458\u53d1\u8d77\u5bc6\u7801\u91cd\u7f6e\u8bf7\u6c42\uff08\u751f\u6210\u91cd\u7f6e\u4ee4\u724c\uff0c\u5ba1\u8ba1 C8 token \u5316\uff09\u3002",
+                "properties": {
+                    "user_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "user_id"
+                ],
+                "type": "object"
+            },
+            "SessionDetailResp": {
+                "description": "\u4f1a\u8bdd\u8f6c\u5f55\u54cd\u5e94\uff08\u542b\u865a\u62df\u8def\u5f84\uff09\u3002",
+                "properties": {
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "messages": {
+                        "items": {
+                            "$ref": "#/components/schemas/ChatMessage"
+                        },
+                        "type": "array"
+                    },
+                    "path": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "messages"
+                ],
+                "type": "object"
+            },
+            "SessionListItem": {
+                "description": "\u4f1a\u8bdd\u5217\u8868\u9879\uff08\u5143\u6570\u636e\uff09\u3002",
+                "properties": {
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "last_active": {
+                        "format": "date-time",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "message_count": {
+                        "format": "int64",
+                        "type": "integer"
+                    },
+                    "module_id": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "path": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "title": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "title",
+                    "created_at",
+                    "message_count"
+                ],
+                "type": "object"
+            },
+            "SessionListResp": {
+                "description": "\u4f1a\u8bdd\u5217\u8868\u54cd\u5e94\u3002",
+                "properties": {
+                    "sessions": {
+                        "items": {
+                            "$ref": "#/components/schemas/SessionListItem"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "sessions"
+                ],
+                "type": "object"
+            },
+            "StatusReq": {
+                "description": "\u8bbe\u7528\u6237\u72b6\u6001\u8bf7\u6c42\u3002",
+                "properties": {
+                    "status": {
+                        "description": "active / disabled\u3002",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ],
+                "type": "object"
+            },
+            "UpdateBindingReq": {
+                "description": "\u66f4\u65b0 binding \u8bf7\u6c42\uff08provider/model/params\uff09\u3002",
+                "properties": {
+                    "model": {
+                        "type": "string"
+                    },
+                    "params": {},
+                    "provider_id": {
+                        "format": "uuid",
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "provider_id",
+                    "model"
+                ],
+                "type": "object"
+            },
+            "UpdateMeReq": {
+                "description": "\u7f16\u8f91\u663e\u793a\u540d\u8bf7\u6c42\u3002",
+                "properties": {
+                    "display_name": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "display_name"
+                ],
+                "type": "object"
+            },
+            "UpdateProviderReq": {
+                "description": "\u66f4\u65b0 provider \u8bf7\u6c42\uff08key \u4e3a None \u65f6\u4fdd\u7559\u539f key\uff09\u3002",
+                "properties": {
+                    "base_url": {
+                        "type": "string"
+                    },
+                    "extra": {},
+                    "key": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "label",
+                    "base_url"
+                ],
+                "type": "object"
+            },
+            "UserInfo": {
+                "description": "\u7528\u6237\u4fe1\u606f\uff08\u7ba1\u7406\u5217\u8868\u7528\uff0c\u4e0d\u542b\u5bc6\u7801\uff09\u3002",
+                "properties": {
+                    "created_at": {
+                        "format": "date-time",
+                        "type": "string"
+                    },
+                    "display_name": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "format": "uuid",
+                        "type": "string"
+                    },
+                    "is_admin": {
+                        "type": "boolean"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "username": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    }
+                },
+                "required": [
+                    "id",
+                    "is_admin",
+                    "status",
+                    "created_at"
+                ],
+                "type": "object"
+            },
+            "VoiceInfo": {
+                "description": "\u97f3\u8272\u4fe1\u606f\uff08list_voices \u8fd4\u56de\uff09\u3002",
+                "properties": {
+                    "gender": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "instruction": {
+                        "type": "boolean"
+                    },
+                    "languages": {
+                        "items": {
+                            "type": "string"
+                        },
+                        "type": "array"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "ssml": {
+                        "type": "boolean"
+                    },
+                    "timestamps": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "languages",
+                    "instruction",
+                    "ssml",
+                    "timestamps"
+                ],
+                "type": "object"
+            },
+            "WordTimestamp": {
+                "description": "\u8bcd\u7ea7\u65f6\u95f4\u6233\uff08\u6beb\u79d2\uff09\u3002",
+                "properties": {
+                    "begin_index": {
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": "integer"
+                    },
+                    "begin_time": {
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": "integer"
+                    },
+                    "end_index": {
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": "integer"
+                    },
+                    "end_time": {
+                        "format": "int32",
+                        "minimum": 0,
+                        "type": "integer"
+                    },
+                    "text": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "text",
+                    "begin_index",
+                    "end_index",
+                    "begin_time",
+                    "end_time"
+                ],
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "cookieAuth": {
+                "in": "cookie",
+                "name": "godoword_session",
+                "type": "apiKey"
+            }
+        }
+    },
+    "info": {
+        "description": "\u79c1\u6709\u90e8\u7f72\u5916\u8bed\u5b66\u4e60\u670d\u52a1 REST API\uff08M1c\uff09\u3002\u7528\u6237\u7ea7\u7aef\u70b9\u7ecf cookie \u4f1a\u8bdd\u8ba4\u8bc1\uff08auth-local\uff0c\u672a\u8ba4\u8bc1 401\uff09\uff1b\u53d8\u66f4\u8bf7\u6c42\u987b\u5e26 CSRF \u81ea\u5b9a\u4e49\u5934 X-Requested-With\uff08\u7f3a\u5219 403\uff09\u3002SSE /messages path \u5165 OpenAPI\uff0cSessionEvent \u4e8b\u4ef6 schema \u5355\u72ec\u7ef4\u62a4\u3002",
+        "license": {
+            "identifier": "AGPL-3.0-only",
+            "name": "AGPL-3.0-only"
+        },
+        "title": "godoword API",
+        "version": "0.0.0"
+    },
+    "openapi": "3.1.0",
+    "paths": {
+        "/api/v1/admin/invites": {
+            "post": {
+                "operationId": "admin_invite",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/InviteReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u7ba1\u7406\u5458\u521b\u5efa\u9080\u8bf7\u7801\u3002",
+                "tags": [
+                    "admin"
+                ]
+            }
+        },
+        "/api/v1/admin/reset": {
+            "post": {
+                "operationId": "admin_reset",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ResetReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u7ba1\u7406\u5458\u91cd\u7f6e\u7528\u6237\u5bc6\u7801\u3002",
+                "tags": [
+                    "admin"
+                ]
+            }
+        },
+        "/api/v1/admin/users": {
+            "get": {
+                "operationId": "admin_users",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/UserInfo"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u7ba1\u7406\u5458\u5217\u51fa\u7528\u6237\u3002",
+                "tags": [
+                    "admin"
+                ]
+            }
+        },
+        "/api/v1/admin/users/{id}/status": {
+            "post": {
+                "operationId": "admin_set_status",
+                "parameters": [
+                    {
+                        "description": "\u7528\u6237 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/StatusReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u7ba1\u7406\u5458\u8bbe\u7528\u6237\u72b6\u6001\uff08\u7981\u7528\u64a4\u9500\u4f1a\u8bdd\uff1b\u9632\u81ea\u7981/\u9632\u7981\u6700\u540e\u4e00\u4e2a\u7ba1\u7406\u5458\uff0c\u5ba1\u8ba1 C3\uff09\u3002",
+                "tags": [
+                    "admin"
+                ]
+            }
+        },
+        "/api/v1/audio/{id}": {
+            "get": {
+                "operationId": "get_audio",
+                "parameters": [
+                    {
+                        "description": "\u97f3\u9891 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/octet-stream": {}
+                        },
+                        "description": "\u88f8 PCM"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u56de\u653e\u7f13\u5b58\u97f3\u9891\uff08\u88f8 PCM\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/audio/{id}/meta": {
+            "get": {
+                "operationId": "audio_meta",
+                "parameters": [
+                    {
+                        "description": "\u97f3\u9891 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AudioMetaResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u56de\u653e\u97f3\u9891\u5143\u6570\u636e\uff08\u8bcd\u7ea7\u65f6\u95f4\u6233 + \u7f16\u7801 + \u91c7\u6837\u7387\uff1b\u5f52\u5c5e\u6821\u9a8c\uff0c\u8d8a\u6743/\u7f3a\u5931 404\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/auth/change-password": {
+            "post": {
+                "operationId": "change_password",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ChangePasswordReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u81ea\u52a9\u6539\u5bc6\uff08\u9a8c\u65e7\u5bc6\u2192\u7edf\u4e00\u7b56\u7565\u2192\u64a4\u9500\u5176\u4ed6\u4f1a\u8bdd\u4fdd\u7559\u5f53\u524d\uff09\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/auth/login": {
+            "post": {
+                "operationId": "login",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserInfo"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    },
+                    "429": {
+                        "description": ""
+                    }
+                },
+                "security": [],
+                "summary": "\u767b\u5f55\uff08\u9a8c\u8eab\u6210\u529f\u53d1\u4f1a\u8bdd cookie\uff09\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/auth/logout": {
+            "post": {
+                "operationId": "logout",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [],
+                "summary": "\u767b\u51fa\uff08\u5220\u4f1a\u8bdd\u4ee4\u724c + \u6e05 cookie\uff09\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/auth/me": {
+            "get": {
+                "operationId": "me",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserInfo"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5f53\u524d\u7528\u6237\u4fe1\u606f\u3002",
+                "tags": [
+                    "auth"
+                ]
+            },
+            "put": {
+                "operationId": "update_me",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateMeReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserInfo"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u7f16\u8f91\u5f53\u524d\u7528\u6237\u663e\u793a\u540d\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "operationId": "register",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/UserInfo"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": ""
+                    },
+                    "429": {
+                        "description": ""
+                    }
+                },
+                "security": [],
+                "summary": "\u6ce8\u518c\uff08\u9996\u7528\u6237\u6210\u7ba1\u7406\u5458\uff1b\u6ce8\u518c\u6a21\u5f0f\u7531\u914d\u7f6e\uff1b\u6210\u529f\u53d1\u4f1a\u8bdd cookie\uff09\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/auth/reset-password": {
+            "post": {
+                "operationId": "reset_password",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ResetPasswordReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "429": {
+                        "description": ""
+                    }
+                },
+                "security": [],
+                "summary": "\u7528\u6237\u6301\u91cd\u7f6e\u4ee4\u724c\u8bbe\u65b0\u5bc6\u7801\uff08\u5355\u6b21/\u8fc7\u671f\u6821\u9a8c\uff1b\u65e0\u9700\u767b\u5f55\uff0c\u4ee4\u724c\u5373\u51ed\u636e\uff1bIP \u9650\u6d41\u9632\u653e\u5927\uff0c\u5ba1\u8ba1 N4\uff09\u3002",
+                "tags": [
+                    "auth"
+                ]
+            }
+        },
+        "/api/v1/bindings": {
+            "get": {
+                "operationId": "list_bindings",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/Binding"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5217\u51fa\u7528\u6237 bindings\u3002",
+                "tags": [
+                    "bindings"
+                ]
+            },
+            "post": {
+                "operationId": "create_binding",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateBindingReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Binding"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "\u8bf7\u6c42\u65e0\u6548\u6216 UNIQUE \u51b2\u7a81"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u65b0\u5efa binding\u3002",
+                "tags": [
+                    "bindings"
+                ]
+            }
+        },
+        "/api/v1/bindings/{id}": {
+            "delete": {
+                "operationId": "delete_binding",
+                "parameters": [
+                    {
+                        "description": "binding id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5220\u9664 binding\u3002",
+                "tags": [
+                    "bindings"
+                ]
+            },
+            "get": {
+                "operationId": "get_binding",
+                "parameters": [
+                    {
+                        "description": "binding id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Binding"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u53d6\u5355\u4e2a binding\u3002",
+                "tags": [
+                    "bindings"
+                ]
+            },
+            "put": {
+                "operationId": "update_binding",
+                "parameters": [
+                    {
+                        "description": "binding id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateBindingReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Binding"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u66f4\u65b0 binding\u3002",
+                "tags": [
+                    "bindings"
+                ]
+            }
+        },
+        "/api/v1/config": {
+            "get": {
+                "operationId": "config",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConfigView"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "security": [],
+                "summary": "\u914d\u7f6e\u8131\u654f\u53ea\u8bfb\u89c6\u56fe\u3002",
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/v1/folders": {
+            "get": {
+                "operationId": "list_folders",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "module",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FolderListResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5217\u51fa\u6587\u4ef6\u5939\u3002",
+                "tags": [
+                    "folders"
+                ]
+            },
+            "post": {
+                "operationId": "create_folder",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "module",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateFolderReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Folder"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u65b0\u5efa\u6587\u4ef6\u5939\u3002",
+                "tags": [
+                    "folders"
+                ]
+            }
+        },
+        "/api/v1/folders/{id}": {
+            "delete": {
+                "operationId": "delete_folder",
+                "parameters": [
+                    {
+                        "description": "\u6587\u4ef6\u5939 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5220\u6587\u4ef6\u5939\uff08\u5b50\u6811\u4e0a\u79fb\u4e00\u5c42\uff0c\u7edd\u4e0d\u7ea7\u8054\u5220\u4f1a\u8bdd\uff09\u3002",
+                "tags": [
+                    "folders"
+                ]
+            },
+            "put": {
+                "operationId": "rename_folder",
+                "parameters": [
+                    {
+                        "description": "\u6587\u4ef6\u5939 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RenameFolderReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Folder"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u6539\u540d/\u79fb\u52a8\u6587\u4ef6\u5939\uff08\u5b50\u6811\u524d\u7f00\u6279\u91cf\u6539\u5199\uff09\u3002",
+                "tags": [
+                    "folders"
+                ]
+            }
+        },
+        "/api/v1/meta": {
+            "get": {
+                "operationId": "meta",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    }
+                },
+                "security": [],
+                "summary": "\u670d\u52a1\u5143\u4fe1\u606f\u3002",
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/v1/openapi.json": {
+            "get": {
+                "operationId": "openapi_json",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "description": "OpenAPI \u6587\u6863"
+                    }
+                },
+                "security": [],
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/api/v1/preferences": {
+            "get": {
+                "operationId": "get_preferences",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preferences"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u8bfb\u7528\u6237\u504f\u597d\uff08\u65e0\u5219\u9ed8\u8ba4\uff09\u3002",
+                "tags": [
+                    "preferences"
+                ]
+            },
+            "put": {
+                "operationId": "put_preferences",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Preferences"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Preferences"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5199\u7528\u6237\u504f\u597d\uff08last-write-wins\uff09\u3002",
+                "tags": [
+                    "preferences"
+                ]
+            }
+        },
+        "/api/v1/providers": {
+            "get": {
+                "operationId": "list_providers",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/Provider"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "provider \u5217\u8868"
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5217\u51fa\u7528\u6237 providers\u3002",
+                "tags": [
+                    "providers"
+                ]
+            },
+            "post": {
+                "operationId": "create_provider",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateProviderReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Provider"
+                                }
+                            }
+                        },
+                        "description": "\u5df2\u521b\u5efa"
+                    },
+                    "400": {
+                        "description": "\u8bf7\u6c42\u65e0\u6548"
+                    },
+                    "401": {
+                        "description": "\u672a\u8ba4\u8bc1"
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u65b0\u5efa provider\u3002",
+                "tags": [
+                    "providers"
+                ]
+            }
+        },
+        "/api/v1/providers/{id}": {
+            "delete": {
+                "operationId": "delete_provider",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "\u5df2\u5220\u9664"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5220\u9664 provider\uff08\u7ea7\u8054\u5220\u5176 bindings\uff09\u3002",
+                "tags": [
+                    "providers"
+                ]
+            },
+            "get": {
+                "operationId": "get_provider",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Provider"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u53d6\u5355\u4e2a provider\u3002",
+                "tags": [
+                    "providers"
+                ]
+            },
+            "put": {
+                "operationId": "update_provider",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateProviderReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Provider"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u66f4\u65b0 provider\u3002",
+                "tags": [
+                    "providers"
+                ]
+            }
+        },
+        "/api/v1/providers/{id}/models": {
+            "get": {
+                "operationId": "provider_models",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/ModelInfo"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "\u6a21\u578b\u5217\u8868"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    },
+                    "502": {
+                        "description": "\u4e0a\u6e38\u9519\u8bef"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u6d4b\u8bd5\u7aef\u70b9\uff1a\u62c9\u53d6 provider \u53ef\u7528\u6a21\u578b\uff08\u8bbe\u7f6e\u9875\u201c\u6d4b\u8bd5\u8fde\u63a5\u201d\uff09\u3002",
+                "tags": [
+                    "providers"
+                ]
+            }
+        },
+        "/api/v1/providers/{id}/preview": {
+            "post": {
+                "operationId": "provider_preview",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PreviewReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PreviewResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    },
+                    "502": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u97f3\u8272\u8bd5\u542c\uff08\u8bbe\u7f6e\u9875\u9009\u97f3\u8272\u542c\u4e00\u53e5\uff09\uff1a\u8d70\u7528\u6237 key \u5408\u6210 + \u7f13\u5b58 + call_log \u8ba1\u91cf\uff08\u5ba1\u8ba1 C9\uff09\u3002",
+                "tags": [
+                    "providers"
+                ]
+            }
+        },
+        "/api/v1/providers/{id}/voices": {
+            "get": {
+                "operationId": "provider_voices",
+                "parameters": [
+                    {
+                        "description": "provider id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "\u6a21\u578b id\uff08\u7701\u7565\u53d6\u9002\u914d\u5668\u9996\u4e2a\uff09",
+                        "in": "query",
+                        "name": "model",
+                        "required": false,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "items": {
+                                        "$ref": "#/components/schemas/VoiceInfo"
+                                    },
+                                    "type": "array"
+                                }
+                            }
+                        },
+                        "description": "\u97f3\u8272\u5217\u8868"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    },
+                    "502": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u6d4b\u8bd5\u7aef\u70b9\uff1a\u62c9\u53d6 provider \u97f3\u8272\uff08\u8bbe\u7f6e\u9875\u201c\u6d4b\u8bd5\u8fde\u63a5\u201d\uff09\u3002",
+                "tags": [
+                    "providers"
+                ]
+            }
+        },
+        "/api/v1/sessions": {
+            "get": {
+                "operationId": "list_sessions",
+                "parameters": [
+                    {
+                        "description": "\u6587\u4ef6\u5939\u8def\u5f84\u5b50\u6811\u8fc7\u6ee4\uff08\u5982 /\u65e5\u8bed/\u4e94\u5341\u97f3\uff09\u3002",
+                        "in": "path",
+                        "name": "folder",
+                        "required": true,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    },
+                    {
+                        "description": "\u6a21\u5757\u547d\u540d\u7a7a\u95f4\u8fc7\u6ee4\uff08default=\u65e0\u6a21\u5757\uff09\u3002",
+                        "in": "path",
+                        "name": "module",
+                        "required": true,
+                        "schema": {
+                            "type": [
+                                "string",
+                                "null"
+                            ]
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionListResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5217\u51fa\u7528\u6237\u4f1a\u8bdd\uff08\u5143\u6570\u636e\uff1atitle/created_at/last_active/message_count/path\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            },
+            "post": {
+                "operationId": "create_session",
+                "parameters": [
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateSessionReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u521b\u5efa\u4f1a\u8bdd\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/sessions/{id}": {
+            "delete": {
+                "operationId": "delete_session",
+                "parameters": [
+                    {
+                        "description": "\u4f1a\u8bdd id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u5220\u9664\u4f1a\u8bdd\uff08\u542b\u8f6c\u5f55\uff0cSessionEnded outbox \u540c\u4e8b\u52a1\u539f\u5b50\uff0c\u5ba1\u8ba1 R6\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            },
+            "get": {
+                "operationId": "get_session",
+                "parameters": [
+                    {
+                        "description": "\u4f1a\u8bdd id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionDetailResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u8bfb\u4f1a\u8bdd\u8f6c\u5f55\uff08\u542b path\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/sessions/{id}/cancel": {
+            "post": {
+                "operationId": "cancel",
+                "parameters": [
+                    {
+                        "description": "\u4f1a\u8bdd id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u663e\u5f0f\u53d6\u6d88\u6d3b\u8dc3\u56de\u5408\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/sessions/{id}/messages": {
+            "post": {
+                "operationId": "messages",
+                "parameters": [
+                    {
+                        "description": "\u4f1a\u8bdd id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MessageReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "text/event-stream": {}
+                        },
+                        "description": "SessionEvent SSE \u6d41"
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u53d1\u6d88\u606f \u2192 \u8be5\u56de\u5408 SSE \u4e8b\u4ef6\u6d41\uff08SSE \u4e0d\u5165 OpenAPI schema\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/api/v1/sessions/{id}/path": {
+            "put": {
+                "operationId": "move_session_path",
+                "parameters": [
+                    {
+                        "description": "\u4f1a\u8bdd id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MoveSessionReq"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                    },
+                    "404": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "\u79fb\u52a8\u4f1a\u8bdd\u5230\u6587\u4ef6\u5939\u8def\u5f84\uff08\u81ea\u52a8\u6ce8\u518c\u76ee\u6807\u94fe\uff1b\u5f52\u5c5e\u6821\u9a8c\uff09\u3002",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
+        "/healthz": {
+            "get": {
+                "operationId": "healthz",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": "\u5b58\u6d3b"
+                    }
+                },
+                "security": [],
+                "summary": "\u5b58\u6d3b\u63a2\u9488\u3002",
+                "tags": [
+                    "system"
+                ]
+            }
+        },
+        "/readyz": {
+            "get": {
+                "operationId": "readyz",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "503": {
+                        "description": "\u5b58\u50a8\u672a\u5c31\u7eea"
+                    }
+                },
+                "security": [],
+                "summary": "\u5c31\u7eea\u63a2\u9488\uff1a\u5b58\u50a8\u8fde\u901a\uff08SELECT 1\uff09\u624d\u7b97\u5c31\u7eea\u3002",
+                "tags": [
+                    "system"
+                ]
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "\u5b58\u6d3b/\u5c31\u7eea/\u5143\u4fe1\u606f/\u914d\u7f6e",
+            "name": "system"
+        },
+        {
+            "description": "\u6ce8\u518c/\u767b\u5f55/\u767b\u51fa/\u5f53\u524d\u7528\u6237/\u81ea\u52a9\u6539\u5bc6",
+            "name": "auth"
+        },
+        {
+            "description": "\u7ba1\u7406\u5458\u91cd\u7f6e/\u9080\u8bf7\u7801/\u7528\u6237\u7ba1\u7406",
+            "name": "admin"
+        },
+        {
+            "description": "\u4f1a\u8bdd\u4e0e\u56de\u5408\uff08SSE\uff09+ \u865a\u62df\u8def\u5f84\u79fb\u52a8",
+            "name": "sessions"
+        },
+        {
+            "description": "\u4f1a\u8bdd\u6587\u4ef6\u5939\uff08\u865a\u62df\u8def\u5f84\u76ee\u5f55\u6811\uff09",
+            "name": "folders"
+        },
+        {
+            "description": "\u7528\u6237\u504f\u597d\uff08\u8de8\u8bbe\u5907\u968f\u8d26\u6237\uff09",
+            "name": "preferences"
+        },
+        {
+            "description": "BYOK provider \u7ba1\u7406 + \u6d4b\u8bd5\u8fde\u63a5 + \u97f3\u8272\u8bd5\u542c",
+            "name": "providers"
+        },
+        {
+            "description": "\u6a21\u5757\u2192provider \u7ed1\u5b9a",
+            "name": "bindings"
+        }
+    ]
+}

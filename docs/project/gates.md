@@ -28,8 +28,8 @@
 8. **gitleaks**：密钥扫描；**下载二进制经 sha256 校验和验证后执行**；豁免收窄为占位符与
    CI 测试凭据 regex，保留 docs/wiki/history 目录扫描。
 9. **依赖许可证**：cargo-deny 白名单（MIT/Apache-2.0/BSD/ISC 等），其余个案审。
-10. **Rust**：fmt / clippy / check / test。**前端**（M1d 起 frontend job）：core tsc 类型检查 + vitest 域逻辑单测 +
-    shell svelte-check + vite build；openapi 生成类型 freshness（P3 起）。
+10. **Rust**：fmt / clippy / check / test。**前端**（M1d 起 frontend job）：OpenAPI 生成类型 freshness（gen + git diff --exit-code schema.d.ts）+
+    core tsc 类型检查 + vitest 域逻辑单测 + shell svelte-check + vite build。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
 12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
     （healthz/readyz/meta/config/openapi/静态、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
