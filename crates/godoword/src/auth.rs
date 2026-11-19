@@ -383,20 +383,26 @@ pub async fn admin_reset(
     {
         return Err(StatusCode::NOT_FOUND);
     }
-    // token 化（审计 C8）：管理员生成重置令牌，用户持令牌自行设新密码。
+    // token 化（审计 C8）：管理员生成重置令牌，用户持令牌自行设新密码。无本地凭据账户拒绝（N4 → 400）。
     let token = auth_local::create_reset_token(&st.store, target)
         .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(auth_err_status)?;
     Ok(Json(json!({ "reset_token": token })))
 }
 
-/// 用户持重置令牌设新密码（单次/过期校验；无需登录，令牌即凭据）。
+/// 用户持重置令牌设新密码（单次/过期校验；无需登录，令牌即凭据；IP 限流防放大，审计 N4）。
 #[utoipa::path(post, path = "/api/v1/auth/reset-password", request_body = ResetPasswordReq, tag = "auth",
-    responses((status = 200, body = Value), (status = 400)))]
+    responses((status = 200, body = Value), (status = 400), (status = 429)))]
 pub async fn reset_password(
     State(st): State<Arc<AppState>>,
+    ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
+    headers: HeaderMap,
     Json(req): Json<ResetPasswordReq>,
 ) -> Result<Json<Value>, StatusCode> {
+    let ip = client_ip(addr.ip(), &headers, &st.trusted_proxies);
+    if !st.rate_limiter.check(&format!("reset-ip:{ip}")) {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
     let ok = auth_local::reset_with_token(&st.store, &req.token, &req.new_password)
         .await
         .map_err(auth_err_status)?;

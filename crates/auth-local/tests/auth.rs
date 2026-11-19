@@ -280,6 +280,56 @@ async fn run_test(store: Arc<Store>) {
         "{b} 无效令牌拒绝"
     );
 
+    // N4.3：无本地凭据账户拒绝签发重置令牌。
+    let nocred = register(&store, "nocred-issue", "pass-12345", None, None, false)
+        .await
+        .unwrap();
+    kernel_api::execute_both!(
+        &*store,
+        "DELETE FROM local_credentials WHERE user_id = $1",
+        nocred.0
+    )
+    .unwrap();
+    assert!(
+        create_reset_token(&store, nocred).await.is_err(),
+        "{b} N4.3：无凭据账户拒绝签发"
+    );
+
+    // N4.2：改密 0 行回滚令牌认领（不消费、不假成功）。
+    let u0 = register(&store, "nocred-reset", "pass-12345", None, None, false)
+        .await
+        .unwrap();
+    let tok0 = create_reset_token(&store, u0).await.unwrap();
+    kernel_api::execute_both!(
+        &*store,
+        "DELETE FROM local_credentials WHERE user_id = $1",
+        u0.0
+    )
+    .unwrap();
+    assert!(
+        reset_with_token(&store, &tok0, "newpass-12345")
+            .await
+            .is_err(),
+        "{b} N4.2：无凭据改密失败"
+    );
+    // 令牌未消费：恢复凭据后重试成功。
+    let h0 = hash_password("restore-pass-123").unwrap();
+    kernel_api::execute_both!(
+        &*store,
+        "INSERT INTO local_credentials (user_id, password_hash, created_at, updated_at) VALUES ($1,$2,$3,$4)",
+        u0.0,
+        h0,
+        Utc::now(),
+        Utc::now()
+    )
+    .unwrap();
+    assert!(
+        reset_with_token(&store, &tok0, "newpass-12345")
+            .await
+            .unwrap(),
+        "{b} N4.2：令牌未消费可重试"
+    );
+
     // 用户列表。
     let users = list_users(&store).await.unwrap();
     assert!(users.len() >= 3, "{b} 用户列表");
@@ -289,7 +339,7 @@ async fn run_test(store: Arc<Store>) {
     );
 
     // 清理（级联删 credentials/sessions）。
-    for u in [admin, user1, user4, case_user] {
+    for u in [admin, user1, user4, case_user, nocred, u0] {
         kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", u.0).unwrap();
     }
     kernel_api::execute_both!(

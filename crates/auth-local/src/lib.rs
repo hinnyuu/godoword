@@ -657,8 +657,20 @@ pub async fn admin_reset_password(
 }
 
 /// 管理员生成密码重置令牌（tokens 表 purpose=password_reset，单次，1h 过期；审计 C8 token 化）。
-/// 管理员不直接知晓用户新密码——用户持令牌自行重置。
+/// 管理员不直接知晓用户新密码——用户持令牌自行重置。**无本地凭据账户拒绝签发**（审计 N4）。
 pub async fn create_reset_token(store: &Store, target: UserId) -> Result<String, AuthError> {
+    let cred: Option<(Uuid,)> = fetch_optional_both!(
+        store,
+        "SELECT user_id FROM local_credentials WHERE user_id = $1",
+        (Uuid,),
+        target.0
+    )
+    .map_err(internal)?;
+    if cred.is_none() {
+        return Err(AuthError::RegistrationRestricted(
+            "该账户无本地密码，不可重置".to_string(),
+        ));
+    }
     let token = generate_token();
     let now = Utc::now();
     let expires = now + Duration::hours(1);
@@ -687,9 +699,23 @@ pub async fn reset_with_token(
     new_password: &str,
 ) -> Result<bool, AuthError> {
     validate_password(new_password)?;
-    let hash = hash_password(new_password)?;
     let now = Utc::now();
     let th = token_hash(token);
+    // 廉价预查询（审计 N4.1）：无效令牌直接拒绝，**不触发 Argon2**（公开端点防 CPU/内存放大）。
+    // 预查询不替代原子认领——并发单次性仍由事务内条件 UPDATE 保证。
+    let valid: Option<(Uuid,)> = fetch_optional_both!(
+        store,
+        "SELECT id FROM tokens WHERE token_hash = $1 AND purpose = 'password_reset'
+         AND used_at IS NULL AND expires_at > $2",
+        (Uuid,),
+        &th,
+        now
+    )
+    .map_err(internal)?;
+    if valid.is_none() {
+        return Ok(false);
+    }
+    let hash = hash_password(new_password)?;
     match store {
         Store::Sqlite(pool) => {
             let mut tx = pool.begin().await.map_err(internal)?;
@@ -713,7 +739,7 @@ pub async fn reset_with_token(
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(internal)?;
-            sqlx::query(
+            let n = sqlx::query(
                 "UPDATE local_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?",
             )
             .bind(&hash)
@@ -721,7 +747,14 @@ pub async fn reset_with_token(
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(internal)?;
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                // 无本地凭据（审计 N4.2）：回滚令牌认领，重置失败（不消费令牌、不假成功）。
+                return Err(AuthError::Internal(
+                    "账户无本地凭据，密码重置失败".to_string(),
+                ));
+            }
             sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
                 .bind(user_id)
                 .execute(&mut *tx)
@@ -752,7 +785,7 @@ pub async fn reset_with_token(
                     .fetch_one(&mut *tx)
                     .await
                     .map_err(internal)?;
-            sqlx::query(
+            let n = sqlx::query(
                 "UPDATE local_credentials SET password_hash = $1, updated_at = $2 WHERE user_id = $3",
             )
             .bind(&hash)
@@ -760,7 +793,13 @@ pub async fn reset_with_token(
             .bind(user_id)
             .execute(&mut *tx)
             .await
-            .map_err(internal)?;
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                return Err(AuthError::Internal(
+                    "账户无本地凭据，密码重置失败".to_string(),
+                ));
+            }
             sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
                 .bind(user_id)
                 .execute(&mut *tx)

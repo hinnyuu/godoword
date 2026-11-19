@@ -26,10 +26,10 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   `set_user_status_guarded`（**串行化守卫 + 事务原子，审计 R7**：防自禁/防禁最后活跃管理员/禁用撤销会话；
   PG `pg_advisory_xact_lock` / SQLite 条件 UPDATE 子查询写锁内求值，防并发互禁→零管理员）/
   `admin_reset_password`（设密码 + 撤销会话，**同事务原子 + validate_password**，审计 R1）。
-  **重置 token 化（审计 C8）+ 事务原子单次性（审计 R1）**：`create_reset_token`（tokens 表 purpose=password_reset，单次 1h）
-  + `reset_with_token`（**先 validate_password**（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**
-  （used_at IS NULL 查 rows_affected，仅一个并发请求成功）→ 改密 → 撤销会话 → 提交；任一步失败回滚令牌可重试。
-  PG 行锁 / SQLite 单写者保并发安全；管理员不知晓新密码）。
+  **重置 token 化（审计 C8）+ 事务原子单次性（审计 R1）+ 防放大/假成功（审计 N4）**：`create_reset_token`（tokens 表 purpose=password_reset，单次 1h；
+  **无本地凭据账户拒绝签发**）+ `reset_with_token`（**廉价预查询令牌有效性后再 Argon2**，无效令牌不算哈希防公开端点放大；
+  先 validate_password（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**（used_at IS NULL 查 rows_affected，仅一个并发请求成功）
+  → 改密（**rows_affected==1 否则回滚令牌认领返回失败**，无凭据不假成功）→ 撤销会话 → 提交。PG 行锁 / SQLite 单写者保并发安全；管理员不知晓新密码）。
 
 ## schema（kernel 0002 迁移）
 
