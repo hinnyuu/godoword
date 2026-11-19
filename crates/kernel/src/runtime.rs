@@ -242,7 +242,8 @@ async fn summarize_span(
             }
         }
     }
-    let status = if err.is_some() { "error" } else { "ok" };
+    let failed = err.is_some();
+    let status = if failed { "error" } else { "ok" };
     let _ = record_call(
         store,
         llm_call_record(
@@ -258,7 +259,8 @@ async fn summarize_span(
         ),
     )
     .await;
-    if summary.is_empty() {
+    // 中途失败不得固化部分摘要（审计 N3）：err 或空 → None，调用方按 truncate 回退，不存储/复用部分 fragment。
+    if failed || summary.is_empty() {
         return None;
     }
     Some(summary)

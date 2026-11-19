@@ -911,3 +911,135 @@ async fn summarize_billing_idempotent_reuse() {
     drop(store);
     std::fs::remove_dir_all(&db_dir).unwrap();
 }
+
+/// 中途失败 summarize LLM（审计 N3）：summarize 调用先发部分文本再报错；教师调用正常。
+struct FailSummarizeLlm {
+    summarize_calls: AtomicU32,
+}
+
+#[async_trait]
+impl LlmProvider for FailSummarizeLlm {
+    fn id(&self) -> &'static str {
+        "fail-summarize-llm"
+    }
+    fn features(&self) -> LlmFeatures {
+        LlmFeatures {
+            tool_calling: false,
+            reasoning: false,
+            streaming: true,
+        }
+    }
+    async fn list_models(&self, _: &ProviderConn) -> Result<Vec<ModelInfo>, ProviderError> {
+        Ok(vec![])
+    }
+    async fn chat_stream(
+        &self,
+        _: &ProviderConn,
+        req: ChatRequest,
+    ) -> Result<ChatStream, ProviderError> {
+        let is_summary = req
+            .messages
+            .first()
+            .map(|m| m.content.contains("压缩"))
+            .unwrap_or(false);
+        if is_summary {
+            self.summarize_calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::pin(stream::iter(vec![
+                Ok(ChatChunk::TextDelta("部分摘要".to_string())),
+                Err(ProviderError::Network {
+                    message: "上游中断".to_string(),
+                    retryable: false,
+                }),
+            ])))
+        } else {
+            Ok(Box::pin(stream::iter(vec![
+                Ok(ChatChunk::TextDelta("回复".to_string())),
+                Ok(ChatChunk::Finish(FinishReason::Stop)),
+            ])))
+        }
+    }
+}
+
+/// N3：summarize 流中途失败 → 不固化部分 fragment、不复用、按 truncate 回退（水位仍推进、事件仍发、回合正常完成）。
+#[tokio::test]
+async fn summarize_midstream_failure_no_partial_persist() {
+    let db_dir = std::env::temp_dir().join(format!("gw-sumfail-{}", Uuid::new_v4()));
+    let store = Arc::new(
+        kernel::open_sqlite(&db_dir.join("db").join("t.sqlite"))
+            .await
+            .unwrap(),
+    );
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let sessions = Arc::new(DbSessions::new(store.clone()));
+    let llm = Arc::new(FailSummarizeLlm {
+        summarize_calls: AtomicU32::new(0),
+    });
+    let rt = Runtime::new(
+        llm.clone(),
+        Arc::new(MockTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        Arc::new(MemAudio::new()),
+        store.clone(),
+    );
+    let user = UserId::new();
+    let session = SessionId::new();
+    kernel::repo::ensure_user(&store, user.0).await.unwrap();
+    sessions
+        .create(
+            user,
+            session,
+            SessionMeta {
+                params: SessionParams {
+                    context_budget_tokens: 5,
+                    eviction: Eviction::Summarize,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    for i in 0..3 {
+        sessions
+            .append(user, session, hist_msg(format!("历史{i}啊啊啊啊")))
+            .await
+            .unwrap();
+    }
+    let events: Vec<SessionEvent> = rt
+        .run_turn(user, session, "新消息".to_string())
+        .collect()
+        .await;
+    assert_eq!(
+        llm.summarize_calls.load(Ordering::SeqCst),
+        1,
+        "N3：summarize 调用一次"
+    );
+    let spans: (i64,) =
+        kernel_api::fetch_one_both!(&*store, "SELECT COUNT(*) FROM summary_spans", (i64,)).unwrap();
+    assert_eq!(spans.0, 0, "N3：中途失败不固化部分摘要（summary_spans 空）");
+    let m = sessions.meta(user, session).await.unwrap().unwrap();
+    assert!(m.summary.is_none(), "N3：失败回退 truncate（无滚动摘要）");
+    assert!(m.evicted_up_to > 0, "N3：水位仍推进");
+    let ev: (i64,) = kernel_api::fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE kind = 'session-evicted'",
+        (i64,)
+    )
+    .unwrap();
+    assert!(ev.0 >= 1, "N3：淘汰事件仍发");
+    assert!(
+        matches!(
+            events.last(),
+            Some(SessionEvent::RunEnd {
+                finish_reason: FinishReason::Stop,
+                ..
+            })
+        ),
+        "N3：失败回退后回合正常完成"
+    );
+    drop(store);
+    std::fs::remove_dir_all(&db_dir).unwrap();
+}
