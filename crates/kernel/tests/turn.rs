@@ -684,14 +684,17 @@ async fn shutdown_aborts_stuck_tasks() {
         .create(user, session, SessionMeta::default())
         .await
         .unwrap();
-    let _stream1 = rt.run_turn(user, session, "x".to_string());
+    let stream1 = rt.run_turn(user, session, "x".to_string());
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    // 任务卡在满 mpsc（cancel 标志无法被处理）；短 grace shutdown → abort+join → 锁释放。
+    // 任务卡在满 mpsc（cancel 标志无法被处理）；短 grace shutdown → abort+join → 任务终止。
     rt.shutdown(std::time::Duration::from_millis(50)).await;
-    let events2: Vec<SessionEvent> = rt.run_turn(user, session, "y".to_string()).collect().await;
+    // 卡死任务已被 abort+join：第一条流必然关闭（tx drop，不永久挂起）→ exec drop → ActiveGuard 释放。
+    // （shutdown 后拒绝新回合 N6，故以流关闭验证任务终止，而非再发新回合。）
+    let events: Vec<SessionEvent> = stream1.collect().await;
     assert!(
-        matches!(events2.first(), Some(SessionEvent::RunStart { .. })),
-        "R3：shutdown abort+join 后活跃锁释放"
+        events.len() <= 258,
+        "R3：shutdown abort+join 后卡死流关闭（任务终止，实得 {}）",
+        events.len()
     );
 }
 
@@ -1042,4 +1045,62 @@ async fn summarize_midstream_failure_no_partial_persist() {
     );
     drop(store);
     std::fs::remove_dir_all(&db_dir).unwrap();
+}
+
+/// N6：shutdown 置退出标志后 run_turn 拒绝新回合（不 spawn/登记），发 shutting_down 终态。
+#[tokio::test(flavor = "current_thread")]
+async fn shutdown_rejects_new_turn() {
+    let (rt, sessions) = runtime_flood(std::time::Duration::from_secs(120)).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    rt.shutdown(std::time::Duration::from_millis(50)).await;
+    let events: Vec<SessionEvent> = rt.run_turn(user, session, "x".to_string()).collect().await;
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(e, SessionEvent::Error { code, .. } if code == "shutting_down")),
+        "N6：退出期间拒绝新回合"
+    );
+    assert!(
+        matches!(
+            events.last(),
+            Some(SessionEvent::RunEnd {
+                finish_reason: FinishReason::Error,
+                ..
+            })
+        ),
+        "N6：拒绝终态 RunEnd"
+    );
+}
+
+/// N6：满 mpsc 超时后第一条流排空必然关闭（终态或丢弃但流终止，不永久挂起），活跃锁释放。
+#[tokio::test(flavor = "current_thread")]
+async fn full_mpsc_first_stream_closes_after_timeout() {
+    let (rt, sessions) = runtime_flood(std::time::Duration::from_millis(100)).await;
+    let user = UserId::new();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    let stream1 = rt.run_turn(user, session, "x".to_string());
+    // 不消费 → mpsc 填满 + 硬超时（终态 try_send 满队列丢弃，记日志）。
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // 排空第一条流：必然终止（collect 返回有限事件，不永久挂起）。
+    let events: Vec<SessionEvent> = stream1.collect().await;
+    assert!(
+        events.len() <= 258,
+        "N6：第一条流排空关闭（事件有限，实得 {}）",
+        events.len()
+    );
+    // 活跃锁释放：新回合不 busy。
+    let events2: Vec<SessionEvent> = rt.run_turn(user, session, "y".to_string()).collect().await;
+    assert!(
+        matches!(events2.first(), Some(SessionEvent::RunStart { .. })),
+        "N6：满 mpsc 超时后活跃锁释放"
+    );
 }
