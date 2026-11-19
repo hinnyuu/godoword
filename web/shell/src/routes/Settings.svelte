@@ -13,6 +13,8 @@
     deleteBinding,
     getAudioPcm,
     getAudioMeta,
+    updateMe,
+    changePassword,
     AudioEngine,
     type Provider,
     type Binding,
@@ -21,6 +23,7 @@
   } from '@godoword/core';
   import workletUrl from '@godoword/core/audio/worklet?worker&url';
   import { prefs } from '../lib/prefs.svelte';
+  import { auth } from '../lib/auth.svelte';
   import { PRESETS } from '@godoword/core';
 
   let cfg = $state<ConfigView | null>(null);
@@ -49,10 +52,17 @@
   let accent = $state('#2563eb');
   let customCss = $state('');
 
+  // 账户自助。
+  let displayName = $state('');
+  let oldPassword = $state('');
+  let newPassword = $state('');
+  let accountMsg = $state('');
+
   async function refresh() {
     try {
       [cfg, providers, bindings] = await Promise.all([getConfig(), listProviders(), listBindings()]);
       customCss = prefs.prefs.custom_css ?? '';
+      displayName = auth.user?.display_name ?? '';
     } catch (err) {
       error = err instanceof Error ? err.message : '加载失败';
     }
@@ -174,6 +184,29 @@
     await prefs.update({ theme: 'light', theme_vars: null, custom_css: null });
   }
 
+  async function saveDisplayName() {
+    accountMsg = '';
+    try {
+      auth.user = await updateMe(displayName);
+      accountMsg = '显示名已保存';
+    } catch (err) {
+      accountMsg = err instanceof Error ? err.message : '保存失败';
+    }
+  }
+
+  async function doChangePassword(e: SubmitEvent) {
+    e.preventDefault();
+    accountMsg = '';
+    try {
+      await changePassword(oldPassword, newPassword);
+      oldPassword = '';
+      newPassword = '';
+      accountMsg = '密码已修改（其他设备会话已失效）';
+    } catch (err) {
+      accountMsg = err instanceof Error ? err.message : '改密失败';
+    }
+  }
+
   let llmProviders = $derived(providers.filter((p) => p.adapter_id === 'llm-openai'));
   let ttsProviders = $derived(providers.filter((p) => p.adapter_id === 'tts-qwen-audio'));
 </script>
@@ -281,6 +314,21 @@
       />
       {$_('settings.onDisconnect')}
     </label>
+  </div>
+
+  <!-- 账户自助 -->
+  <div class="panel">
+    <h2>账户</h2>
+    <div class="row">
+      <label>{$_('auth.displayName')} <input bind:value={displayName} /></label>
+      <button onclick={saveDisplayName}>保存</button>
+    </div>
+    <form onsubmit={doChangePassword} class="row">
+      <input type="password" placeholder={$_('auth.oldPassword')} bind:value={oldPassword} autocomplete="current-password" required />
+      <input type="password" placeholder={$_('auth.newPassword')} bind:value={newPassword} autocomplete="new-password" required />
+      <button type="submit">{$_('auth.changePassword')}</button>
+    </form>
+    {#if accountMsg}<p class="status">{accountMsg}</p>{/if}
   </div>
 
   <!-- provider 管理 -->
