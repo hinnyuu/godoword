@@ -36,11 +36,13 @@
   LLM 可控子集为 text/voice/rate/pitch/instruction/language_hints；model/format/sample_rate/word_timestamps
   由 kernel 从绑定/配置填，不暴露给 LLM。
 
-## 有意耦合声明（R3）
+## 有意耦合声明（R3 + M1d）
 
-kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）**与 sqlx**（`Store` 双驱动）。
-全应用即 axum，模块可重写不要求框架中立。**升级 axum/sqlx 视为契约变更**，须走契约级全量审查；
-未来 agent 不得自作主张"解耦"。此耦合是务实决策，非疏忽。
+kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）、**sqlx**（`Store` 双驱动）
+与 **utoipa**（M1d：REST-facing 类型 `ModelInfo`/`VoiceInfo`/`ChatMessage`/`WordTimestamp`/`AudioFormat`
+派生 `ToSchema`，供 OpenAPI schema 补全→前端类型生成单一事实源，history 2049 决策 B）。
+全应用即 axum，模块可重写不要求框架中立。**升级 axum/sqlx/utoipa 视为契约变更**，须走契约级全量审查；
+未来 agent 不得自作主张"解耦"。此耦合是务实决策，非疏忽。ToSchema 仅 derive，不改 serde 线缆形状/trait 签名。
 
 ## 当前状态与 roadmap 差异
 

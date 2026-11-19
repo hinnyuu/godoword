@@ -7,8 +7,12 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::Json;
-use kernel::{repo, Binding, Provider};
-use kernel_api::{ModelInfo, ProviderError, VoiceInfo};
+use bytes::Bytes;
+use futures_util::StreamExt;
+use kernel::{repo, Binding, CachedAudio, Provider};
+use kernel_api::{
+    AudioEvent, AudioFormat, AudioId, ModelInfo, ProviderError, TtsRequest, VoiceInfo,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
@@ -199,7 +203,7 @@ pub async fn delete_provider(
 #[utoipa::path(
     get, path = "/api/v1/providers/{id}/models", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 200, description = "模型列表", body = Value), (status = 404), (status = 502, description = "上游错误"), (status = 401))
+    responses((status = 200, description = "模型列表", body = Vec<ModelInfo>), (status = 404), (status = 502, description = "上游错误"), (status = 401))
 )]
 pub async fn provider_models(
     State(st): State<Arc<AppState>>,
@@ -225,7 +229,7 @@ pub async fn provider_models(
 #[utoipa::path(
     get, path = "/api/v1/providers/{id}/voices", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id"), ("model" = Option<String>, Query, description = "模型 id（省略取适配器首个）")),
-    responses((status = 200, description = "音色列表", body = Value), (status = 404), (status = 502), (status = 401))
+    responses((status = 200, description = "音色列表", body = Vec<VoiceInfo>), (status = 404), (status = 502), (status = 401))
 )]
 pub async fn provider_voices(
     State(st): State<Arc<AppState>>,
@@ -400,4 +404,120 @@ pub async fn delete_binding(
     } else {
         Err(StatusCode::NOT_FOUND)
     }
+}
+
+/// 音色试听默认短文本。
+const DEFAULT_PREVIEW_TEXT: &str = "こんにちは、始めましょう。";
+
+/// 音色试听请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct PreviewReq {
+    pub model: String,
+    pub voice: String,
+    /// 可选自定义文本（缺省固定短文本）。
+    #[serde(default)]
+    pub text: Option<String>,
+}
+
+/// 音色试听响应（合成音频 id，经 GET /audio/{id} + /meta 播放/高亮）。
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct PreviewResp {
+    pub audio_id: Uuid,
+}
+
+/// 音色试听（设置页选音色听一句）：走用户 key 合成 + 缓存 + call_log 计量（审计 C9）。
+#[utoipa::path(
+    post, path = "/api/v1/providers/{id}/preview", tag = "providers",
+    params(("id" = Uuid, Path, description = "provider id")), request_body = PreviewReq,
+    responses((status = 200, body = PreviewResp), (status = 400), (status = 401), (status = 404), (status = 502))
+)]
+pub async fn provider_preview(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<PreviewReq>,
+) -> Result<Json<PreviewResp>, StatusCode> {
+    let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let model = req.model.clone();
+    let tts_req = TtsRequest {
+        model: req.model,
+        text: req.text.unwrap_or_else(|| DEFAULT_PREVIEW_TEXT.to_string()),
+        voice: req.voice,
+        format: AudioFormat::Pcm,
+        sample_rate: 24000,
+        rate: None,
+        pitch: None,
+        instruction: None,
+        language_hints: vec!["ja".to_string()],
+        word_timestamps: true,
+        extra: serde_json::json!({}),
+    };
+    let start = std::time::Instant::now();
+    let init = st.tts.synthesize_stream(&conn, tts_req).await;
+    let mut stream = match init {
+        Ok(s) => s,
+        Err(e) => {
+            let status = upstream_status(&e);
+            let r: Result<(), ProviderError> = Err(e);
+            meter_test(&st.store, user, "tts", st.tts.id(), &model, start, &r).await;
+            return Err(status);
+        }
+    };
+    let audio_id = AudioId::new();
+    let mut complete: Vec<u8> = Vec::new();
+    let mut words = Vec::new();
+    let mut stream_err: Option<ProviderError> = None;
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(AudioEvent::Chunk { pcm, .. }) => complete.extend_from_slice(&pcm),
+            Ok(AudioEvent::Words(w)) => words.extend(w),
+            Ok(AudioEvent::End { complete: end }) => {
+                if let Some(b) = end {
+                    complete = b.to_vec();
+                }
+            }
+            Ok(_) => {}
+            Err(e) => {
+                stream_err = Some(e);
+                break;
+            }
+        }
+    }
+    let final_result: Result<(), ProviderError> = match stream_err {
+        Some(e) => Err(e),
+        None => Ok(()),
+    };
+    meter_test(
+        &st.store,
+        user,
+        "tts",
+        st.tts.id(),
+        &model,
+        start,
+        &final_result,
+    )
+    .await;
+    if let Err(e) = final_result {
+        return Err(upstream_status(&e));
+    }
+    // 缓存写失败关闭（审计 R2）：put 失败不假成功。
+    st.audio
+        .put(
+            audio_id,
+            CachedAudio {
+                pcm: Bytes::from(complete),
+                words,
+                format: AudioFormat::Pcm,
+                sample_rate: 24000,
+                owner: user,
+            },
+        )
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(PreviewResp {
+        audio_id: audio_id.0,
+    }))
 }

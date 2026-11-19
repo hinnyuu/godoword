@@ -157,6 +157,9 @@ worklet 经 Vite ?worker&url 打包独立脚本，引擎注入 URL（core 不依
   旧/损坏/PCM-only sidecar 兼容 404 可再生（N7）+ 限流器容量满 fail-closed 保密禁（N5）+ 可信代理 XFF 最右不可信跳。
   各配失败/并发负例测试（**auth/journal/storage 并发与迁移回滚双后端；runtime 回合行为测试 SQLite**）。
 - 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、教学模块（M2+）。
-  **M1d 前端进行中**：P1 骨架 + 音频引擎（web/core + web/shell Svelte 5）已起；完整 UI（P4–P6）/后端扩展（P2）/构建 CI（P7）待落。
+  **M1d 进行中**：P1 前端骨架 + 音频引擎（web/core + web/shell Svelte 5，spike 听音确认）；
+  **P2 后端扩展已落**：0005 迁移（user_preferences/session_folders/sessions.path）+ 虚拟路径域逻辑（NFC/固定上限/子树改写）+
+  偏好/文件夹/会话元数据仓储 + 自助改密 + REST 扩展（preferences/folders/sessions-meta/move/audio-meta/preview/change-password/update-me）+
+  **OpenAPI schema 补全（kernel-api 5 类型 + UserInfo + 新 DTO ToSchema，utoipa 有意耦合→契约级审查）**。完整 UI（P4–P6）/构建 CI（P7）待落。
 - 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 生产仍静态占位（P7 切 SPA 伺服）；
   outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

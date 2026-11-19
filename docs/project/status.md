@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T21:30+08:00
-- 当前里程碑: **M1d 实施中——P0 设计落档已合并（bf3a413）；P1 前端骨架+音频引擎代码就绪（工具链全绿），待人工浏览器 spike 确认 + CI → P2**
+- verified: 2026-11-19T22:30+08:00
+- 当前里程碑: **M1d 实施中——P0 合并（bf3a413）；P1 音频 spike 听音确认；P2 后端扩展+schema 补全+契约审查完成（SQLite 绿）→ 待 CI PG/cargo-deny → P3 web/core**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ 多轮审计收尾（a2bdf17）→ 验收+产品愿景（9d15342）→ **M1d 设计落档（本 PR）→ M1d 实施**
 
 ## done
@@ -18,8 +18,8 @@
 
 ## in-flight
 
-- **M1d 实施 PR**（分支 feat/m1d-frontend）：P1 前端骨架 + 音频引擎代码就绪（core tsc/vitest 18/svelte-check/vite build 全绿，
-  worklet ?worker&url 自包含打包验证）。待 CI 绿 + **人工浏览器 spike 确认**（出声 + 高亮）→ P2。
+- **M1d 实施 PR #18**（分支 feat/m1d-frontend）：P1 前端骨架+音频引擎（spike 听音确认）+ **P2 后端扩展+schema 补全+契约级全量审查**已落
+  （全 workspace SQLite 测试绿/clippy/fmt 净/OpenAPI 测试绿）。待 CI PG 双后端 + cargo-deny 绿 → P3。
 - P0 设计落档已合并（PR #17，bf3a413，R4 main 重测 success）。
 
 ## M1d 实施跟踪（phase 级，详细交接）
@@ -31,7 +31,7 @@
 |---|---|---|
 | P0 | 设计落档（roadmap/history/glossary/conventions/status） | **完成（PR #17 bf3a413）** |
 | P1 | 音频 spike：web/core audio 引擎 + AudioWorklet 出声 + 词级高亮同步，本地真 key + 移动浏览器实测 | **代码就绪（工具链全绿）；待人工浏览器出声+高亮确认** |
-| P2 | 后端扩展：kernel-api 5 类型 ToSchema（**utoipa 耦合→契约级全量审查**）+ 0005 迁移 + path/preferences/folders/sessions-meta + auth-local change_password/UserInfo + godoword REST + schema 补全 + 双后端测试 | 待启动 |
+| P2 | 后端扩展：kernel-api 5 类型 ToSchema（**utoipa 耦合→契约级全量审查**）+ 0005 迁移 + path/preferences/folders/sessions-meta + auth-local change_password/UserInfo + godoword REST + schema 补全 + 双后端测试 | **代码+测试 SQLite 绿+契约审查矩阵完成；待 CI PG 双后端/cargo-deny** |
 | P3 | web/core：api（openapi-fetch+生成类型）/sse/session/theme/i18n/prefs + vitest + 类型 freshness | 待启动 |
 | P4 | web/shell 认证/管理/引导 UI | 待启动 |
 | P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | 待启动 |
@@ -70,9 +70,10 @@
 
 ## 下一动作
 
-1. **P1 收尾**：实施 PR CI 绿（含 frontend job）+ **人工浏览器 spike 确认**（harness ① 合成音无 key 验证引擎/高亮 →
-   ② 真 key live 出声+高亮；③ 回放待 P2 /meta；移动端真机 AudioWorklet 兼容）。出声+高亮跑通再铺 UI。
-2. P2 后端扩展（0005 + REST + kernel-api ToSchema 契约级全量审查）→ P3 web/core → P4–P6 shell UI → P7 构建/CI → P8 验收。
+1. **P2 收尾**：PR #18 CI 绿（PG 双后端 storage + cargo-deny unicode-normalization 许可证 + frontend + 冒烟）。
+2. **P3 web/core**：api（openapi-fetch + 生成类型提交 + CI freshness）/sse（fetch + eventsource-parser）/session（路径 trie/NFC 镜像）/
+   theme/i18n/prefs 接线 + vitest。
+3. P4–P6 shell UI（认证/管理/引导 → 设置 → 会话）→ P7 Dockerfile/CI → P8 验收（含人工感官 + 部署矩阵重 sign-off）。
 
 **文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；产品本质保持显著。
 M1d 因内容较多，status 按主开发者要求做 phase 级详细跟踪（决策指针指 history，不复制叙事）。

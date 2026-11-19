@@ -261,7 +261,7 @@ async fn user_info(store: &Store, user: UserId) -> Result<Value, StatusCode> {
 
 /// 注册（首用户成管理员；注册模式由配置；成功发会话 cookie）。
 #[utoipa::path(post, path = "/api/v1/auth/register", request_body = RegisterReq, tag = "auth",
-    responses((status = 200, body = Value), (status = 400), (status = 403), (status = 429)))]
+    responses((status = 200, body = auth_local::UserInfo), (status = 400), (status = 403), (status = 429)))]
 pub async fn register(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
@@ -306,7 +306,7 @@ pub async fn register(
 
 /// 登录（验身成功发会话 cookie）。
 #[utoipa::path(post, path = "/api/v1/auth/login", request_body = LoginReq, tag = "auth",
-    responses((status = 200, body = Value), (status = 401), (status = 403), (status = 429)))]
+    responses((status = 200, body = auth_local::UserInfo), (status = 401), (status = 403), (status = 429)))]
 pub async fn login(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
@@ -354,12 +354,69 @@ pub async fn logout(
 }
 
 /// 当前用户信息。
-#[utoipa::path(get, path = "/api/v1/auth/me", tag = "auth", responses((status = 200, body = Value), (status = 401)))]
+#[utoipa::path(get, path = "/api/v1/auth/me", tag = "auth", responses((status = 200, body = auth_local::UserInfo), (status = 401)))]
 pub async fn me(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
+) -> Result<Json<auth_local::UserInfo>, StatusCode> {
+    auth_local::get_user(&st.store, user)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+/// 自助改密请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct ChangePasswordReq {
+    pub old_password: String,
+    pub new_password: String,
+}
+
+/// 自助改密（验旧密→统一策略→撤销其他会话保留当前）。
+#[utoipa::path(post, path = "/api/v1/auth/change-password", request_body = ChangePasswordReq, tag = "auth",
+    responses((status = 200, body = Value), (status = 400), (status = 401), (status = 403), (status = 404)))]
+pub async fn change_password(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    headers: HeaderMap,
+    Json(req): Json<ChangePasswordReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    Ok(Json(user_info(&st.store, user).await?))
+    let token = parse_cookie(&headers, SESSION_COOKIE);
+    match auth_local::change_password(
+        &st.store,
+        user,
+        &req.old_password,
+        &req.new_password,
+        token.as_deref(),
+    )
+    .await
+    {
+        Ok(true) => Ok(Json(json!({ "ok": true }))),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => Err(auth_err_status(e)),
+    }
+}
+
+/// 编辑显示名请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct UpdateMeReq {
+    pub display_name: String,
+}
+
+/// 编辑当前用户显示名。
+#[utoipa::path(put, path = "/api/v1/auth/me", request_body = UpdateMeReq, tag = "auth",
+    responses((status = 200, body = auth_local::UserInfo), (status = 401), (status = 404)))]
+pub async fn update_me(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Json(req): Json<UpdateMeReq>,
+) -> Result<Json<auth_local::UserInfo>, StatusCode> {
+    auth_local::update_display_name(&st.store, user, &req.display_name)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 /// 管理员重置用户密码。
@@ -424,15 +481,15 @@ pub async fn admin_invite(
 
 /// 管理员列出用户。
 #[utoipa::path(get, path = "/api/v1/admin/users", tag = "admin",
-    responses((status = 200, body = Value), (status = 401), (status = 403)))]
+    responses((status = 200, body = Vec<auth_local::UserInfo>), (status = 401), (status = 403)))]
 pub async fn admin_users(
     State(st): State<Arc<AppState>>,
     AdminUser(_admin): AdminUser,
-) -> Result<Json<Value>, StatusCode> {
+) -> Result<Json<Vec<auth_local::UserInfo>>, StatusCode> {
     let users = auth_local::list_users(&st.store)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(serde_json::to_value(users).unwrap_or(json!([]))))
+    Ok(Json(users))
 }
 
 /// 设用户状态请求。

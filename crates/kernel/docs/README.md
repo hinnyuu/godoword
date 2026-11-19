@@ -52,8 +52,18 @@
 `src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接 + `checkpoint` 退出 WAL 屏障）+ `src/migrate.rs`（自定义双后端迁移 runner：
 版本表 + checksum 防漂移 + 迁移前备份 + **每条迁移同事务原子，审计 A2**）+ `migrations/0001_init.sql`（11 表）
 + `0002_auth.sql`（users.username + auth_sessions）+ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）
-+ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）。
++ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）+ `0005_preferences_folders.sql`（M1d user_preferences/session_folders/sessions.path）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
+
+## M1d 用户级扩展（偏好/文件夹/会话元数据）
+
+- `src/path.rs`：会话虚拟路径域逻辑（NFC 归一化 + 固定上限校验 + 前缀匹配/子树改写 helpers，服务端权威）。详见 [storage.md](storage.md)。
+- `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema）+ get/put（UPSERT last-write-wins，跨设备随账户）。
+- `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+UNIQUE / rename 子树批量改写防环 / delete 子树上移一层绝不删会话 /
+  move_session 自动注册路径链+自取命名空间）；读经薄分发宏、写收口驱动专属事务原子。
+- `src/session_meta.rs`：`SessionListItem`（title 首条用户消息截断 / created_at / last_active=MAX(messages.created_at) /
+  message_count / path / module_id）+ `list_sessions_meta`（SQL GROUP BY 聚合 + Rust 侧首条消息/前缀/模块过滤）+ `get_session_path`。
+- 双后端测试 `tests/m1d.rs`（偏好 UPSERT / 文件夹归一化/UNIQUE/子树改写/删非空上移/移动注册/防环/越权 / 会话元数据+过滤）。
 
 ## 加密（M1b）
 

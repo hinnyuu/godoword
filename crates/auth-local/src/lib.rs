@@ -387,7 +387,7 @@ pub async fn create_invite(
 }
 
 /// 用户信息（管理列表用，不含密码）。
-#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize)]
+#[derive(Debug, Clone, sqlx::FromRow, serde::Serialize, utoipa::ToSchema)]
 pub struct UserInfo {
     pub id: Uuid,
     pub username: Option<String>,
@@ -416,6 +416,26 @@ pub async fn get_user(store: &Store, user: UserId) -> Result<Option<UserInfo>, A
         user.0
     )
     .map_err(internal)
+}
+
+/// 更新显示名（M1d 账户自助；不存在 → None）。
+pub async fn update_display_name(
+    store: &Store,
+    user: UserId,
+    display_name: &str,
+) -> Result<Option<UserInfo>, AuthError> {
+    let n = execute_both!(
+        store,
+        "UPDATE users SET display_name = $1, updated_at = $2 WHERE id = $3",
+        display_name,
+        Utc::now(),
+        user.0
+    )
+    .map_err(internal)?;
+    if n == 0 {
+        return Ok(None);
+    }
+    get_user(store, user).await
 }
 
 /// 设用户状态（active/disabled，管理员用）。禁用时撤销全部会话（审计 C3）。
@@ -809,6 +829,111 @@ pub async fn reset_with_token(
             Ok(true)
         }
     }
+}
+
+/// 自助改密（M1d：验旧密→统一策略→设新密→撤销**其他**会话保留当前，事务原子）。
+/// current_token 为当前会话令牌（保留不撤销）；None 则撤销全部。无凭据/旧密错→失败。
+pub async fn change_password(
+    store: &Store,
+    user: UserId,
+    old_password: &str,
+    new_password: &str,
+    current_token: Option<&str>,
+) -> Result<bool, AuthError> {
+    let row: Option<(String, String)> = fetch_optional_both!(
+        store,
+        "SELECT c.password_hash, u.status FROM local_credentials c JOIN users u ON c.user_id = u.id
+         WHERE c.user_id = $1",
+        (String, String),
+        user.0
+    )
+    .map_err(internal)?;
+    let Some((hash, status)) = row else {
+        return Ok(false);
+    };
+    if status != "active" {
+        return Err(AuthError::Disabled);
+    }
+    if !verify_password(old_password, &hash) {
+        return Err(AuthError::InvalidCredentials);
+    }
+    validate_password(new_password)?;
+    let new_hash = hash_password(new_password)?;
+    let now = Utc::now();
+    let keep_hash = current_token.map(token_hash);
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?",
+            )
+            .bind(&new_hash)
+            .bind(now)
+            .bind(user.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                return Err(AuthError::Internal("无本地凭据，改密失败".to_string()));
+            }
+            match &keep_hash {
+                Some(kh) => {
+                    sqlx::query("DELETE FROM auth_sessions WHERE user_id = ? AND token_hash != ?")
+                        .bind(user.0)
+                        .bind(kh)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(internal)?;
+                }
+                None => {
+                    sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
+                        .bind(user.0)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(internal)?;
+                }
+            }
+            tx.commit().await.map_err(internal)?;
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = $1, updated_at = $2 WHERE user_id = $3",
+            )
+            .bind(&new_hash)
+            .bind(now)
+            .bind(user.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                return Err(AuthError::Internal("无本地凭据，改密失败".to_string()));
+            }
+            match &keep_hash {
+                Some(kh) => {
+                    sqlx::query(
+                        "DELETE FROM auth_sessions WHERE user_id = $1 AND token_hash != $2",
+                    )
+                    .bind(user.0)
+                    .bind(kh)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+                }
+                None => {
+                    sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
+                        .bind(user.0)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(internal)?;
+                }
+            }
+            tx.commit().await.map_err(internal)?;
+        }
+    }
+    Ok(true)
 }
 
 #[async_trait]

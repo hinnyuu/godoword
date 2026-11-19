@@ -30,6 +30,9 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   **无本地凭据账户拒绝签发**）+ `reset_with_token`（**廉价预查询令牌有效性后再 Argon2**，无效令牌不算哈希防公开端点放大；
   先 validate_password（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**（used_at IS NULL 查 rows_affected，仅一个并发请求成功）
   → 改密（**rows_affected==1 否则回滚令牌认领返回失败**，无凭据不假成功）→ 撤销会话 → 提交。PG 行锁 / SQLite 单写者保并发安全；管理员不知晓新密码）。
+- **自助改密（M1d）**：`change_password(store,user,old,new,current_token)`——验旧密（联查 status，禁用→Disabled）→
+  `validate_password` 统一策略→事务改密（rows==1）→撤销**其他**会话（`token_hash != current`，保留当前；None 则全撤）。
+  `update_display_name`（账户自助编辑显示名）。`UserInfo` 派生 `utoipa::ToSchema`（OpenAPI schema 补全→前端类型生成）。
 
 ## schema（kernel 0002 迁移）
 

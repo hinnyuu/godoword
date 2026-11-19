@@ -127,6 +127,7 @@ dependencies = [
  "sha2",
  "sqlx",
  "tokio",
+ "utoipa",
  "uuid",
 ]
 
@@ -1029,9 +1030,11 @@ dependencies = [
  "serde_json",
  "sha2",
  "sqlx",
+ "thiserror",
  "tokio",
  "toml",
  "tracing",
+ "unicode-normalization",
  "utoipa",
  "uuid",
 ]
@@ -1051,6 +1054,7 @@ dependencies = [
  "sqlx",
  "thiserror",
  "tokio",
+ "utoipa",
  "uuid",
 ]
 

@@ -30,13 +30,13 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 - **PostgreSQL**：运行时镜像（debian-slim）无 pg_dump，**跳过 + 告警日志**，PG 部署自备外部备份
   （见 [wiki/deploy](../../../wiki/deploy/quickstart.md)）。
 
-## schema（`migrations/0001_init.sql` + `0002_auth.sql` + `0003_eviction_watermark.sql` + `0004_summary_spans.sql`）
+## schema（`migrations/0001_init.sql` + `0002_auth.sql` + `0003_eviction_watermark.sql` + `0004_summary_spans.sql` + `0005_preferences_folders.sql`）
 
 双兼容子集：uuid 主键应用生成、时间戳应用侧（`Utc::now()`）、JSON 整取回 Rust、`$1` 占位、
 单一 PG 风格类型名（UUID/TIMESTAMPTZ/JSONB/BOOLEAN/BYTEA/TEXT/INTEGER）靠 SQLite 类型亲和性双后端通用。
 外键 `REFERENCES … ON DELETE CASCADE`（SQLite 须 pool 启用 foreign_keys，PG 默认强制）。
 0001（M1b）建 11 表；0002（M1c）增 users.username + auth_sessions；0003（M1c-hardening C7）增 sessions.summary + evicted_up_to；
-0004（二审 R4）建 summary_spans（summarize 计费幂等）。M4 oidc 前瞻。
+0004（二审 R4）建 summary_spans（summarize 计费幂等）；0005（M1d）建 user_preferences + session_folders + sessions.path。M4 oidc 前瞻。
 
 | 表 | 列 | 约束/说明 |
 |---|---|---|
@@ -45,7 +45,7 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 | oidc_identities | id UUID PK, user_id→users, issuer TEXT, subject TEXT, created_at TS | M4 前瞻；UNIQUE(issuer,subject) |
 | providers | id UUID PK, user_id→users, adapter_id TEXT, label TEXT, base_url TEXT, **key_enc BYTEA**, extra_json JSONB?, created_at/updated_at TS | 一实例一 key；key_enc=nonce+密文+tag |
 | bindings | id UUID PK, user_id→users, **module_id TEXT（哨兵 `*`）**, capability TEXT, role TEXT, provider_id→providers, model TEXT, params_json JSONB, created_at/updated_at TS | UNIQUE(user_id,module_id,capability,role)；`*`=全模块默认 |
-| sessions | id UUID PK, user_id→users, module_id TEXT?, plan_version TEXT?, on_disconnect TEXT, params_json JSONB?, **summary TEXT?（0003）**, **evicted_up_to INTEGER?（0003）**, created_at/updated_at TS | module_id/plan_version 可空；on_disconnect cancel/continue；**summary 滚动摘要 + evicted_up_to 淘汰水位（C7）** |
+| sessions | id UUID PK, user_id→users, module_id TEXT?, plan_version TEXT?, on_disconnect TEXT, params_json JSONB?, **summary TEXT?（0003）**, **evicted_up_to INTEGER?（0003）**, **path TEXT?（0005）**, created_at/updated_at TS | module_id/plan_version 可空；on_disconnect cancel/continue；**summary 滚动摘要 + evicted_up_to 淘汰水位（C7）**；**path 虚拟路径文件夹链（M1d，NULL=未分类）** |
 | messages | id UUID PK, session_id→sessions, seq INTEGER, role TEXT, content TEXT, reasoning TEXT?, tool_calls JSONB?, tool_call_id TEXT?, audio_refs JSONB?, created_at TS | UNIQUE(session_id,seq)；JSON 整取 |
 | call_log | id UUID PK, user_id→users, session_id UUID?, run_id UUID?, capability TEXT, adapter_id TEXT, model TEXT, prompt/completion/reasoning/total_tokens INTEGER?, characters INTEGER?, latency_ms INTEGER?, status TEXT, error_code TEXT?, created_at TS | M1c 计量落地 |
 | progress_events | id UUID PK, user_id→users, session_id UUID?, module_id TEXT, kind TEXT, skill_tags JSONB?, detail JSONB?, created_at TS, processed_at TS? | outbox；processed_at 空=未处理 |
@@ -53,10 +53,20 @@ sqlx `migrate!` 宏单驱动 pin，无法服务 Store 双驱动，故**自定义
 | invites | id UUID PK, code_hash TEXT, max_uses INTEGER, used_count INTEGER, created_by UUID?→users(SET NULL), expires_at TS?, created_at TS | 邀请码注册 |
 | auth_sessions | id UUID PK, user_id→users CASCADE, token_hash TEXT, expires_at TS, created_at TS | **0002（M1c）** cookie 会话令牌（opaque token sha256，可撤销），与单次 tokens 分离 |
 | summary_spans | span_hash TEXT PK, session_id→sessions CASCADE, fragment TEXT, created_at TS | **0004（二审 R4）** summarize 计费幂等：span 消息 ID 集哈希键，命中复用 fragment 免重复 LLM 计费 |
+| user_preferences | user_id UUID PK→users CASCADE, prefs_json JSONB, updated_at TS | **0005（M1d）** 用户偏好跨设备随账户（theme/auto_play/on_disconnect_default/密度/字号/custom_css/theme_vars）；UPSERT last-write-wins |
+| session_folders | id UUID PK, user_id→users CASCADE, module_id TEXT, path TEXT, created_at/updated_at TS | **0005（M1d）** 虚拟路径文件夹登记表（持久空文件夹）；UNIQUE(user_id,module_id,path)（path NOT NULL 避 NULL 陷阱）；module_id 哨兵 `default`=无模块命名空间（chroot） |
 
 索引：providers(user_id)、bindings(user_id)、sessions(user_id)、call_log(user_id,created_at)、
 progress_events(user_id,processed_at)、tokens(token_hash)、invites(code_hash)、users(username) UNIQUE、
-auth_sessions(token_hash)、auth_sessions(user_id)、summary_spans(session_id)。
+auth_sessions(token_hash)、auth_sessions(user_id)、summary_spans(session_id)、session_folders(user_id)。
+
+**会话虚拟路径（M1d，`src/path.rs`）**：路径即文件夹身份（`/日语/五十音`），前端 trie 渲染。
+服务端权威 **NFC 归一化**（`unicode-normalization`，日语浊音 `が` 单码位 vs `か`+组合符 NFD 同形异码→裂文件夹陷阱）
++ 校验（禁 `/`/控制字符/空段/`.`/`..`/段首尾空白）；**上限固定常量**（深度≤8/段≤64 字符/全路径≤1024，**不进 config**，
+校验仅写入时已存数据永不回溯失效）。前缀匹配/子树改写在 Rust 侧（`is_within`/`rewrite_prefix`/`parent`，不用 SQL LIKE 免转义）。
+文件夹改名/移动=子树（文件夹+会话）前缀批量改写单事务原子（防环：目标不可在源子树内）；删非空文件夹=子树上移一层
+（`parent`，根级→NULL，**绝不级联删会话**）；移动会话自动注册目标路径链（`ensure_chain` ON CONFLICT DO NOTHING）。
+模块 chroot：module_id 隐式根命名空间（哨兵 `default`↔sessions.module_id NULL），创建时固定杜绝跨模块移动。
 
 **bindings 哨兵 `*`**：取代 NULL 表全模块默认——两后端 NULL 皆互不相等致 UNIQUE 失效，
 哨兵使 UNIQUE(user,module,cap,role) 正常约束、5 级 fallback 解析一致（见 [architecture](../../../docs/project/architecture.md)）。

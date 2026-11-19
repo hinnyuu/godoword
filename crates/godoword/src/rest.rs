@@ -2,7 +2,7 @@
 //! POST /messages 响应即该回合 SessionEvent 流（SSE path 入 OpenAPI，SessionEvent 事件 schema 单独协议文档）。
 //! 用户级端点经 AuthUser extractor 认证（cookie → 会话令牌）+ 对象级归属校验（审计 C1，越权 404）；未认证 401。
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{header, StatusCode};
 use axum::response::sse::{Event, Sse};
 use axum::response::{IntoResponse, Response};
@@ -10,7 +10,9 @@ use axum::Json;
 use futures_util::stream::Stream;
 use futures_util::StreamExt;
 use kernel::{AudioCache, Config, ConfigView, MasterKey, Runtime, SessionMeta, SessionRepo};
-use kernel_api::{AudioId, LlmProvider, SessionEvent, SessionId, Store, TtsProvider};
+use kernel_api::{
+    AudioFormat, AudioId, LlmProvider, SessionEvent, SessionId, Store, TtsProvider, WordTimestamp,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::convert::Infallible;
@@ -119,29 +121,52 @@ pub async fn create_session(
     Ok(Json(json!({ "id": id.to_string() })))
 }
 
-/// 列出用户会话。
-#[utoipa::path(get, path = "/api/v1/sessions", tag = "sessions", responses((status = 200, body = Value), (status = 401)))]
+/// 会话列表查询（folder 子树过滤 / module 命名空间过滤；page 预留，M1d 全量返回私有规模有界）。
+#[derive(Deserialize, utoipa::IntoParams)]
+pub struct SessionListQuery {
+    /// 文件夹路径子树过滤（如 /日语/五十音）。
+    #[serde(default)]
+    pub folder: Option<String>,
+    /// 模块命名空间过滤（default=无模块）。
+    #[serde(default)]
+    pub module: Option<String>,
+}
+
+/// 会话列表响应。
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct SessionListResp {
+    pub sessions: Vec<kernel::SessionListItem>,
+}
+
+/// 列出用户会话（元数据：title/created_at/last_active/message_count/path）。
+#[utoipa::path(get, path = "/api/v1/sessions", tag = "sessions", params(SessionListQuery), responses((status = 200, body = SessionListResp), (status = 401)))]
 pub async fn list_sessions(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
-) -> Result<Json<Value>, StatusCode> {
-    let ids = st
-        .sessions
-        .list(user)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({
-        "sessions": ids.iter().map(|id| json!({ "id": id.to_string() })).collect::<Vec<_>>()
-    })))
+    Query(q): Query<SessionListQuery>,
+) -> Result<Json<SessionListResp>, StatusCode> {
+    let sessions =
+        kernel::list_sessions_meta(&st.store, user.0, q.module.as_deref(), q.folder.as_deref())
+            .await
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(SessionListResp { sessions }))
 }
 
-/// 读会话转录。
-#[utoipa::path(get, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404)))]
+/// 会话转录响应（含虚拟路径）。
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct SessionDetailResp {
+    pub id: Uuid,
+    pub path: Option<String>,
+    pub messages: Vec<kernel_api::ChatMessage>,
+}
+
+/// 读会话转录（含 path）。
+#[utoipa::path(get, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = SessionDetailResp), (status = 401), (status = 404)))]
 pub async fn get_session(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
-) -> Result<Json<Value>, StatusCode> {
+) -> Result<Json<SessionDetailResp>, StatusCode> {
     let sid = SessionId(id);
     if !st
         .sessions
@@ -156,7 +181,74 @@ pub async fn get_session(
         .history(user, sid)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(json!({ "id": id.to_string(), "messages": msgs })))
+    let path = kernel::get_session_path(&st.store, user.0, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(SessionDetailResp {
+        id,
+        path,
+        messages: msgs,
+    }))
+}
+
+/// 移动会话请求（path=null 回未分类）。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct MoveSessionReq {
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+/// 移动会话到文件夹路径（自动注册目标链；归属校验）。
+#[utoipa::path(put, path = "/api/v1/sessions/{id}/path", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MoveSessionReq, responses((status = 200, body = Value), (status = 400), (status = 401), (status = 404)))]
+pub async fn move_session_path(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<MoveSessionReq>,
+) -> Result<Json<Value>, StatusCode> {
+    match kernel::move_session(&st.store, user.0, id, req.path.as_deref()).await {
+        Ok(true) => Ok(Json(json!({ "ok": true }))),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => Err(folder_err_status(e)),
+    }
+}
+
+/// 音频元数据响应（回放词级高亮出口）。
+#[derive(serde::Serialize, utoipa::ToSchema)]
+pub struct AudioMetaResp {
+    pub words: Vec<WordTimestamp>,
+    pub format: AudioFormat,
+    pub sample_rate: u32,
+}
+
+/// 回放音频元数据（词级时间戳 + 编码 + 采样率；归属校验，越权/缺失 404）。
+#[utoipa::path(get, path = "/api/v1/audio/{id}/meta", tag = "sessions", params(("id" = Uuid, Path, description = "音频 id")), responses((status = 200, body = AudioMetaResp), (status = 401), (status = 404)))]
+pub async fn audio_meta(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<AudioMetaResp>, StatusCode> {
+    let cached = st
+        .audio
+        .get(AudioId(id), user)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    Ok(Json(AudioMetaResp {
+        words: cached.words,
+        format: cached.format,
+        sample_rate: cached.sample_rate,
+    }))
+}
+
+/// FolderError → HTTP（Invalid/Conflict/Cycle→400，Storage→500）。
+pub fn folder_err_status(e: kernel::FolderError) -> StatusCode {
+    match e {
+        kernel::FolderError::Invalid(_)
+        | kernel::FolderError::Conflict(_)
+        | kernel::FolderError::Cycle(_) => StatusCode::BAD_REQUEST,
+        kernel::FolderError::Storage(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
 }
 
 /// 删除会话（含转录，SessionEnded outbox 同事务原子，审计 R6）。

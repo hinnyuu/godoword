@@ -81,14 +81,14 @@ impl std::fmt::Debug for ProviderConn {
 }
 
 /// 模型信息（list_models 返回）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ModelInfo {
     pub id: String,
     pub display_name: Option<String>,
 }
 
 /// 音色信息（list_voices 返回）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct VoiceInfo {
     pub id: String,
     pub name: String,
@@ -117,7 +117,7 @@ pub struct TtsUsage {
 }
 
 /// 词级时间戳（毫秒）。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct WordTimestamp {
     pub text: String,
     pub begin_index: u32,
@@ -127,7 +127,7 @@ pub struct WordTimestamp {
 }
 
 /// 音频编码。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, utoipa::ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum AudioFormat {
     Pcm,
@@ -161,7 +161,7 @@ pub struct ToolResult {
 }
 
 /// 聊天消息。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct ChatMessage {
     pub role: String,
     pub content: String,
