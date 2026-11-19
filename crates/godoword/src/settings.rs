@@ -294,7 +294,8 @@ async fn meter_test<T>(
 
 fn upstream_status(e: &ProviderError) -> StatusCode {
     match e {
-        ProviderError::Auth { .. } => StatusCode::UNAUTHORIZED,
+        // 上游 key 无效 ≠ 用户未认证：401 专属用户会话（AuthUser），上游错误用 502（防前端 401 钩子误登出）。
+        ProviderError::Auth { .. } => StatusCode::BAD_GATEWAY,
         ProviderError::Quota { .. } => StatusCode::PAYMENT_REQUIRED,
         ProviderError::RateLimit { .. } => StatusCode::TOO_MANY_REQUESTS,
         _ => StatusCode::BAD_GATEWAY,

@@ -42,7 +42,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
   `PUT /sessions/{id}/path`（移动，自动注册路径链）、`GET /sessions/{id}`（+path，SessionDetailResp）。
 - **音频回放高亮出口**：`GET /audio/{id}/meta`（AudioMetaResp：words/format/sample_rate，归属校验，补 P25 回放高亮缺口）。
 - **音色试听**（`src/settings.rs`）：`POST /providers/{id}/preview`（PreviewReq{model,voice,text?}→PreviewResp{audio_id}，
-  走用户 key 合成+缓存+call_log 计量 C9，缓存写失败关闭 R2）。
+  走用户 key 合成+缓存+call_log 计量 C9，缓存写失败关闭 R2）。**上游错误映射**：`upstream_status` Auth/其他→**502**（401 专属用户会话 AuthUser，
+  防前端 401 钩子误登出，P8 验收修复）、Quota→402、RateLimit→429。测试连接按 adapter 分流（llm→models / tts→voices）。
 - **账户自助**（`src/auth.rs`）：`POST /auth/change-password`（验旧密→撤销其他会话保留当前）、`PUT /auth/me`（显示名）；
   me/admin_users/register/login 响应类型化 UserInfo。
 - **OpenAPI schema 补全（决策 B）**：kernel-api 5 类型（ModelInfo/VoiceInfo/ChatMessage/WordTimestamp/AudioFormat）+

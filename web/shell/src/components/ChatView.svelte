@@ -4,6 +4,7 @@
     streamTurn,
     cancelSession,
     getSession,
+    createSession,
     AudioEngine,
     appendWords,
     type SessionEvent,
@@ -12,7 +13,8 @@
   import workletUrl from '@godoword/core/audio/worklet?worker&url';
   import { prefs } from '../lib/prefs.svelte';
 
-  let { sessionId }: { sessionId: string } = $props();
+  let { sessionId }: { sessionId: string | null } = $props();
+  let currentId = $state<string | null>(null);
 
   interface Segment {
     audioId: string;
@@ -80,9 +82,10 @@
   }
 
   $effect(() => {
+    currentId = sessionId;
     messages = [];
     error = '';
-    void loadHistory(sessionId);
+    if (sessionId) void loadHistory(sessionId);
   });
 
   function findSeg(assistant: Msg, audioId: string): Segment {
@@ -143,7 +146,12 @@
     streaming = true;
     abort = new AbortController();
     try {
-      await streamTurn(sessionId, text, (ev) => handleEvent(ev, assistant), abort.signal);
+      let id = currentId;
+      if (!id) {
+        id = await createSession(prefs.prefs.on_disconnect_default ?? undefined);
+        currentId = id;
+      }
+      await streamTurn(id, text, (ev) => handleEvent(ev, assistant), abort.signal);
     } catch (err) {
       if (!abort.signal.aborted) error = err instanceof Error ? err.message : '回合失败';
     } finally {
@@ -153,7 +161,7 @@
 
   async function cancel() {
     abort?.abort();
-    await cancelSession(sessionId);
+    if (currentId) await cancelSession(currentId);
     streaming = false;
   }
 

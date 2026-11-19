@@ -1355,5 +1355,30 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0130-m1d-p8-acceptance-fixes.md",
+    "title": "M1d P8 验收修复（首轮人工验收发现 4 缺陷）",
+    "date": "2026-11-20T01:30+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "presets",
+      "upstream-401",
+      "logout",
+      "session-proliferation",
+      "test-connection"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

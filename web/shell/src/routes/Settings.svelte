@@ -104,11 +104,16 @@
     }
   }
 
-  async function testModels(id: string) {
+  async function testConnection(p: Provider) {
     error = '';
     try {
-      const models = await providerModels(id);
-      previewStatus = `模型：${models.map((m) => m.id).join(', ') || '（空）'}`;
+      if (p.adapter_id === 'tts-qwen-audio') {
+        const voices = await providerVoices(p.id);
+        previewStatus = `音色：${voices.map((v) => v.name).join(', ') || '（空）'}`;
+      } else {
+        const models = await providerModels(p.id);
+        previewStatus = `模型：${models.map((m) => m.id).join(', ') || '（空）'}`;
+      }
     } catch (err) {
       error = err instanceof Error ? err.message : '测试失败';
     }
@@ -351,6 +356,7 @@
       <button type="submit">添加</button>
     </form>
     <p class="hint">{$_('settings.apiKeyHint')}</p>
+    <p class="hint">端点：LLM 填 v1 根（…/compatible-mode/v1）；TTS 填 host 根（仅域名，适配器自动补全路径）。预设模板已含正确端点。</p>
     <table>
       <tbody>
         {#each providers as p (p.id)}
@@ -358,7 +364,7 @@
             <td>{p.label}</td>
             <td>{p.adapter_id}</td>
             <td class="actions">
-              <button onclick={() => testModels(p.id)}>{$_('settings.testConnection')}</button>
+              <button onclick={() => testConnection(p)}>{$_('settings.testConnection')}</button>
               <button onclick={() => removeProvider(p.id)}>删除</button>
             </td>
           </tr>

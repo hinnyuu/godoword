@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T00:40+08:00
-- 当前里程碑: **M1d 实施中——P0 合并；P1 听音确认；P2 CI 全绿；P3 web/core；P4–P6 全 UI（认证/管理/引导/设置/对话/会话）+ P7 Dockerfile/冒烟代码就绪 → 待 CI image 构建 + 人工全产品流验收 → P8 收尾**
+- verified: 2026-11-20T01:30+08:00
+- 当前里程碑: **M1d 实施中——P0 合并；P1 听音确认；P2 CI 全绿；P3 web/core；P4 认证流用户确认；P5–P7 全 UI+构建代码就绪；P8 首轮验收 4 缺陷已修（history 0130）→ 全新库复验中**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ 多轮审计收尾（a2bdf17）→ 验收+产品愿景（9d15342）→ **M1d 设计落档（本 PR）→ M1d 实施**
 
 ## done
@@ -37,7 +37,7 @@
 | P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | **代码就绪（Settings：provider CRUD+预设+测试连接+音色试听播放+绑定卡片/高级矩阵+主题预设/强调色/自定义 CSS+偏好开关；svelte-check/build 绿）；待人工确认** |
 | P6 | web/shell 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage 脚注） | **代码就绪（ChatView SSE 流式+音频播放+词级高亮+错误分流；SessionSidebar 目录树+元数据列表+移动/删除；Home/Sessions；svelte-check/build 绿）；待人工确认** |
 | P7 | Dockerfile node 阶段 + axum SPA fallback + 前端 CI job + 冒烟扩展 | **代码就绪（Dockerfile 三阶段 rust+node+runtime；冒烟 SPA 断言；meta M1d；hash 路由免 fallback）；待 CI image 构建验证** |
-| P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | 待启动 |
+| P8 | 验收：CI 全绿 + R4 main 重测 + 人工残留 sign-off + 全状态面 reconcile + history 实现条目 | **首轮人工验收发现 4 缺陷已修（内置预设/上游 Auth→502 防误登出/测试连接按 adapter 分流/会话懒创建防泛滥，history 0130）；全新库复验中** |
 
 ### M1d 已定案决策（不重议，详见 history 2049）
 

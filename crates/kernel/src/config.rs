@@ -104,7 +104,26 @@ impl Default for Config {
             data_dir: PathBuf::from("/data"),
             database_url: None,
             registration_mode: RegistrationMode::default(),
-            provider_presets: Vec::new(),
+            // 内置默认预设（首跑一键模板，不含 key；config.toml 可覆盖/追加）。
+            // TTS base_url 为 host 根（适配器自 append DashScope 路径）；LLM 为 v1 根。
+            provider_presets: vec![
+                ProviderPreset {
+                    id: "qwen-llm".to_string(),
+                    adapter_id: "llm-openai".to_string(),
+                    label: "Qwen LLM".to_string(),
+                    base_url: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1".to_string(),
+                    suggested_models: vec!["qwen4-max-preview".to_string()],
+                    capability: Some("llm".to_string()),
+                },
+                ProviderPreset {
+                    id: "qwen-tts".to_string(),
+                    adapter_id: "tts-qwen-audio".to_string(),
+                    label: "Qwen TTS".to_string(),
+                    base_url: "https://token-plan.maas.qianwenaiapi.com".to_string(),
+                    suggested_models: vec!["qwen-audio-3.0-tts-plus".to_string()],
+                    capability: Some("tts".to_string()),
+                },
+            ],
             cache_ttl_secs: 30 * 24 * 3600,
             cache_max_bytes: 1024 * 1024 * 1024,
             max_detached_turns: 4,
@@ -255,7 +274,9 @@ mod tests {
         assert_eq!(cfg.data_dir, PathBuf::from("/data"));
         assert!(cfg.database_url.is_none());
         assert_eq!(cfg.registration_mode, RegistrationMode::Invite);
-        assert!(cfg.provider_presets.is_empty());
+        assert_eq!(cfg.provider_presets.len(), 2, "内置默认预设 qwen-llm/qwen-tts");
+        assert_eq!(cfg.provider_presets[0].id, "qwen-llm");
+        assert_eq!(cfg.provider_presets[1].id, "qwen-tts");
         assert_eq!(cfg.view().database_backend, "sqlite");
     }
 
