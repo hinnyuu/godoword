@@ -10,6 +10,7 @@ use kernel::{run_migrations, Migration, KERNEL_MIGRATIONS};
 use kernel_api::{execute_both, fetch_all_both, fetch_one_both, fetch_optional_both, Store};
 use serde_json::Value;
 use sqlx::{PgPool, SqlitePool};
+use std::sync::Arc;
 use uuid::Uuid;
 
 async fn backends() -> Vec<Store> {
@@ -309,4 +310,77 @@ async fn checksum_drift_rejected() {
     }];
     let err = run_migrations(&store, &v1_changed, None).await;
     assert!(err.is_err(), "已应用迁移内容漂移须拒绝");
+}
+
+/// N8/A2 迁移失败回滚探针：第二语句失败 → 首 DDL + 版本记录均回滚，修正后可重跑（双后端）。
+async fn assert_migration_rollback(store: Arc<Store>, probe: &Migration, fixed: &Migration) {
+    let b = store.backend();
+    let r = run_migrations(&store, std::slice::from_ref(probe), None).await;
+    assert!(r.is_err(), "{b} N8：第二语句失败迁移报错");
+    // 首 DDL 回滚：probe_rb 不存在（查询报错）。
+    let q = fetch_one_both!(&*store, "SELECT COUNT(*) FROM probe_rb", (i64,));
+    assert!(q.is_err(), "{b} N8：首 DDL 回滚（probe_rb 不存在）");
+    // 版本记录回滚。
+    let ver: (i64,) = fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM _schema_migrations WHERE version = '9999'",
+        (i64,)
+    )
+    .unwrap();
+    assert_eq!(ver.0, 0, "{b} N8：版本记录回滚");
+    // 修正后重跑成功。
+    let n = run_migrations(&store, std::slice::from_ref(fixed), None)
+        .await
+        .unwrap();
+    assert_eq!(n, 1, "{b} N8：修正后重跑应用 1 条");
+    let cnt: (i64,) = fetch_one_both!(&*store, "SELECT COUNT(*) FROM probe_rb", (i64,)).unwrap();
+    assert_eq!(cnt.0, 0, "{b} N8：修正后 probe_rb 存在");
+}
+
+#[tokio::test]
+async fn migration_failure_rolls_back_ddl_and_version() {
+    let probe = Migration {
+        version: "9999",
+        name: "probe_rb",
+        sql:
+            "CREATE TABLE probe_rb (id UUID PRIMARY KEY); INSERT INTO gw_no_such_table VALUES (1);",
+    };
+    let fixed = Migration {
+        version: "9999",
+        name: "probe_rb",
+        sql: "CREATE TABLE probe_rb (id UUID PRIMARY KEY);",
+    };
+    let sqlite = SqlitePool::connect("sqlite::memory:").await.unwrap();
+    assert_migration_rollback(Arc::new(Store::Sqlite(sqlite)), &probe, &fixed).await;
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_migr_rb_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_migration_rollback(Arc::new(Store::Pg(pg)), &probe, &fixed).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
 }
