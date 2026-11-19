@@ -4,10 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>godoword</title>
-    <script type="module" crossorigin src="/assets/index-C6KUDxeG.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CTZXPDpa.css">
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 4rem auto; padding: 0 1rem; line-height: 1.6; }
+      code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 3px; }
+      footer { margin-top: 3rem; font-size: 0.85rem; color: #666; }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <h1>godoword</h1>
+    <p>借助 LLM 与语音合成 API 学习外语的私有部署应用，日语优先。当前为 <strong>M1c 后端就绪阶段</strong>（图形界面 M1d 落地）。</p>
+    <p>健康检查：<code>GET /healthz</code> · 服务信息：<code>GET /api/v1/meta</code></p>
+    <p>完整教学功能随里程碑 M1–M3 落地。部署说明见仓库 wiki/deploy。</p>
+    <footer>
+      许可证 AGPL-3.0 ·
+      <a href="https://github.com/hinnyuu/godoword">源码</a>
+    </footer>
   </body>
 </html>
