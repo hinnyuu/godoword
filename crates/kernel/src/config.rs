@@ -111,7 +111,8 @@ impl Default for Config {
                     id: "qwen-llm".to_string(),
                     adapter_id: "llm-openai".to_string(),
                     label: "Qwen LLM".to_string(),
-                    base_url: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1".to_string(),
+                    base_url: "https://token-plan.maas.qianwenaiapi.com/compatible-mode/v1"
+                        .to_string(),
                     suggested_models: vec!["qwen4-max-preview".to_string()],
                     capability: Some("llm".to_string()),
                 },
@@ -274,7 +275,11 @@ mod tests {
         assert_eq!(cfg.data_dir, PathBuf::from("/data"));
         assert!(cfg.database_url.is_none());
         assert_eq!(cfg.registration_mode, RegistrationMode::Invite);
-        assert_eq!(cfg.provider_presets.len(), 2, "内置默认预设 qwen-llm/qwen-tts");
+        assert_eq!(
+            cfg.provider_presets.len(),
+            2,
+            "内置默认预设 qwen-llm/qwen-tts"
+        );
         assert_eq!(cfg.provider_presets[0].id, "qwen-llm");
         assert_eq!(cfg.provider_presets[1].id, "qwen-tts");
         assert_eq!(cfg.view().database_backend, "sqlite");
