@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T00:03+08:00
-- 当前里程碑: **M1c 二审收尾加固代码完成（R1–R9 + A2/A3，history 2241/0003），待验收复核（M1d 延后至复核完成）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审收尾加固（feat/m1c-second-hardening 代码完成待验收）**
+- verified: 2026-11-19T13:24+08:00
+- 当前里程碑: **M1c 二审 + 第三次审计收尾代码完成（R1–R9 + N1–N7，history 2241/0003/1324），待验收复核（M1d 延后）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审+三审收尾加固（PR #15 代码完成待验收）**
 
 ## done
 
@@ -42,13 +42,14 @@
 
 ## in-flight
 
-- **feat/m1c-second-hardening：R1–R9 + A2/A3 代码修复完成**（10 commit，各配失败/并发负例，双后端绿，fmt/clippy 净）。
-  待验收闭环：CI 全绿（含 test_gate + 新负例）+ R4 same-tree/main 重测 + 人工残留 sign-off + 二审复核无新回归。
+- **feat/m1c-second-hardening（PR #15）：R1–R9 + A2/A3 + 第三次审计 N1–N7 代码修复完成**（各配失败/并发负例；
+  auth/journal/storage 并发与迁移回滚双后端绿，runtime 回合行为 SQLite；全 workspace 绿，fmt/clippy 净）。
+  待验收闭环：PR #15 CI 重跑绿 + 第三方定向复核 + 合并 + R4 same-tree/main 重测 + 人工残留 sign-off。
 
 ## blocked / 待拍板决策
 
-- **M1c 二审收尾代码修复完成（R1–R9，history 2241），待验收复核**：验收闭环（CI + R4 重测 + 人工 sign-off + 二审复核）前，
-  **不恢复"无阻塞/后端已就绪"声明**。
+- **M1c 二审 + 第三次审计收尾代码修复完成（R1–R9 / N1–N7，history 2241/0003/1324），待验收复核**：
+  验收闭环（CI 重跑 + 定向复核 + 合并 + R4 重测 + 人工 sign-off）前，**不恢复"无阻塞/后端已就绪"声明**。
 - M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
 
@@ -70,13 +71,18 @@
 
 ## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
 
-**P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化；各配失败/并发负例，双后端绿）。
+**P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化）。
 
 **P1（一致性/CI/文档）**：全部完成（R6 SessionEnded 删除原子 / R8 test_gate 接 docs-gate CI / 文档漂移 trivial 项 #14 已修）。
 
 **P2（运维/精化）**：全部完成（R9 旧 sidecar 兼容 404 可再生 / 限流器过期清理+容量上限 / 可信代理 XFF 最右不可信跳，Config trusted_proxies + 部署 wiki）。
 
-**R1–R9 代码修复全部落地**（各配失败/并发负例，双后端绿，详见 history 2241 + 各 fix commit）。剩余为验收闭环（见下）。
+**第三次审计 N1–N7 全部完成**（history 1324）：N1 OpenAPI 操作级 security 矩阵 / N2 end_session DELETE RETURNING 唯一认领 /
+N3 summarize 中途失败不固化 / N4 重置防 Argon2 放大+改密 rows 校验 / N5 限流容量满 fail-closed 保密禁 /
+N6 shutdown 拒新回合+满队列终态策略 / N7 缺 sidecar 404；N8 迁移回滚探针+OpenAPI 矩阵+真实摘要失败链测试补齐。
+
+**R1–R9 + N1–N7 代码修复全部落地**（各配失败/并发负例；auth/journal/storage 并发与迁移回滚双后端，runtime 回合行为 SQLite；
+全 workspace 绿，详见 history 2241/0003/1324 + 各 fix commit）。剩余为验收闭环（见下）。
 
 **重新签收证据**（二审第七节）：重置并发仅一次 + 空密码拒绝 / 音频写失败无假成功 / 淘汰各失败点不丢不重 + summarize 多回合 /
 满 mpsc 超时退出 + shutdown abort/join 后 checkpoint / OpenAPI $ref 全解析 + 认证 CSRF 一致 / 管理员并发互禁不失锁 /

@@ -1068,5 +1068,33 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-19-1324-m1c-third-audit-fixes.md",
+    "title": "M1c 第三次审计收尾（N1–N7）+ 测试缺口补齐",
+    "date": "2026-11-19T13:24+08:00",
+    "keywords": [
+      "m1c",
+      "third-audit",
+      "openapi-security",
+      "end-session",
+      "summarize-failure",
+      "reset-amplification",
+      "rate-limiter",
+      "shutdown",
+      "sidecar",
+      "migration-rollback"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
   }
 ]
