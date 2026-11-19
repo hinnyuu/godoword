@@ -339,29 +339,67 @@ async fn run_test(store: Arc<Store>) {
     );
 
     // 自助改密（M1d）：验旧密 + 撤销其他会话保留当前 + 弱密码/错旧密拒绝。
-    let chg = register(&store, "chgpwd", "orig-pass-123", None, None, false).await.unwrap();
-    let cur_token = create_session(&store, chg, Duration::hours(1)).await.unwrap();
-    let other_token = create_session(&store, chg, Duration::hours(1)).await.unwrap();
+    let chg = register(&store, "chgpwd", "orig-pass-123", None, None, false)
+        .await
+        .unwrap();
+    let cur_token = create_session(&store, chg, Duration::hours(1))
+        .await
+        .unwrap();
+    let other_token = create_session(&store, chg, Duration::hours(1))
+        .await
+        .unwrap();
     // 错旧密拒绝。
     assert!(
-        change_password(&store, chg, "wrong-old", "new-pass-123", Some(&cur_token)).await.is_err(),
+        change_password(&store, chg, "wrong-old", "new-pass-123", Some(&cur_token))
+            .await
+            .is_err(),
         "{b} 错旧密拒绝"
     );
     // 弱新密码拒绝（不撤销会话）。
     assert!(
-        change_password(&store, chg, "orig-pass-123", "weak", Some(&cur_token)).await.is_err(),
+        change_password(&store, chg, "orig-pass-123", "weak", Some(&cur_token))
+            .await
+            .is_err(),
         "{b} 弱新密码拒绝"
     );
-    assert_eq!(validate_session(&store, &other_token).await.unwrap(), Some(chg), "{b} 弱密码不撤销会话");
+    assert_eq!(
+        validate_session(&store, &other_token).await.unwrap(),
+        Some(chg),
+        "{b} 弱密码不撤销会话"
+    );
     // 成功改密：保留当前，撤销其他。
     assert!(
-        change_password(&store, chg, "orig-pass-123", "new-pass-123", Some(&cur_token)).await.unwrap(),
+        change_password(
+            &store,
+            chg,
+            "orig-pass-123",
+            "new-pass-123",
+            Some(&cur_token)
+        )
+        .await
+        .unwrap(),
         "{b} 改密成功"
     );
-    assert_eq!(validate_session(&store, &cur_token).await.unwrap(), Some(chg), "{b} 当前会话保留");
-    assert_eq!(validate_session(&store, &other_token).await.unwrap(), None, "{b} 其他会话撤销");
-    assert!(verify_login(&store, "chgpwd", "new-pass-123").await.is_ok(), "{b} 新密码可登录");
-    assert!(verify_login(&store, "chgpwd", "orig-pass-123").await.is_err(), "{b} 旧密码失效");
+    assert_eq!(
+        validate_session(&store, &cur_token).await.unwrap(),
+        Some(chg),
+        "{b} 当前会话保留"
+    );
+    assert_eq!(
+        validate_session(&store, &other_token).await.unwrap(),
+        None,
+        "{b} 其他会话撤销"
+    );
+    assert!(
+        verify_login(&store, "chgpwd", "new-pass-123").await.is_ok(),
+        "{b} 新密码可登录"
+    );
+    assert!(
+        verify_login(&store, "chgpwd", "orig-pass-123")
+            .await
+            .is_err(),
+        "{b} 旧密码失效"
+    );
 
     // 清理（级联删 credentials/sessions）。
     for u in [admin, user1, user4, case_user, nocred, u0, chg] {
