@@ -1096,5 +1096,29 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "15"
+  },
+  {
+    "file": "2026-11-19-1529-m1c-fourth-review-fixes.md",
+    "title": "M1c 第四次复核收尾（H1/H2）+ 测试同源偏差增强",
+    "date": "2026-11-19T15:29+08:00",
+    "keywords": [
+      "m1c",
+      "fourth-review",
+      "shutdown-lifecycle",
+      "lock",
+      "finish-reason",
+      "summarize",
+      "openapi-matrix"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
   }
 ]
