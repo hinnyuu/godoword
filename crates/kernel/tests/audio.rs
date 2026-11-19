@@ -158,5 +158,12 @@ async fn get_legacy_or_corrupt_sidecar_none() {
         cache.get(id2, user).await.unwrap().is_none(),
         "R9.1：损坏 sidecar → None"
     );
+    // PCM-only 崩溃孤儿（审计 N7）：只有 PCM 无 sidecar → None（404 可再生），不 500。
+    let id3 = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id3.0)), vec![7u8; 100]).unwrap();
+    assert!(
+        cache.get(id3, user).await.unwrap().is_none(),
+        "N7：PCM-only 孤儿 → None"
+    );
     std::fs::remove_dir_all(&dir).unwrap();
 }

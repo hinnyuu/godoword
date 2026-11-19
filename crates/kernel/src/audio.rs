@@ -149,7 +149,12 @@ impl AudioCache for FsAudio {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(io_err(e)),
         };
-        let json = tokio::fs::read(self.json_path(id)).await.map_err(io_err)?;
+        let json = match tokio::fs::read(self.json_path(id)).await {
+            Ok(b) => b,
+            // PCM-only 崩溃孤儿（审计 N7）：sidecar 缺失视为缓存缺失 → None（404 可再生），不 500。
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(io_err(e)),
+        };
         let sidecar: Sidecar = match serde_json::from_slice(&json) {
             Ok(s) => s,
             Err(e) => {

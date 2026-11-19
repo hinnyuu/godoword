@@ -42,7 +42,7 @@
   `evict_session` 原子更新，R4）、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
 - `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
   `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界；
-  **owner 可空 + 旧/损坏 sidecar 视为缺失 → 404 可再生不 500，审计 R9.1**）；
+  **owner 可空 + 旧/损坏 sidecar + PCM-only 崩溃孤儿均视为缺失 → 404 可再生不 500，审计 R9.1/N7**）；
   `MemAudio` 测试替身。**默认新鲜合成**；
   复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash）+ 静态资产（M2）。见 history 音频白名单条目。
 
