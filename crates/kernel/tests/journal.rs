@@ -458,3 +458,97 @@ async fn end_session_atomicity() {
         eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
     }
 }
+
+/// N2 并发 end_session 唯一认领断言：8 并发恰一个 true、恰一个 session-ended 事件、会话已删。
+async fn assert_end_concurrent(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let user = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, user).await.unwrap();
+    let sessions = kernel::DbSessions::new(store.clone());
+    let sid = kernel_api::SessionId::new();
+    sessions
+        .create(
+            kernel_api::UserId(user),
+            sid,
+            kernel::SessionMeta::default(),
+        )
+        .await
+        .unwrap();
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let s = store.clone();
+        handles.push(tokio::spawn(async move {
+            kernel::end_session(&s, user, sid.0).await
+        }));
+    }
+    let mut ok = 0;
+    for h in handles {
+        if h.await.unwrap().unwrap() {
+            ok += 1;
+        }
+    }
+    assert_eq!(ok, 1, "{b} N2：并发 end_session 恰一个 true（实得 {ok}）");
+    let ev: (i64,) = fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE session_id = $1 AND kind = 'session-ended'",
+        (i64,),
+        sid.0
+    )
+    .unwrap();
+    assert_eq!(
+        ev.0, 1,
+        "{b} N2：恰一个 session-ended 事件（实得 {}）",
+        ev.0
+    );
+    assert!(
+        !sessions
+            .exists(kernel_api::UserId(user), sid)
+            .await
+            .unwrap(),
+        "{b} N2：会话已删"
+    );
+}
+
+#[tokio::test]
+async fn end_session_concurrent_unique() {
+    let dir = std::env::temp_dir().join(format!("gw-end-conc-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_end_concurrent(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_end_conc_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_end_concurrent(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}

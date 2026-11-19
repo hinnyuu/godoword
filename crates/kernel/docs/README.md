@@ -23,8 +23,8 @@
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退）；
   call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
   **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
-  **`end_session`（审计 R6）**：读 module_id（失败关闭）→ session-ended outbox + DELETE sessions 同事务原子
-  （不吞错伪造结束，事件提交后才可见 dispatcher 不提前消费）；
+  **`end_session`（审计 R6/N2）**：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插 session-ended outbox
+  （并发删除恰一个 true 一个事件，不吞错伪造结束，事件提交后才可见 dispatcher 不提前消费）；
   **`summary_spans` 计费幂等**（summary_span_hash/lookup/store_summary_span）：span 消息 ID 集哈希键，命中复用 fragment 免重复计费。
 - 错误归一化：`ProviderError` → `SessionEvent::Error`（auth/quota→action:settings、rate_limit/network 可重试等）。
 

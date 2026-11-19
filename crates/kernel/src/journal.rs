@@ -160,9 +160,9 @@ pub async fn dispatch_once(
     Ok(processed)
 }
 
-/// 会话结束原子落库（审计 R6）：读 module_id（失败关闭，不吞错模糊路由）→ session-ended outbox INSERT
-/// → DELETE sessions **同事务**。emit 失败则不删（不丢事件），delete 失败则 outbox 回滚（不伪造结束）；
-/// 事件提交后才可见，dispatcher 不会在删除提交前消费。Ok(true)=已结束删除 / Ok(false)=不存在或非本用户。
+/// 会话结束原子落库（审计 R6/N2）：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插入
+/// session-ended outbox → 提交。并发删除仅一个事务取得行（恰好一个事件、一个 true）；不存在/非本用户/已被
+/// 并发删除 → Ok(false)。emit 失败则 DELETE 回滚（不丢事件不伪造结束）；事件提交后才可见 dispatcher 不提前消费。
 pub async fn end_session(
     store: &Store,
     user_id: Uuid,
@@ -174,13 +174,14 @@ pub async fn end_session(
     match store {
         Store::Sqlite(pool) => {
             let mut tx = pool.begin().await.map_err(storage_err)?;
-            let row: Option<(Option<String>,)> =
-                sqlx::query_as("SELECT module_id FROM sessions WHERE id = ? AND user_id = ?")
-                    .bind(session_id)
-                    .bind(user_id)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "DELETE FROM sessions WHERE id = ? AND user_id = ? RETURNING module_id",
+            )
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
             let Some((module_id,)) = row else {
                 return Ok(false);
             };
@@ -201,24 +202,19 @@ pub async fn end_session(
             .execute(&mut *tx)
             .await
             .map_err(storage_err)?;
-            sqlx::query("DELETE FROM sessions WHERE id = ? AND user_id = ?")
-                .bind(session_id)
-                .bind(user_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage_err)?;
             tx.commit().await.map_err(storage_err)?;
             Ok(true)
         }
         Store::Pg(pool) => {
             let mut tx = pool.begin().await.map_err(storage_err)?;
-            let row: Option<(Option<String>,)> =
-                sqlx::query_as("SELECT module_id FROM sessions WHERE id = $1 AND user_id = $2")
-                    .bind(session_id)
-                    .bind(user_id)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "DELETE FROM sessions WHERE id = $1 AND user_id = $2 RETURNING module_id",
+            )
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
             let Some((module_id,)) = row else {
                 return Ok(false);
             };
@@ -239,12 +235,6 @@ pub async fn end_session(
             .execute(&mut *tx)
             .await
             .map_err(storage_err)?;
-            sqlx::query("DELETE FROM sessions WHERE id = $1 AND user_id = $2")
-                .bind(session_id)
-                .bind(user_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(storage_err)?;
             tx.commit().await.map_err(storage_err)?;
             Ok(true)
         }
