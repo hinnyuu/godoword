@@ -81,8 +81,26 @@ use utoipa::OpenApi;
 )]
 pub struct ApiDoc;
 
-/// 构建完整 OpenAPI 文档（审计 R5）：derive 基础 + 机器可读 cookieAuth/security + 所有 /api/v1 变更操作
-/// 集中补 CSRF `X-Requested-With` header 参数 + 403 响应（DRY，与 csrf_guard 中间件一致）。
+/// 公开 operation（无需 cookie 认证，审计 N1）：健康/元信息/配置/注册/登录/重置/登出/OpenAPI 自身。
+/// 运行时按 extractor 选择认证（非全局 cookie），文档须与之一致——公开操作 security:[]，受保护 cookieAuth。
+fn is_public(path: &str, method: &str) -> bool {
+    matches!(
+        (path, method),
+        ("/healthz", "get")
+            | ("/readyz", "get")
+            | ("/api/v1/meta", "get")
+            | ("/api/v1/config", "get")
+            | ("/api/v1/openapi.json", "get")
+            | ("/api/v1/auth/register", "post")
+            | ("/api/v1/auth/login", "post")
+            | ("/api/v1/auth/reset-password", "post")
+            | ("/api/v1/auth/logout", "post")
+    )
+}
+
+/// 构建完整 OpenAPI 文档（审计 R5/N1）：derive 基础 + cookieAuth securityScheme + **操作级 security 矩阵**
+/// （公开 security:[] / 受保护 cookieAuth，不用根级全局以免误伤公开端点）+ 所有 /api/v1 变更操作集中补
+/// CSRF `X-Requested-With` header 参数 + 403 响应（DRY，与 csrf_guard 中间件一致）。
 pub fn build_openapi() -> Value {
     let mut doc = serde_json::to_value(ApiDoc::openapi()).unwrap_or_else(|_| json!({}));
     if !doc
@@ -92,40 +110,62 @@ pub fn build_openapi() -> Value {
     {
         doc["components"] = json!({});
     }
-    // cookie 会话认证（apiKey in cookie）+ 全局 security 要求。
     doc["components"]["securitySchemes"] = json!({
         "cookieAuth": { "type": "apiKey", "in": "cookie", "name": "godoword_session" }
     });
-    doc["security"] = json!([{ "cookieAuth": [] }]);
-    // CSRF：所有 /api/v1 变更操作补 header 参数 + 403（缺头或非管理员）。
+    if !doc.get("paths").map(|p| p.is_object()).unwrap_or(false) {
+        doc["paths"] = json!({});
+    }
+    // 登记 openapi.json 自身（公开 GET，文档自描述完整）。
+    doc["paths"]["/api/v1/openapi.json"] = json!({
+        "get": {
+            "tags": ["system"],
+            "operationId": "openapi_json",
+            "responses": {
+                "200": {
+                    "description": "OpenAPI 文档",
+                    "content": { "application/json": { "schema": { "type": "object" } } }
+                }
+            }
+        }
+    });
     if let Some(paths) = doc.get_mut("paths").and_then(|p| p.as_object_mut()) {
         for (path, item) in paths.iter_mut() {
-            if !path.starts_with("/api/v1") {
-                continue;
-            }
-            for method in ["post", "put", "delete", "patch"] {
+            for method in ["get", "post", "put", "delete", "patch"] {
                 let Some(op) = item.get_mut(method).and_then(|o| o.as_object_mut()) else {
                     continue;
                 };
-                let params = op.entry("parameters").or_insert_with(|| json!([]));
-                if let Some(arr) = params.as_array_mut() {
-                    let has = arr.iter().any(|p| {
-                        p.get("name").and_then(|n| n.as_str()) == Some("X-Requested-With")
-                    });
-                    if !has {
-                        arr.push(json!({
-                            "name": "X-Requested-With",
-                            "in": "header",
-                            "required": true,
-                            "description": "CSRF 自定义头（变更请求必带，缺则 403）",
-                            "schema": { "type": "string" }
-                        }));
+                // 操作级 security 矩阵（审计 N1）。
+                let sec = if is_public(path, method) {
+                    json!([])
+                } else {
+                    json!([{ "cookieAuth": [] }])
+                };
+                op.insert("security".to_string(), sec);
+                // CSRF：/api/v1 变更操作补 header 参数 + 403（运行时 register/login/reset 也要求自定义头）。
+                if path.starts_with("/api/v1")
+                    && matches!(method, "post" | "put" | "delete" | "patch")
+                {
+                    let params = op.entry("parameters").or_insert_with(|| json!([]));
+                    if let Some(arr) = params.as_array_mut() {
+                        let has = arr.iter().any(|p| {
+                            p.get("name").and_then(|n| n.as_str()) == Some("X-Requested-With")
+                        });
+                        if !has {
+                            arr.push(json!({
+                                "name": "X-Requested-With",
+                                "in": "header",
+                                "required": true,
+                                "description": "CSRF 自定义头（变更请求必带，缺则 403）",
+                                "schema": { "type": "string" }
+                            }));
+                        }
                     }
-                }
-                let responses = op.entry("responses").or_insert_with(|| json!({}));
-                if let Some(rmap) = responses.as_object_mut() {
-                    rmap.entry("403")
-                        .or_insert_with(|| json!({ "description": "CSRF 头缺失或非管理员" }));
+                    let responses = op.entry("responses").or_insert_with(|| json!({}));
+                    if let Some(rmap) = responses.as_object_mut() {
+                        rmap.entry("403")
+                            .or_insert_with(|| json!({ "description": "CSRF 头缺失或非管理员" }));
+                    }
                 }
             }
         }
@@ -191,36 +231,73 @@ mod tests {
             schemas.contains_key("CreateSessionReq"),
             "R5：CreateSessionReq 注册"
         );
-        // cookieAuth securityScheme + 全局 security。
+        // cookieAuth securityScheme（机器可读）。
         assert_eq!(
             doc["components"]["securitySchemes"]["cookieAuth"]["type"].as_str(),
             Some("apiKey"),
-            "R5：cookieAuth apiKey"
+            "cookieAuth apiKey"
         );
         assert_eq!(
             doc["components"]["securitySchemes"]["cookieAuth"]["in"].as_str(),
             Some("cookie"),
-            "R5：cookieAuth in cookie"
+            "cookieAuth in cookie"
         );
+        // N1：不用根级全局 security（会误伤公开端点）。
         assert!(
-            doc["security"]
-                .as_array()
-                .map(|a| !a.is_empty())
-                .unwrap_or(false),
-            "R5：全局 security 要求"
+            doc.get("security")
+                .map(|s| s.as_array().map(|a| a.is_empty()).unwrap_or(true))
+                .unwrap_or(true),
+            "N1：无根级全局 security"
         );
-        // 变更端点 CSRF header + 403（集中注入）。
-        let post_sessions = &doc["paths"]["/api/v1/sessions"]["post"];
-        let params = post_sessions["parameters"].as_array().expect("parameters");
+        // N1：操作级 security 矩阵——公开 security:[]，受保护 cookieAuth；N8：所有变更方法 CSRF required+403。
+        let paths = doc["paths"].as_object().expect("paths");
+        let mut public_count = 0;
+        let mut protected_count = 0;
+        for (path, item) in paths {
+            for method in ["get", "post", "put", "delete", "patch"] {
+                let Some(op) = item.get(method) else { continue };
+                let sec = op
+                    .get("security")
+                    .and_then(|s| s.as_array())
+                    .unwrap_or_else(|| panic!("N1：{method} {path} 缺 security"));
+                if is_public(path, method) {
+                    assert!(sec.is_empty(), "N1：公开 {method} {path} security 应为空");
+                    public_count += 1;
+                } else {
+                    assert!(
+                        sec.iter().any(|s| s.get("cookieAuth").is_some()),
+                        "N1：受保护 {method} {path} 应要求 cookieAuth"
+                    );
+                    protected_count += 1;
+                }
+                if path.starts_with("/api/v1")
+                    && matches!(method, "post" | "put" | "delete" | "patch")
+                {
+                    let params = op
+                        .get("parameters")
+                        .and_then(|p| p.as_array())
+                        .unwrap_or_else(|| panic!("N8：{method} {path} 缺 parameters"));
+                    let csrf = params
+                        .iter()
+                        .find(|p| p["name"].as_str() == Some("X-Requested-With"))
+                        .unwrap_or_else(|| panic!("N8：{method} {path} 缺 CSRF header"));
+                    assert_eq!(csrf["required"].as_bool(), Some(true), "N8：CSRF required");
+                    assert!(
+                        op["responses"]["403"].is_object(),
+                        "N8：{method} {path} 缺 403"
+                    );
+                }
+            }
+        }
         assert!(
-            params
-                .iter()
-                .any(|p| p["name"].as_str() == Some("X-Requested-With")),
-            "R5：变更端点 CSRF header"
+            public_count >= 8,
+            "N1：公开操作数（healthz/register/login 等）"
         );
+        assert!(protected_count >= 10, "N1：受保护操作数");
+        // openapi.json 自身登记（公开）。
         assert!(
-            post_sessions["responses"]["403"].is_object(),
-            "R5：变更端点 403"
+            doc["paths"]["/api/v1/openapi.json"]["get"].is_object(),
+            "N1：openapi.json 登记"
         );
         // delete 会话 404（越权/不存在）。
         assert!(
