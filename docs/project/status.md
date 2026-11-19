@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T16:26+08:00
-- 当前里程碑: **M1c 二审至五审收尾代码完成（R1–R9 + N1–N7 + H1/H2 + EOF，history 2241/0003/1324/1529/1626），待验收复核（M1d 延后）**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审+三审收尾加固（PR #15 代码完成待验收）**
+- verified: 2026-11-19T17:57+08:00
+- 当前里程碑: **M1c 收尾完成无阻塞（多轮审计加固 PR #15 已合并 a2bdf17，R4 main 重测绿，人工 sign-off + 六轮复核通过）→ M1d 待启动设计讨论**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **多轮审计收尾加固（a2bdf17，PR #15 已合并验收）→ M1d 待启动**
 
 ## done
 
@@ -39,60 +39,37 @@
   P0 对象级授权（session/audio/binding 全路径校验归属，越权 404）+ binding/provider 同主 + 禁用/重置撤销会话 + 持久化失败关闭；
   P1 continue 公开配置 + 硬超时/TTS cancel/退出屏障（WAL checkpoint）+ 淘汰水位（0003）+ 重置 token 化/IP 限流/SessionEnded/上游重试 + 测试端点计量；
   OpenAPI 修正 + 全状态面 reconcile + **门禁 D6/D7 修复 + 合成回归 6 例** + AGENTS 协议加固。两用户负例 + 多回合不重复 + 重置令牌单次锚定。详见 history 1618。
+- **M1c 多轮审计收尾加固（a2bdf17，PR #15 已合并，R4 main 重测 success，部署矩阵/TTS 音质 sign-off，六轮复核通过）**：
+  二审 R1–R9（重置事务+密码策略/音频失败关闭/退出 abort+背压/淘汰原子+计费幂等/OpenAPI/SessionEnded/管理员串行化/test_gate CI/运维精化）
+  + 三审 N1–N7（OpenAPI 操作级 security 矩阵/end_session 唯一认领/summarize 失败/重置防放大+rows/限流保密禁/shutdown 拒新回合/缺 sidecar）
+  + 四审 H1/H2（shutdown 生命周期同锁/Finish 非 Stop 失败）+ 五审 EOF（仅 Stop 成功，三失败通道穷举）。各配失败/并发负例（双后端）。
+  **不改 kernel-api 契约**。真 key 活体全链路 + summarize 淘汰活体实证。详见 history 2241/0003/1324/1529/1626。
+- **M1c 验收文档复核（本 PR）**：超规格全量 docs/wiki 复核——确认加固信息已记录；**补强产品核心需求显著度**
+  （README 产品愿景 + wiki/user 愿景 + architecture 定位 + roadmap M1d 高自定义 WebUI），防多轮开发后核心需求被稀释。详见 history 1757。
 
 ## in-flight
 
-- **feat/m1c-second-hardening（PR #15）：R1–R9 + A2/A3 + 三审 N1–N7 + 四审 H1/H2 + 五审 EOF 代码修复完成**（各配失败/并发负例；
-  auth/journal/storage 并发与迁移回滚双后端绿，runtime 回合行为 SQLite；全 workspace 绿，fmt/clippy 净）。
-  待验收闭环：PR #15 CI 重跑绿 + 第三方定向复核 + 合并 + R4 same-tree/main 重测 + 人工残留 sign-off。
+- 无开放实现 PR。M1c 收尾完成无阻塞；本 docs PR（产品愿景补强 + 验收交接）合并后启动 M1d 设计讨论。
 
 ## blocked / 待拍板决策
 
-- **M1c 二审至五审收尾代码修复完成（R1–R9 / N1–N7 / H1/H2 / EOF，history 2241/0003/1324/1529/1626），待验收复核**：
-  验收闭环（CI 重跑 + 定向复核 + 合并 + R4 重测 + 人工 sign-off）前，**不恢复"无阻塞/后端已就绪"声明**。
-- M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
-- 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
+- **M1c 无阻塞**（多轮审计加固合并验收完成）。M1d 启动设计讨论待主开发者发起（前端构建工具/Svelte 5 runes/web 分层/OpenAPI→TS/SSE 重连/AudioWorklet/词级高亮/i18n/前端测试/Dockerfile node 阶段，重大者交用户）。
+- 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用；**六轮复核非阻断观察**（summarize usage Finish 后或漏记/主循环与 summarize Finish 处理不对称/断言助手可增强）留 M2 一致性检查统一处理。
 
-## 下一动作（实现序列，设计已定案 history 2241）
+## 下一动作
 
-设计分歧定案：①事务=驱动专属块（沿用 register，不改 kernel-api）；②R4 计费幂等=新表 summary_spans（0004）+ 修迁移原子性；
-③R9=Config.trusted_proxies + XFF 最右不可信跳；④密码=8–128 字符 + 必含字母与数字（建议加特殊字符，区分大小写），
-统一 validate_password；⑤本期纳入 A2/A3/A4，A5（outbox 消费幂等）留 M2，A6 可选。
-
-1. P0：R1 重置事务+密码校验+双后端并发仅一次负例 → R7 管理员串行化+并发互禁负例。
-2. P0：R2 音频失败语义+故障注入（含 A3 孤儿）→ R3 真 abort+join+try_send/关通道+满 mpsc/shutdown 回归（含 A1 永久 busy）。
-3. P0：R4 emit+水位同事务+0004 幂等表（含 A2 迁移原子性）+summarize 多回合/各失败点测试 → R6 delete 原子。
-4. P0/P1：R5 OpenAPI 系统性标注（cookieAuth/CSRF/403/404）+$ref 全解析测试（A4）→ R8 test_gate 接 CI。
-5. P2：R9 sidecar 升级处理+限流器清理+可信代理。
-6. 收尾：全状态面 reconcile + history + CI 绿（含新并发/失败回归）+ R4 重测 + 人工残留 sign-off + 二审复核无新回归
-   → 恢复"M1c 收尾完成无阻塞" → M1d 设计讨论。
+- **M1d 设计讨论**（待主开发者发起）：范围/待讨论设计/验收见下「M1d 启动规划」。后端基础就绪无阻塞。
+- M2 一致性检查留档：六轮复核非阻断观察（summarize usage/主循环 Finish 对称/断言增强）+ outbox 消费幂等（A5）+ 角色音色档案实体 + 白名单音频复用。
 
 **文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
 
-## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
+## M1c 多轮审计收尾（已完成合并验收，详见 history 2241/0003/1324/1529/1626，不重议）
 
-**P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化）。
-
-**P1（一致性/CI/文档）**：全部完成（R6 SessionEnded 删除原子 / R8 test_gate 接 docs-gate CI / 文档漂移 trivial 项 #14 已修）。
-
-**P2（运维/精化）**：全部完成（R9 旧 sidecar 兼容 404 可再生 / 限流器过期清理+容量上限 / 可信代理 XFF 最右不可信跳，Config trusted_proxies + 部署 wiki）。
-
-**第三次审计 N1–N7 全部完成**（history 1324）：N1 OpenAPI 操作级 security 矩阵 / N2 end_session DELETE RETURNING 唯一认领 /
-N3 summarize 中途失败不固化 / N4 重置防 Argon2 放大+改密 rows 校验 / N5 限流容量满 fail-closed 保密禁 /
-N6 shutdown 拒新回合+满队列终态策略 / N7 缺 sidecar 404；N8 迁移回滚探针+OpenAPI 矩阵+真实摘要失败链测试补齐。
-
-**第四次复核 H1/H2 全部完成**（history 1529）：H1 shutdown 准入—注册—快照同 tasks 锁串行化（确定性交错+barrier 并发回归）/
-H2 summarize Finish(Error/Length/ContentFilter/Cancelled) 不固化部分摘要；OpenAPI 测试独立公开操作表（防同源偏差）。
-
-**第五次复核 EOF 完成**（history 1626）：summarize 仅实际收到 Finish(Stop) 才成功，无 Finish 静默 EOF 不固化；
-表驱动覆盖五种非 Stop Finish + EOF 负例。
-
-**R1–R9 + N1–N7 + H1/H2 + EOF 代码修复全部落地**（各配失败/并发负例；auth/journal/storage 并发与迁移回滚双后端，runtime 回合行为 SQLite；
-全 workspace 绿，详见 history 2241/0003/1324/1529/1626 + 各 fix commit）。剩余为验收闭环（见下）。
-
-**重新签收证据**（二审第七节）：重置并发仅一次 + 空密码拒绝 / 音频写失败无假成功 / 淘汰各失败点不丢不重 + summarize 多回合 /
-满 mpsc 超时退出 + shutdown abort/join 后 checkpoint / OpenAPI $ref 全解析 + 认证 CSRF 一致 / 管理员并发互禁不失锁 /
-test_gate CI 必跑 / 状态面单一事实 / 修复 PR + R4 绿 + 二审复核无新回归。
+二审 R1–R9 + 三审 N1–N7 + 四审 H1/H2 + 五审 EOF 全部修复闭环（PR #15 a2bdf17）：重置事务单次+统一密码策略、
+音频失败关闭、退出 abort+join+背压硬边界+生命周期同锁、淘汰原子+summarize 计费幂等+仅 Stop 成功（流 Err/非 Stop Finish/无 Finish EOF 三通道穷举）、
+SessionEnded 唯一认领、管理员禁用串行化、OpenAPI 操作级 security 矩阵+$ref 全解析、test_gate CI、sidecar 兼容+限流保密禁+可信代理 XFF。
+各配失败/并发负例（auth/journal/storage 双后端，runtime 回合 SQLite）；CI 7/7 + R4 main 重测 + 部署矩阵/TTS 音质 sign-off + 六轮复核通过。
+**不改 kernel-api 契约**。真 key 活体全链路 + summarize 淘汰活体实证。
 
 ## M1c-hardening（已完成，详见 history 1618，不重议）
 
@@ -101,15 +78,16 @@ continue 公开配置 + 硬超时/TTS cancel/退出屏障 + 淘汰水位（0003�
 OpenAPI 修正 + 全状态面 reconcile + 门禁 D6/D7 修复（test_gate.py 回归 6 例）+ AGENTS 协议加固。
 两用户负例 + 多回合不重复 + 重置令牌单次锚定；CI 7 checks + R4 + 人工残留 sign-off 全过。
 
-## M1d 启动规划（延后至二审收尾加固复核完成，设计待讨论）
+## M1d 启动规划（M1c 已收尾无阻塞，设计待主开发者发起讨论）
 
 **范围**（蓝图 M1d，有 UI）：Svelte 骨架 + 设置/会话/认证 UI。web/core 框架无关 TS（OpenAPI→TS 客户端 + SSE 客户端
-+ AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ 设置 UI（BYOK provider/binding
-+ 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）+ Dockerfile node 构建阶段 + 前端 CI job。
++ AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ **高自定义/可美化 UI**（核心需求）
++ 设置 UI（BYOK provider/binding + 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）
++ Dockerfile node 构建阶段 + 前端 CI job。
 
-**后端基础就绪**（M1c + hardening + 二审收尾）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
-**OpenAPI 完整性已修（R5：CreateSessionReq 注册 + cookieAuth/CSRF/403/404 + $ref 全解析测试），M1d 可生成 TS 客户端**
-（待二审收尾验收复核完成）。M1d 不改后端契约（若需契约变更走全量审查）。
+**后端基础就绪无阻塞**（M1c + hardening + 多轮审计收尾合并验收）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
+**OpenAPI 完整性已修（R5/N1：CreateSessionReq 注册 + 操作级 cookieAuth/CSRF/403/404 + $ref 全解析测试），M1d 可生成 TS 客户端**。
+M1d 不改后端契约（若需契约变更走全量审查）。
 
 **待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
 /SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。

@@ -4,7 +4,23 @@
 LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-one，podman 优先、兼容 docker。
 
 - 许可证：AGPL-3.0（见 [LICENSE](LICENSE)）
-- 状态：M1c 完成（会话运行时 + 认证 + 管理 + 持久化 + 上下文淘汰 + 计量）并经第三方审计加固（对象级授权/失败关闭/硬边界），M1d 前端待启动（详见 [roadmap](docs/project/roadmap.md)）
+- 状态：M1c 完成（会话运行时 + 认证 + 管理 + 持久化 + 上下文淘汰 + 计量）并经多轮第三方审计加固，M1d 前端待启动（详见 [roadmap](docs/project/roadmap.md)）
+
+## 产品愿景与核心需求
+
+godoword 的核心是**让 LLM 担任语言教师、结合 TTS 完成听说教学**（日语优先，未来 STT 听说互动）。
+以下核心需求贯穿全部设计，**新 agent 接手须始终明确**（当前实现事实见 [architecture](docs/project/architecture.md)，
+里程碑序列见 [roadmap](docs/project/roadmap.md)，决策为什么见 [history](history/)）：
+
+- **完全 BYOK**：用户自选 LLM/TTS 服务商并自填 API key，服务端仅代理调用；key 静态加密、不下发浏览器、管理员不可读。
+- **多角色声音与角色扮演**：TTS 音色目录/克隆归服务商；跨模块老师声音经绑定配置，对话角色声音经 speak 参数，
+  角色音色档案库（M2+）跨模块复用——定位为横切声音基础设施（地基原语 + 模块编排，见 history 角色扮演条目）。
+- **自适应教学与集中评估**：多教学模块（五十音/对话等）输出进度事件，评估模块（teach-assess）集中提取、重生成教学方案，
+  为各模块 LLM 老师制订难度与侧重点（placement → 教学方案 → 自适应课程，评估为教学核心）。
+- **双认证平滑过渡**：本地用户名密码（argon2id）+ 公网 authentik OIDC（M4）；业务数据挂稳定 user_id，切换认证零业务数据迁移。
+- **高自定义 WebUI**：Svelte SPA + i18n（M1d 起），界面可定制美化，设置/会话/认证/管理图形化，词级高亮跟读。
+- **私有部署单容器**：podman 优先兼容 docker，双栈 IPv4/IPv6，自适应降权，一切持久状态入卷，容器误删重建零丢失。
+- **高度模块化**：内核 + 适配器 + 教学模块三层，仅经 kernel-api 契约交流，可整模块重写替换（见下「核心设计」）。
 
 ## 文档入口
 
