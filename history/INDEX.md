@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 57 条。
+共 58 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -61,3 +61,4 @@
 - [M1d P5 实现：设置 UI（provider/绑定/音色试听/主题/偏好）](2026-11-20-0010-m1d-p5-settings.md) — 2026-11-20T00:10+08:00 · change · accepted · scope: project, godoword · keywords: m1d, frontend, settings, provider, binding, voice-preview, theme, preferences
 - [M1d P6+P7 实现：会话 UI（对话/文件夹树/音频高亮）+ Dockerfile node 构建/SPA 伺服](2026-11-20-0040-m1d-p6-p7-ui-build.md) — 2026-11-20T00:40+08:00 · change · accepted · scope: project, godoword · keywords: m1d, frontend, chat, sse, audio, highlight, folder-tree, dockerfile, node, spa, smoke
 - [M1d P8 验收修复（首轮人工验收发现 4 缺陷）](2026-11-20-0130-m1d-p8-acceptance-fixes.md) — 2026-11-20T01:30+08:00 · change · accepted · scope: project, kernel, godoword · keywords: m1d, acceptance, bugfix, presets, upstream-401, logout, session-proliferation, test-connection
+- [M1d P8 验收修复第二轮（对话空气泡 + 测试反馈位置）](2026-11-20-0210-m1d-p8-chat-fix.md) — 2026-11-20T02:10+08:00 · change · accepted · scope: project, godoword · keywords: m1d, acceptance, bugfix, svelte-runes, reactivity, chat, streaming

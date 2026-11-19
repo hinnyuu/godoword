@@ -1380,5 +1380,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0210-m1d-p8-chat-fix.md",
+    "title": "M1d P8 验收修复第二轮（对话空气泡 + 测试反馈位置）",
+    "date": "2026-11-20T02:10+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "svelte-runes",
+      "reactivity",
+      "chat",
+      "streaming"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

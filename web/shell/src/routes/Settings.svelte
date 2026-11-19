@@ -46,6 +46,7 @@
   let previewVoiceId = $state('longanlingxin');
   let previewText = $state('');
   let previewStatus = $state('');
+  let testStatus = $state('');
   let engine: AudioEngine | null = null;
 
   // 主题自定义。
@@ -106,13 +107,14 @@
 
   async function testConnection(p: Provider) {
     error = '';
+    testStatus = '';
     try {
       if (p.adapter_id === 'tts-qwen-audio') {
         const voices = await providerVoices(p.id);
-        previewStatus = `音色：${voices.map((v) => v.name).join(', ') || '（空）'}`;
+        testStatus = `${p.label} 音色：${voices.map((v) => v.name).join(', ') || '（空）'}`;
       } else {
         const models = await providerModels(p.id);
-        previewStatus = `模型：${models.map((m) => m.id).join(', ') || '（空）'}`;
+        testStatus = `${p.label} 模型：${models.map((m) => m.id).join(', ') || '（空）'}`;
       }
     } catch (err) {
       error = err instanceof Error ? err.message : '测试失败';
@@ -371,6 +373,7 @@
         {/each}
       </tbody>
     </table>
+    {#if testStatus}<p class="status">{testStatus}</p>{/if}
   </div>
 
   <!-- 高级绑定矩阵 -->

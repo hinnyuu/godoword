@@ -141,8 +141,9 @@
     error = '';
     errorAction = null;
     messages.push({ role: 'user', text, reasoning: '', segments: [], showReasoning: false });
-    const assistant: Msg = { role: 'assistant', text: '', reasoning: '', segments: [], showReasoning: false };
-    messages.push(assistant);
+    messages.push({ role: 'assistant', text: '', reasoning: '', segments: [], showReasoning: false });
+    // 取 $state 代理引用（mutate 原始对象不触发响应式，Svelte 5 runes 陷阱）。
+    const assistant = messages[messages.length - 1]!;
     streaming = true;
     abort = new AbortController();
     try {
