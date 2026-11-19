@@ -21,6 +21,7 @@
     '/register': Register,
     '/reset': Reset,
     '/': Home,
+    '/chat/:id': Home,
     '/sessions': Sessions,
     '/settings': Settings,
     '/admin': Admin,

@@ -66,7 +66,7 @@ pub async fn meta() -> Json<Value> {
     Json(json!({
         "name": "godoword",
         "version": env!("CARGO_PKG_VERSION"),
-        "milestone": "M1c",
+        "milestone": "M1d",
     }))
 }
 

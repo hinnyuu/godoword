@@ -3,6 +3,7 @@ target
 .github
 devenv.md
 node_modules
+web/**/dist
 data
 *.key
 .env

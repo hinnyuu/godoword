@@ -129,16 +129,19 @@ Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，hi
   CI freshness diff，CSRF middleware + 401 钩子）/sse（fetch ReadableStream + eventsource-parser + SessionEvent 判别联合）/
   session（路径 trie/NFC 镜像/校验）/theme（CSS 变量引擎 + 预设）/i18n（zh-CN catalog）/prefs（load/save 域函数）。
   领域逻辑不进组件——shell 调 core 域函数（封装 api 细节，CSRF header param 等），不裸调 api。
-- **web/shell**（Svelte 5 视图层，runes 自动检测兼容 legacy lib）：**P4 已落** svelte-spa-router hash 路由（静态伺服深链稳健）+
+- **web/shell**（Svelte 5 视图层，runes 自动检测兼容 legacy lib）：**P4–P6 已落** svelte-spa-router hash 路由（静态伺服深链稳健）+
   svelte-i18n（core zh-CN catalog）+ runes store（auth 用户态 / prefs 偏好+主题应用）+ 认证门 + 401 钩子 + AGPL 页脚；
-  页面 Login/Register/Reset/Admin/Onboarding（Home/Settings/Sessions P5/P6 填充）。core 服务层（api/services.ts）封装域函数，组件不裸调 api。
+  页面 Login/Register/Reset/Admin/Onboarding/Settings（provider 三卡片+绑定矩阵+音色试听+主题面板+偏好）/
+  Home（ChatView 流式对话+音频卡片+词级高亮+usage+错误分流）/Sessions（SessionSidebar 文件夹目录树+会话元数据列表+移动/删除）。
+  core 服务层（api/services.ts）封装域函数，组件不裸调 api。
   主题引擎地基：语义 CSS 变量（:root + data-theme 明暗），用户自定义变量经 prefs 注入（跨设备）。
 - **web/modules/<id>**：教学模块前端（M2+）。
 
 音频管线：AudioContext({sampleRate:24000}) 免重采样 + AudioWorklet 环形缓冲排队（欠载补静音）+
 高亮播放时钟（AudioContext.currentTime vs 词时间戳）；live 逐 chunk push，回放一次性 push PCM + meta words。
 worklet 经 Vite ?worker&url 打包独立脚本，引擎注入 URL（core 不依赖 bundler 语法）。
-构建：Vite → dist（P7 Dockerfile node 阶段拷入运行镜像 web/shell/public）；前端 CI job（core tsc + vitest + svelte-check + build）。
+构建：**P7 已落** Dockerfile 三阶段（rust builder + node:22-slim webbuilder npm ci→vite build + debian-slim 运行时，
+dist 拷入 web/shell/public）；前端 CI job（类型 freshness + core tsc + vitest + svelte-check + build）；冒烟断言 SPA 伺服（title + assets 引用）。
 
 ## 当前状态与 roadmap 差异（M1c + M1c-hardening + 二审收尾加固）
 

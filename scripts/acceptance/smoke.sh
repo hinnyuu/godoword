@@ -76,10 +76,11 @@ wait_ready http://127.0.0.1:18080/readyz
 assert_eq "healthz(127.0.0.1)" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/healthz)"
 assert_eq "healthz(localhost 双栈)" '{"status":"ok"}' "$(curl -s --max-time 8 http://localhost:18080/healthz)"
 assert_eq "readyz（存储探活）" '{"status":"ok"}' "$(curl -s --max-time 8 http://127.0.0.1:18080/readyz)"
-assert_contains "meta milestone=M1c" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/meta)" '"milestone":"M1c"'
+assert_contains "meta milestone=M1d" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/meta)" '"milestone":"M1d"'
 assert_contains "config 脱敏（sqlite/invite）" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/config)" '"database_backend":"sqlite"'
 assert_contains "config registration_mode" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/config)" '"registration_mode":"invite"'
-assert_contains "静态占位页" "$(curl -s --max-time 8 http://127.0.0.1:18080/)" '<title>godoword</title>'
+assert_contains "SPA 伺服（title）" "$(curl -s --max-time 8 http://127.0.0.1:18080/)" '<title>godoword</title>'
+assert_contains "SPA 构建产物（assets 引用）" "$(curl -s --max-time 8 http://127.0.0.1:18080/)" '/assets/index-'
 OPENAPI=$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/openapi.json)
 assert_contains "openapi.json" "$OPENAPI" '"openapi"'
 assert_contains "openapi CreateSessionReq 注册（R5）" "$OPENAPI" 'CreateSessionReq'

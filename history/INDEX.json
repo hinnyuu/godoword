@@ -1328,5 +1328,32 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0040-m1d-p6-p7-ui-build.md",
+    "title": "M1d P6+P7 实现：会话 UI（对话/文件夹树/音频高亮）+ Dockerfile node 构建/SPA 伺服",
+    "date": "2026-11-20T00:40+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "chat",
+      "sse",
+      "audio",
+      "highlight",
+      "folder-tree",
+      "dockerfile",
+      "node",
+      "spa",
+      "smoke"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

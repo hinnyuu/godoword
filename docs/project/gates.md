@@ -32,7 +32,7 @@
     core tsc 类型检查 + vitest 域逻辑单测 + shell svelte-check + vite build。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
 12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
-    （healthz/readyz/meta/config/openapi/静态、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
+    （healthz/readyz/meta/config/openapi/SPA 伺服（title+assets）、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
     注册首用户成管理员/cookie/me/会话/providers + CSRF 守卫 403、/data 初始化断言 db/master.key 0600/backups、
     完整 uid/卷矩阵 rootless named/bind 非 1000 uid + rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用），
     资源隔离 + 自动清理。容器以 GODOWORD_COOKIE_SECURE=false 运行（CI HTTP cookie 可回传）。
