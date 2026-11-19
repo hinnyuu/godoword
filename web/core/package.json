@@ -1,0 +1,22 @@
+{
+  "name": "@godoword/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "godoword 框架无关领域核心（API 客户端/SSE/音频引擎/会话路径/主题/i18n/偏好）",
+  "exports": {
+    ".": "./src/index.ts",
+    "./audio": "./src/audio/index.ts",
+    "./audio/worklet": "./src/audio/worklet.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,54 @@
+/* 主题引擎地基（M1d P1 种子，P5 扩展预设/自定义面板）：语义 CSS 变量，明暗主题经 data-theme 切换。
+   用户自定义变量经 prefs 注入 :root（跨设备）。密度/字号亦变量。无 CSS-in-JS。 */
+
+:root {
+  --gw-bg: #ffffff;
+  --gw-fg: #1a1a1a;
+  --gw-muted: #666666;
+  --gw-accent: #2563eb;
+  --gw-surface: #f4f4f5;
+  --gw-border: #e4e4e7;
+  --gw-radius: 8px;
+  --gw-font-size: 16px;
+  --gw-space: 1rem;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --gw-bg: #18181b;
+  --gw-fg: #f4f4f5;
+  --gw-muted: #a1a1aa;
+  --gw-accent: #60a5fa;
+  --gw-surface: #27272a;
+  --gw-border: #3f3f46;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: var(--gw-font-size);
+  line-height: 1.6;
+  background: var(--gw-bg);
+  color: var(--gw-fg);
+}
+
+.shell {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: calc(var(--gw-space) * 2) var(--gw-space);
+}
+
+a {
+  color: var(--gw-accent);
+}
+
+footer {
+  margin-top: calc(var(--gw-space) * 3);
+  font-size: 0.85rem;
+  color: var(--gw-muted);
+}
