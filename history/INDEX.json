@@ -1142,5 +1142,27 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "15"
+  },
+  {
+    "file": "2026-11-19-1757-m1c-acceptance-product-vision.md",
+    "title": "M1c 多轮审计收尾合并验收 + 超规格产品需求文档复核",
+    "date": "2026-11-19T17:57+08:00",
+    "keywords": [
+      "m1c",
+      "acceptance",
+      "merge",
+      "product-vision",
+      "doc-review",
+      "core-requirements",
+      "m1d-handoff"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
