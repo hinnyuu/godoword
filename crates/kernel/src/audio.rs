@@ -21,13 +21,15 @@ pub struct FsAudio {
 }
 
 /// sidecar 元数据（词级时间戳 + 编码 + 采样率 + 创建时间 + 归属用户）。
+/// owner 可空（审计 R9.1）：旧版 sidecar 无 owner 字段，serde default → None，get 视为不可授权 → 404 可再生。
 #[derive(Serialize, Deserialize)]
 struct Sidecar {
     words: Vec<WordTimestamp>,
     format: AudioFormat,
     sample_rate: u32,
     created_at: DateTime<Utc>,
-    owner: UserId,
+    #[serde(default)]
+    owner: Option<UserId>,
 }
 
 impl FsAudio {
@@ -126,16 +128,18 @@ impl AudioCache for FsAudio {
             format: audio.format,
             sample_rate: audio.sample_rate,
             created_at: Utc::now(),
-            owner: audio.owner,
+            owner: Some(audio.owner),
         };
         let json = serde_json::to_vec(&sidecar)
             .map_err(|e| KernelError::Internal(format!("音频 sidecar 序列化失败：{e}")))?;
         write_atomic(&self.pcm_path(id), &audio.pcm)
             .await
             .map_err(io_err)?;
-        write_atomic(&self.json_path(id), &json)
-            .await
-            .map_err(io_err)?;
+        if let Err(e) = write_atomic(&self.json_path(id), &json).await {
+            // 半写清理孤儿 PCM（审计 A3）：sidecar 失败时移除已写 PCM，避免 get 读缺 sidecar 致 500。
+            let _ = tokio::fs::remove_file(self.pcm_path(id)).await;
+            return Err(io_err(e));
+        }
         Ok(())
     }
 
@@ -145,11 +149,22 @@ impl AudioCache for FsAudio {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(e) => return Err(io_err(e)),
         };
-        let json = tokio::fs::read(self.json_path(id)).await.map_err(io_err)?;
-        let sidecar: Sidecar = serde_json::from_slice(&json)
-            .map_err(|e| KernelError::Internal(format!("音频 sidecar 解析失败：{e}")))?;
-        // 归属校验（审计 C1）：非本用户 → None，不泄露存在性。
-        if sidecar.owner != user {
+        let json = match tokio::fs::read(self.json_path(id)).await {
+            Ok(b) => b,
+            // PCM-only 崩溃孤儿（审计 N7）：sidecar 缺失视为缓存缺失 → None（404 可再生），不 500。
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(io_err(e)),
+        };
+        let sidecar: Sidecar = match serde_json::from_slice(&json) {
+            Ok(s) => s,
+            Err(e) => {
+                // 旧/损坏 sidecar（审计 R9.1）：缓存可再生，视为缺失 → None（REST 404），不 500。
+                tracing::warn!("音频 sidecar 解析失败（可再生，视为缺失）：{e}");
+                return Ok(None);
+            }
+        };
+        // 归属校验（审计 C1/R9.1）：旧 sidecar 无 owner（None）或非本用户 → None，不泄露存在性（fail-closed）。
+        if sidecar.owner != Some(user) {
             return Ok(None);
         }
         Ok(Some(CachedAudio {
@@ -157,7 +172,7 @@ impl AudioCache for FsAudio {
             words: sidecar.words,
             format: sidecar.format,
             sample_rate: sidecar.sample_rate,
-            owner: sidecar.owner,
+            owner: user,
         }))
     }
 }

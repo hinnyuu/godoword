@@ -39,6 +39,8 @@ pub struct AppState {
     pub tts: Arc<dyn TtsProvider>,
     /// 登录限流器。
     pub rate_limiter: Arc<RateLimiter>,
+    /// 可信反向代理 IP/CIDR（审计 R9.4，启动时从配置解析）：XFF 客户端 IP 解析用。
+    pub trusted_proxies: Vec<ipnet::IpNet>,
 }
 
 /// 存活探针。
@@ -157,46 +159,19 @@ pub async fn get_session(
     Ok(Json(json!({ "id": id.to_string(), "messages": msgs })))
 }
 
-/// 删除会话（含转录）。
-#[utoipa::path(delete, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 204), (status = 401)))]
+/// 删除会话（含转录，SessionEnded outbox 同事务原子，审计 R6）。
+#[utoipa::path(delete, path = "/api/v1/sessions/{id}", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 204), (status = 401), (status = 404)))]
 pub async fn delete_session(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, StatusCode> {
-    let sid = SessionId(id);
-    if !st
-        .sessions
-        .exists(user, sid)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        return Err(StatusCode::NOT_FOUND);
+    // SessionEnded outbox + 删除同事务原子（审计 R6）：不吞错伪造结束，越权/不存在 404。
+    match kernel::end_session(&st.store, user.0, id).await {
+        Ok(true) => Ok(StatusCode::NO_CONTENT),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
-    // 会话结束发 SessionEnded outbox（审计 C8；module_id 有则用之、无则哨兵 kernel）。
-    let module_id = st
-        .sessions
-        .meta(user, sid)
-        .await
-        .ok()
-        .flatten()
-        .and_then(|m| m.module_id.map(|m| m.0))
-        .unwrap_or_else(|| "kernel".to_string());
-    let _ = kernel::emit_progress(
-        &st.store,
-        user.0,
-        Some(sid.0),
-        &module_id,
-        "session-ended",
-        json!([]),
-        json!({}),
-    )
-    .await;
-    st.sessions
-        .delete(user, sid)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(StatusCode::NO_CONTENT)
 }
 
 /// 回合消息请求体。
@@ -207,7 +182,7 @@ pub struct MessageReq {
 }
 
 /// 发消息 → 该回合 SSE 事件流（SSE 不入 OpenAPI schema）。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 401)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/messages", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), request_body = MessageReq, responses((status = 200, description = "SessionEvent SSE 流", content_type = "text/event-stream"), (status = 401), (status = 404)))]
 pub async fn messages(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
@@ -228,7 +203,7 @@ pub async fn messages(
 }
 
 /// 显式取消活跃回合。
-#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401)))]
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/cancel", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404)))]
 pub async fn cancel(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,

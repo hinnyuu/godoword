@@ -80,7 +80,10 @@ assert_contains "meta milestone=M1c" "$(curl -s --max-time 8 http://127.0.0.1:18
 assert_contains "config 脱敏（sqlite/invite）" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/config)" '"database_backend":"sqlite"'
 assert_contains "config registration_mode" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/config)" '"registration_mode":"invite"'
 assert_contains "静态占位页" "$(curl -s --max-time 8 http://127.0.0.1:18080/)" '<title>godoword</title>'
-assert_contains "openapi.json" "$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/openapi.json)" '"openapi"'
+OPENAPI=$(curl -s --max-time 8 http://127.0.0.1:18080/api/v1/openapi.json)
+assert_contains "openapi.json" "$OPENAPI" '"openapi"'
+assert_contains "openapi CreateSessionReq 注册（R5）" "$OPENAPI" 'CreateSessionReq'
+assert_contains "openapi cookieAuth 认证（R5）" "$OPENAPI" 'cookieAuth'
 # /data 初始化断言（容器内 stat：master.key 32 字节 0600 + db + backups）
 assert_eq "master.key 32 字节 0600" "32 600" "$(as_user podman exec "${TAG}-named" stat -c '%s %a' /data/keys/master.key 2>/dev/null)"
 assert_eq "db 文件存在" "yes" "$(as_user podman exec "${TAG}-named" sh -c 'test -f /data/db/godoword.sqlite && echo yes' 2>/dev/null)"

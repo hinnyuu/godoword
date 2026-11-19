@@ -114,3 +114,56 @@ async fn cleanup_missing_dir_ok() {
     let cache = FsAudio::new(temp_dir());
     assert_eq!(cache.cleanup(Duration::ZERO, 0).unwrap(), 0);
 }
+
+#[tokio::test]
+async fn put_sidecar_failure_cleans_orphan_pcm() {
+    let dir = temp_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let cache = FsAudio::new(dir.clone());
+    let user = UserId::new();
+    let id = AudioId::new();
+    // 故障注入（审计 A3）：sidecar 路径占为目录 → write_atomic rename 失败。
+    let json_path = dir.join(format!("{}.json", id.0));
+    std::fs::create_dir(&json_path).unwrap();
+    let res = cache.put(id, sample_audio(4800, user)).await;
+    assert!(res.is_err(), "A3：sidecar 写失败 put 返回 Err");
+    // 孤儿 PCM 已清理（无半写残留，避免 get 读缺 sidecar 致 500）。
+    let pcm_path = dir.join(format!("{}.pcm", id.0));
+    assert!(!pcm_path.exists(), "A3：sidecar 失败后孤儿 PCM 已清理");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test]
+async fn get_legacy_or_corrupt_sidecar_none() {
+    let dir = temp_dir();
+    std::fs::create_dir_all(&dir).unwrap();
+    let cache = FsAudio::new(dir.clone());
+    let user = UserId::new();
+    // 旧版 sidecar（无 owner 字段，审计 R9.1）→ 不可授权 → None（404 可再生），不 500。
+    let id = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id.0)), vec![7u8; 100]).unwrap();
+    let legacy = serde_json::json!({
+        "words": [], "format": "pcm", "sample_rate": 24000, "created_at": "2026-01-01T00:00:00Z"
+    });
+    std::fs::write(dir.join(format!("{}.json", id.0)), legacy.to_string()).unwrap();
+    assert!(
+        cache.get(id, user).await.unwrap().is_none(),
+        "R9.1：旧 sidecar 无 owner → None"
+    );
+    // 损坏 sidecar（非法 JSON）→ None，不 500。
+    let id2 = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id2.0)), vec![7u8; 100]).unwrap();
+    std::fs::write(dir.join(format!("{}.json", id2.0)), "{not json").unwrap();
+    assert!(
+        cache.get(id2, user).await.unwrap().is_none(),
+        "R9.1：损坏 sidecar → None"
+    );
+    // PCM-only 崩溃孤儿（审计 N7）：只有 PCM 无 sidecar → None（404 可再生），不 500。
+    let id3 = AudioId::new();
+    std::fs::write(dir.join(format!("{}.pcm", id3.0)), vec![7u8; 100]).unwrap();
+    assert!(
+        cache.get(id3, user).await.unwrap().is_none(),
+        "N7：PCM-only 孤儿 → None"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

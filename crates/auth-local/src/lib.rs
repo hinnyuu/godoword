@@ -52,6 +52,25 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
     }
 }
 
+/// 统一密码策略（注册/重置共用，审计 R1）：8–128 字符 + 必含字母与数字；区分大小写（绝不折叠）。
+/// 建议（不强制）加特殊字符——提示文案 surface 到 UI/docs。长度按字符计，上限足以防 argon2 超长 DoS。
+pub fn validate_password(password: &str) -> Result<(), AuthError> {
+    let n = password.chars().count();
+    if !(8..=128).contains(&n) {
+        return Err(AuthError::RegistrationRestricted(
+            "密码长度须 8–128 字符（区分大小写）".to_string(),
+        ));
+    }
+    let has_letter = password.chars().any(|c| c.is_alphabetic());
+    let has_digit = password.chars().any(|c| c.is_numeric());
+    if !has_letter || !has_digit {
+        return Err(AuthError::RegistrationRestricted(
+            "密码须同时含字母与数字，建议加特殊字符（区分大小写）".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// 生成 opaque 随机会话令牌（两个 uuid 拼接，足够熵）。
 fn generate_token() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
@@ -74,11 +93,12 @@ pub async fn register(
     invite_code: Option<&str>,
     require_invite: bool,
 ) -> Result<UserId, AuthError> {
-    if username.is_empty() || password.is_empty() {
+    if username.is_empty() {
         return Err(AuthError::RegistrationRestricted(
-            "用户名/密码不可为空".to_string(),
+            "用户名不可为空".to_string(),
         ));
     }
+    validate_password(password)?;
     let hash = hash_password(password)?;
     let id = Uuid::new_v4();
     let now = Utc::now();
@@ -438,31 +458,219 @@ pub async fn active_admin_count(store: &Store) -> Result<i64, AuthError> {
     Ok(row.0)
 }
 
-/// 管理员重置用户密码（设新密码哈希 + 撤销旧会话；管理员权限由组合根校验。token 化见 C8/H2）。
+/// SQLite 管理员状态守卫体（Transaction Executor lifetime 泛型足够，同 register helper）。
+/// 守卫嵌入条件 UPDATE 子查询：首语句即写（获写锁），子查询于写时见最新已提交态 → 并发互禁串行化。
+/// 禁用条件 `NOT(目标是活跃管理员 AND 活跃管理员数<=1)`：非最后管理员才禁；rows=0 区分不存在/最后管理员。
+async fn set_status_sqlite(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    actor: UserId,
+    target: UserId,
+    disable: bool,
+    now: DateTime<Utc>,
+) -> Result<bool, AuthError> {
+    if disable && target == actor {
+        return Err(AuthError::RegistrationRestricted(
+            "不可禁用自己".to_string(),
+        ));
+    }
+    let n = if disable {
+        sqlx::query(
+            "UPDATE users SET status = 'disabled', updated_at = ? WHERE id = ?
+             AND NOT (is_admin AND status = 'active'
+                      AND (SELECT COUNT(*) FROM users WHERE is_admin AND status = 'active') <= 1)",
+        )
+        .bind(now)
+        .bind(target.0)
+        .execute(&mut **tx)
+        .await
+        .map_err(internal)?
+        .rows_affected()
+    } else {
+        sqlx::query("UPDATE users SET status = 'active', updated_at = ? WHERE id = ?")
+            .bind(now)
+            .bind(target.0)
+            .execute(&mut **tx)
+            .await
+            .map_err(internal)?
+            .rows_affected()
+    };
+    if n == 0 {
+        if disable {
+            let exists: Option<(Uuid,)> = sqlx::query_as("SELECT id FROM users WHERE id = ?")
+                .bind(target.0)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(internal)?;
+            if exists.is_none() {
+                return Ok(false);
+            }
+            return Err(AuthError::RegistrationRestricted(
+                "不可禁用最后一个活跃管理员".to_string(),
+            ));
+        }
+        return Ok(false);
+    }
+    if disable {
+        sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
+            .bind(target.0)
+            .execute(&mut **tx)
+            .await
+            .map_err(internal)?;
+    }
+    Ok(true)
+}
+
+/// 管理员设用户状态（**串行化守卫 + 事务原子**，审计 R7）：防自禁 / 防禁最后一个活跃管理员 / 禁用撤销会话。
+/// 检查与禁用须串行化防并发互禁→零管理员：PG `pg_advisory_xact_lock` / SQLite 条件 UPDATE 子查询（写锁内求值）。
+/// Ok(true)=已更新 / Ok(false)=用户不存在 / Err=守卫拒绝（→400）。
+pub async fn set_user_status_guarded(
+    store: &Store,
+    actor: UserId,
+    target: UserId,
+    status: &str,
+) -> Result<bool, AuthError> {
+    let disable = status != "active";
+    let now = Utc::now();
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let r = set_status_sqlite(&mut tx, actor, target, disable, now).await;
+            match r {
+                Ok(v) => {
+                    tx.commit().await.map_err(internal)?;
+                    Ok(v)
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            sqlx::query("SELECT pg_advisory_xact_lock($1)")
+                .bind(0x6777_6164_i64) // "gwad"：管理员状态串行化锁（区别注册锁）
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            let row: Option<(bool,)> = sqlx::query_as("SELECT is_admin FROM users WHERE id = $1")
+                .bind(target.0)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(internal)?;
+            let Some((target_admin,)) = row else {
+                return Ok(false);
+            };
+            if disable {
+                if target == actor {
+                    return Err(AuthError::RegistrationRestricted(
+                        "不可禁用自己".to_string(),
+                    ));
+                }
+                if target_admin {
+                    let (n,): (i64,) = sqlx::query_as(
+                        "SELECT COUNT(*) FROM users WHERE is_admin = $1 AND status = 'active'",
+                    )
+                    .bind(true)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+                    if n <= 1 {
+                        return Err(AuthError::RegistrationRestricted(
+                            "不可禁用最后一个活跃管理员".to_string(),
+                        ));
+                    }
+                }
+            }
+            sqlx::query("UPDATE users SET status = $1, updated_at = $2 WHERE id = $3")
+                .bind(status)
+                .bind(now)
+                .bind(target.0)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            if disable {
+                sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
+                    .bind(target.0)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            }
+            tx.commit().await.map_err(internal)?;
+            Ok(true)
+        }
+    }
+}
+
+/// 管理员重置用户密码（设新密码哈希 + 撤销旧会话，**同事务原子**，审计 R1；管理员权限由组合根校验）。
 pub async fn admin_reset_password(
     store: &Store,
     target: UserId,
     new_password: &str,
 ) -> Result<bool, AuthError> {
+    validate_password(new_password)?;
     let hash = hash_password(new_password)?;
     let now = Utc::now();
-    let n = execute_both!(
-        store,
-        "UPDATE local_credentials SET password_hash = $1, updated_at = $2 WHERE user_id = $3",
-        &hash,
-        now,
-        target.0
-    )
-    .map_err(internal)?;
-    if n > 0 {
-        revoke_user_sessions(store, target).await?;
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?",
+            )
+            .bind(&hash)
+            .bind(now)
+            .bind(target.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n > 0 {
+                sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
+                    .bind(target.0)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            }
+            tx.commit().await.map_err(internal)?;
+            Ok(n > 0)
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = $1, updated_at = $2 WHERE user_id = $3",
+            )
+            .bind(&hash)
+            .bind(now)
+            .bind(target.0)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n > 0 {
+                sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
+                    .bind(target.0)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            }
+            tx.commit().await.map_err(internal)?;
+            Ok(n > 0)
+        }
     }
-    Ok(n > 0)
 }
 
 /// 管理员生成密码重置令牌（tokens 表 purpose=password_reset，单次，1h 过期；审计 C8 token 化）。
-/// 管理员不直接知晓用户新密码——用户持令牌自行重置。
+/// 管理员不直接知晓用户新密码——用户持令牌自行重置。**无本地凭据账户拒绝签发**（审计 N4）。
 pub async fn create_reset_token(store: &Store, target: UserId) -> Result<String, AuthError> {
+    let cred: Option<(Uuid,)> = fetch_optional_both!(
+        store,
+        "SELECT user_id FROM local_credentials WHERE user_id = $1",
+        (Uuid,),
+        target.0
+    )
+    .map_err(internal)?;
+    if cred.is_none() {
+        return Err(AuthError::RegistrationRestricted(
+            "该账户无本地密码，不可重置".to_string(),
+        ));
+    }
     let token = generate_token();
     let now = Utc::now();
     let expires = now + Duration::hours(1);
@@ -482,36 +690,125 @@ pub async fn create_reset_token(store: &Store, target: UserId) -> Result<String,
     Ok(token)
 }
 
-/// 用户持重置令牌设新密码（校验单次/过期 → 设密码 + 撤销旧会话 + 标记令牌已用）。
+/// 用户持重置令牌设新密码（**事务原子 + 条件认领单次性**，审计 R1）。
+/// 先校验密码（弱密码不消费令牌）；事务内条件 UPDATE 认领（used_at IS NULL 查 rows_affected，仅一个并发请求成功）
+/// → 改密 → 撤销旧会话 → 提交。任一步失败回滚，令牌未消费可重试。双后端并发安全（PG 行锁 / SQLite 单写者）。
 pub async fn reset_with_token(
     store: &Store,
     token: &str,
     new_password: &str,
 ) -> Result<bool, AuthError> {
+    validate_password(new_password)?;
     let now = Utc::now();
-    let row: Option<(Uuid, Uuid)> = fetch_optional_both!(
+    let th = token_hash(token);
+    // 廉价预查询（审计 N4.1）：无效令牌直接拒绝，**不触发 Argon2**（公开端点防 CPU/内存放大）。
+    // 预查询不替代原子认领——并发单次性仍由事务内条件 UPDATE 保证。
+    let valid: Option<(Uuid,)> = fetch_optional_both!(
         store,
-        "SELECT id, user_id FROM tokens WHERE token_hash = $1 AND purpose = 'password_reset'
+        "SELECT id FROM tokens WHERE token_hash = $1 AND purpose = 'password_reset'
          AND used_at IS NULL AND expires_at > $2",
-        (Uuid, Uuid),
-        token_hash(token),
+        (Uuid,),
+        &th,
         now
     )
     .map_err(internal)?;
-    let Some((token_id, user_id)) = row else {
-        return Ok(false);
-    };
-    if !admin_reset_password(store, UserId(user_id), new_password).await? {
+    if valid.is_none() {
         return Ok(false);
     }
-    execute_both!(
-        store,
-        "UPDATE tokens SET used_at = $1 WHERE id = $2",
-        now,
-        token_id
-    )
-    .map_err(internal)?;
-    Ok(true)
+    let hash = hash_password(new_password)?;
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let claimed = sqlx::query(
+                "UPDATE tokens SET used_at = ? WHERE token_hash = ? AND purpose = 'password_reset'
+                 AND used_at IS NULL AND expires_at > ?",
+            )
+            .bind(now)
+            .bind(&th)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if claimed == 0 {
+                return Ok(false);
+            }
+            let (user_id,): (Uuid,) =
+                sqlx::query_as("SELECT user_id FROM tokens WHERE token_hash = ?")
+                    .bind(&th)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = ?, updated_at = ? WHERE user_id = ?",
+            )
+            .bind(&hash)
+            .bind(now)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                // 无本地凭据（审计 N4.2）：回滚令牌认领，重置失败（不消费令牌、不假成功）。
+                return Err(AuthError::Internal(
+                    "账户无本地凭据，密码重置失败".to_string(),
+                ));
+            }
+            sqlx::query("DELETE FROM auth_sessions WHERE user_id = ?")
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            tx.commit().await.map_err(internal)?;
+            Ok(true)
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(internal)?;
+            let claimed = sqlx::query(
+                "UPDATE tokens SET used_at = $1 WHERE token_hash = $2 AND purpose = 'password_reset'
+                 AND used_at IS NULL AND expires_at > $3",
+            )
+            .bind(now)
+            .bind(&th)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if claimed == 0 {
+                return Ok(false);
+            }
+            let (user_id,): (Uuid,) =
+                sqlx::query_as("SELECT user_id FROM tokens WHERE token_hash = $1")
+                    .bind(&th)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(internal)?;
+            let n = sqlx::query(
+                "UPDATE local_credentials SET password_hash = $1, updated_at = $2 WHERE user_id = $3",
+            )
+            .bind(&hash)
+            .bind(now)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(internal)?
+            .rows_affected();
+            if n != 1 {
+                return Err(AuthError::Internal(
+                    "账户无本地凭据，密码重置失败".to_string(),
+                ));
+            }
+            sqlx::query("DELETE FROM auth_sessions WHERE user_id = $1")
+                .bind(user_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(internal)?;
+            tx.commit().await.map_err(internal)?;
+            Ok(true)
+        }
+    }
 }
 
 #[async_trait]

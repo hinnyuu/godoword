@@ -18,7 +18,10 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::context::assemble_truncate;
-use crate::journal::{emit_progress, record_call, CallRecord};
+use crate::journal::{
+    evict_session, lookup_summary_span, record_call, store_summary_span, summary_span_hash,
+    CallRecord,
+};
 use crate::persona::DEFAULT_TEACHER_PERSONA;
 use crate::seam::{AudioCache, BindingResolver, CachedAudio, SessionRepo, StoredMessage};
 use crate::speak::prepare_speak;
@@ -228,10 +231,20 @@ async fn summarize_span(
     let mut summary = String::new();
     let mut usage: Option<Usage> = None;
     let mut err: Option<String> = None;
+    let mut saw_stop = false;
     while let Some(item) = stream.next().await {
         match item {
             Ok(ChatChunk::TextDelta(t)) => summary.push_str(&t),
             Ok(ChatChunk::Usage(u)) => usage = Some(u),
+            Ok(ChatChunk::Finish(fr)) => {
+                // 仅实际收到 Stop 才算完整成功（审计 H2/第五次复核）：非 Stop（Error/Length/ContentFilter/
+                // Cancelled/ToolCalls）失败；首个 Finish 后停读，避免 Stop 后继续处理额外文本。
+                saw_stop = matches!(fr, FinishReason::Stop);
+                if !saw_stop {
+                    err = Some("summarize 非正常结束".to_string());
+                }
+                break;
+            }
             Ok(_) => {}
             Err(e) => {
                 err = Some(provider_error_code(&e).to_string());
@@ -239,7 +252,13 @@ async fn summarize_span(
             }
         }
     }
-    let status = if err.is_some() { "error" } else { "ok" };
+    // 无 Finish 的静默 EOF 亦失败（审计第五次复核）：llm-openai [DONE]/自然 EOF 可不发 Finish，
+    // 部分文本 + 无 Stop 不得固化。success = saw_stop && !err && !empty。
+    if !saw_stop && err.is_none() {
+        err = Some("summarize 流未以 Stop 结束".to_string());
+    }
+    let failed = err.is_some();
+    let status = if failed { "error" } else { "ok" };
     let _ = record_call(
         store,
         llm_call_record(
@@ -255,7 +274,8 @@ async fn summarize_span(
         ),
     )
     .await;
-    if summary.is_empty() {
+    // 失败/未完整结束不得固化部分摘要（审计 N3/H2/第五次）：调用方按 truncate 回退，不存储/复用部分 fragment。
+    if failed || summary.is_empty() {
         return None;
     }
     Some(summary)
@@ -284,6 +304,8 @@ pub struct Runtime {
     cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
     detach: Arc<tokio::sync::Semaphore>,
     tasks: Arc<Mutex<Vec<tokio::task::JoinHandle<()>>>>,
+    /// 退出标志（审计 N6）：shutdown 置位后 run_turn 拒绝新回合，防快照后登记新任务破坏退出屏障。
+    shutting_down: Arc<AtomicBool>,
 }
 
 impl Runtime {
@@ -308,6 +330,7 @@ impl Runtime {
             cancels: Arc::new(Mutex::new(HashMap::new())),
             detach: Arc::new(tokio::sync::Semaphore::new(4)),
             tasks: Arc::new(Mutex::new(Vec::new())),
+            shutting_down: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -319,6 +342,14 @@ impl Runtime {
         }
     }
 
+    /// 设置回合硬超时（默认 120s；测试可缩短验证背压硬边界）。
+    pub fn with_turn_timeout(self, timeout: Duration) -> Self {
+        Self {
+            turn_timeout: timeout,
+            ..self
+        }
+    }
+
     /// 取消所有活跃回合（优雅退出用）。
     pub fn cancel_all(&self) {
         for flag in self.cancels.lock().unwrap().values() {
@@ -326,20 +357,30 @@ impl Runtime {
         }
     }
 
-    /// 优雅退出屏障（审计 C6）：置取消标志 → 有界等待 detached 任务落盘 → abort 超时者。
-    /// 调用方随后做 WAL checkpoint（SQLite）确保持久化屏障。
+    /// 优雅退出屏障（审计 C6/R3/N6/H1）：**tasks 锁内置退出标志 + 取任务快照**（与 run_turn 检查+注册互斥）
+    /// → 置取消标志 → 有界等待 detached 任务落盘 → **超时者 abort 并 join**（drop future 于 await 点取消，
+    /// sqlx 事务 drop 回滚不留半提交）→ 全部终止后返回。调用方随后 WAL checkpoint 才是严格写入屏障。
     pub async fn shutdown(&self, grace: Duration) {
+        // 生命周期临界区（审计 H1）：置标志 + 取快照同一锁内（锁内不 await），杜绝 run_turn 快照后登记新任务。
+        let mut handles: Vec<tokio::task::JoinHandle<()>> = {
+            let mut g = self.tasks.lock().unwrap();
+            self.shutting_down.store(true, Ordering::SeqCst);
+            std::mem::take(&mut *g)
+        };
         self.cancel_all();
-        let handles: Vec<tokio::task::JoinHandle<()>> =
-            std::mem::take(&mut *self.tasks.lock().unwrap());
-        let join_all = async {
-            for h in handles {
+        let wait = async {
+            for h in handles.iter_mut() {
                 let _ = h.await;
             }
         };
-        if tokio::time::timeout(grace, join_all).await.is_err() {
-            // 超时者已在 grace 内未落盘完毕；handles 已 move，超时即放弃等待（进程随后退出）。
-            tracing::warn!("优雅退出等待 detached 任务超时（{grace:?}）");
+        if tokio::time::timeout(grace, wait).await.is_err() {
+            tracing::warn!("优雅退出等待 detached 任务超时（{grace:?}），abort 剩余任务并 join");
+            for h in &handles {
+                h.abort();
+            }
+            for h in handles.iter_mut() {
+                let _ = h.await;
+            }
         }
     }
 
@@ -360,6 +401,16 @@ impl Runtime {
         }
     }
 
+    /// 已登记任务数（测试/观测用，审计 H1 生命周期不变量断言）。
+    pub fn pending_task_count(&self) -> usize {
+        self.tasks.lock().unwrap().len()
+    }
+
+    /// 活跃回合数（测试/观测用，审计 H1）。
+    pub fn active_count(&self) -> usize {
+        self.active.lock().unwrap().len()
+    }
+
     /// 跑一个回合，返回 SessionEvent 流（SSE）。执行/投递分离：回合 spawn 为 tokio task 经有界 mpsc
     /// 投递，SSE 订阅 receiver。客户端断开（receiver drop）→ 读 on_disconnect：cancel 置取消标志 /
     /// continue 取 detach permit 后排空跑完（permit 满则降级 cancel）。活跃锁归执行体（task 结束释放）。
@@ -371,71 +422,91 @@ impl Runtime {
     ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<SessionEvent>(256);
         let run_id = RunId::new();
+        let shutting_down = self.shutting_down.clone();
+        let tasks = self.tasks.clone();
         let exec = self.run_turn_stream(user, session, user_text, run_id);
         let sessions = self.sessions.clone();
         let cancels = self.cancels.clone();
         let detach = self.detach.clone();
         let turn_timeout = self.turn_timeout;
-        let tasks = self.tasks.clone();
-
-        let handle = tokio::spawn(async move {
-            let mut exec = Box::pin(exec);
-            let mut decided = false;
-            let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
-            let poll = async {
-                while let Some(ev) = exec.next().await {
-                    if tx.send(ev).await.is_err() && !decided {
-                        // 客户端断开：决策一次（cancel / continue）。
-                        decided = true;
-                        let on_disc = sessions
-                            .meta(user, session)
-                            .await
-                            .ok()
-                            .flatten()
-                            .map(|m| m.on_disconnect)
-                            .unwrap_or_default();
-                        let mut cancel = true;
-                        if on_disc == crate::seam::OnDisconnect::Continue {
-                            if let Ok(p) = detach.clone().try_acquire_owned() {
-                                _detach_permit = Some(p);
-                                cancel = false; // continue：排空跑完
-                            }
-                        }
-                        if cancel {
-                            if let Some(flag) = cancels.lock().unwrap().get(&session) {
-                                flag.store(true, Ordering::Relaxed);
-                            }
-                        }
-                    }
-                }
-            };
-            // 硬超时（审计 C6）：超时则 exec drop 中止上游，发 timeout + RunEnd。
-            if tokio::time::timeout(turn_timeout, poll).await.is_err() {
-                let _ = tx
-                    .send(SessionEvent::Error {
-                        code: "timeout".to_string(),
-                        message: "回合硬超时".to_string(),
-                        retryable: false,
-                        action: None,
-                    })
-                    .await;
-                let _ = tx
-                    .send(SessionEvent::RunEnd {
-                        run_id,
-                        finish_reason: FinishReason::Error,
-                    })
-                    .await;
-            }
-            // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
-        });
-        // 注册任务供退出屏障（审计 C6）；清理已完成 handle 防累积。
-        {
+        // 生命周期临界区（审计 H1）：复检退出标志 + spawn + 注册同一 tasks 锁内（锁内不 await），
+        // 与 shutdown 置标志+取快照互斥——任务先注册必被快照取到，或先见退出标志拒绝。
+        let accepted = {
             let mut g = tasks.lock().unwrap();
-            g.retain(|h| !h.is_finished());
-            g.push(handle);
-        }
+            if shutting_down.load(Ordering::SeqCst) {
+                false
+            } else {
+                let handle = tokio::spawn(async move {
+                    let mut exec = Box::pin(exec);
+                    let mut decided = false;
+                    let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
+                    let poll = async {
+                        while let Some(ev) = exec.next().await {
+                            if tx.send(ev).await.is_err() && !decided {
+                                // 客户端断开：决策一次（cancel / continue）。
+                                decided = true;
+                                let on_disc = sessions
+                                    .meta(user, session)
+                                    .await
+                                    .ok()
+                                    .flatten()
+                                    .map(|m| m.on_disconnect)
+                                    .unwrap_or_default();
+                                let mut cancel = true;
+                                if on_disc == crate::seam::OnDisconnect::Continue {
+                                    if let Ok(p) = detach.clone().try_acquire_owned() {
+                                        _detach_permit = Some(p);
+                                        cancel = false; // continue：排空跑完
+                                    }
+                                }
+                                if cancel {
+                                    if let Some(flag) = cancels.lock().unwrap().get(&session) {
+                                        flag.store(true, Ordering::Relaxed);
+                                    }
+                                }
+                            }
+                        }
+                    };
+                    // 硬超时（审计 C6/R3/A1/N6）：超时则 exec drop 中止上游。**try_send 非阻塞**投递 timeout + RunEnd——
+                    // 满 mpsc（receiver 存活但不消费）亦不永久阻塞；任务随即结束 → exec drop → ActiveGuard 释放活跃锁。
+                    // 满队列终态策略（N6）：终态不可投递时记录日志，流随后关闭（客户端见 close 即知回合结束，硬边界优先）。
+                    if tokio::time::timeout(turn_timeout, poll).await.is_err() {
+                        if tx
+                            .try_send(SessionEvent::Error {
+                                code: "timeout".to_string(),
+                                message: "回合硬超时".to_string(),
+                                retryable: false,
+                                action: None,
+                            })
+                            .is_err()
+                        {
+                            tracing::warn!("回合硬超时终态不可投递（mpsc 满），流将关闭");
+                        }
+                        let _ = tx.try_send(SessionEvent::RunEnd {
+                            run_id,
+                            finish_reason: FinishReason::Error,
+                        });
+                    }
+                    // exec 结束 → ActiveGuard 释放活跃锁；_detach_permit drop 释放 detach 名额。
+                });
+                // 注册任务供退出屏障（审计 C6/H1）；清理已完成 handle 防累积。锁内完成。
+                g.retain(|h| !h.is_finished());
+                g.push(handle);
+                true
+            }
+        };
 
         async_stream::stream! {
+            if !accepted {
+                yield SessionEvent::Error {
+                    code: "shutting_down".to_string(),
+                    message: "服务正在退出，拒绝新回合".to_string(),
+                    retryable: true,
+                    action: None,
+                };
+                yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                return;
+            }
             while let Some(ev) = rx.recv().await {
                 yield ev;
             }
@@ -564,15 +635,48 @@ impl Runtime {
             );
             if !assembled.evicted.is_empty() {
                 let mut rolling = meta.summary.clone();
-                // summarize 淘汰（opt-in）：压缩 evicted span 并入滚动摘要，失败回退 truncate。
+                // summarize 淘汰（opt-in）+ 计费幂等（审计 R4）：span_hash 命中复用 fragment 免重复 LLM 计费；
+                // 未命中则 LLM 压缩 → 落 fragment（独立提交）→ 并入滚动摘要。失败回退 truncate。
                 if params.eviction == kernel_api::Eviction::Summarize {
-                    if let Some(fragment) =
-                        summarize_span(&llm, &bindings, &store, user, session, run_id, &assembled.evicted)
-                            .await
-                    {
+                    let span_hash = summary_span_hash(&assembled.evicted);
+                    let fragment = match lookup_summary_span(&store, &span_hash).await {
+                        Ok(Some(f)) => Some(f),
+                        Ok(None) => {
+                            let f = summarize_span(
+                                &llm, &bindings, &store, user, session, run_id, &assembled.evicted,
+                            )
+                            .await;
+                            if let Some(frag) = &f {
+                                if let Err(e) =
+                                    store_summary_span(&store, &span_hash, session.0, frag).await
+                                {
+                                    yield SessionEvent::Error {
+                                        code: "storage".to_string(),
+                                        message: e.to_string(),
+                                        retryable: false,
+                                        action: None,
+                                    };
+                                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                                    return;
+                                }
+                            }
+                            f
+                        }
+                        Err(e) => {
+                            yield SessionEvent::Error {
+                                code: "storage".to_string(),
+                                message: e.to_string(),
+                                retryable: false,
+                                action: None,
+                            };
+                            yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                            return;
+                        }
+                    };
+                    if let Some(frag) = fragment {
                         rolling = Some(match rolling {
-                            Some(old) => format!("{old}\n{fragment}"),
-                            None => fragment,
+                            Some(old) => format!("{old}\n{frag}"),
+                            None => frag,
                         });
                     }
                 }
@@ -582,7 +686,6 @@ impl Runtime {
                     .map(|m| m.seq)
                     .max()
                     .unwrap_or(meta.evicted_up_to);
-                // 淘汰 span 入 outbox 一次（水位推进后下一回合不再重复，审计 C7）。
                 let module_id = meta
                     .module_id
                     .as_ref()
@@ -590,19 +693,17 @@ impl Runtime {
                     .unwrap_or_else(|| "kernel".to_string());
                 let ids: Vec<String> =
                     assembled.evicted.iter().map(|m| m.id.to_string()).collect();
-                let _ = emit_progress(
+                // 原子落库（审计 R4）：session-evicted outbox + 水位/滚动摘要同事务，失败整体回滚不丢不重。
+                if let Err(e) = evict_session(
                     &store,
                     user.0,
-                    Some(session.0),
+                    session.0,
                     &module_id,
-                    "session-evicted",
-                    json!([]),
-                    json!({ "message_ids": ids }),
+                    rolling.clone(),
+                    new_watermark,
+                    &ids,
                 )
-                .await;
-                if let Err(e) = sessions
-                    .update_eviction(user, session, rolling.clone(), new_watermark)
-                    .await
+                .await
                 {
                     yield SessionEvent::Error {
                         code: "storage".to_string(),
@@ -861,17 +962,32 @@ impl Runtime {
                                                     }
                                                     AudioEvent::End { complete: end } => {
                                                         let pcm = end.unwrap_or_else(|| Bytes::from(complete.clone()));
-                                                        let _ = audio.put(audio_id, CachedAudio {
+                                                        // 缓存写失败关闭（审计 R2）：put 失败不发正常 AudioEnd/成功 ToolResult，
+                                                        // 改发错误语义（live chunk 已流式播放，但持久回放失败须如实报告）。
+                                                        match audio.put(audio_id, CachedAudio {
                                                             pcm,
                                                             words: words_acc.clone(),
                                                             format,
                                                             sample_rate,
                                                             owner: user,
-                                                        }).await;
-                                                        yield SessionEvent::AudioEnd {
-                                                            audio_id,
-                                                            url: format!("/api/v1/audio/{audio_id}"),
-                                                        };
+                                                        }).await {
+                                                            Ok(()) => {
+                                                                yield SessionEvent::AudioEnd {
+                                                                    audio_id,
+                                                                    url: format!("/api/v1/audio/{audio_id}"),
+                                                                };
+                                                            }
+                                                            Err(e) => {
+                                                                ok = false;
+                                                                err = format!("音频缓存写入失败：{e}");
+                                                                yield SessionEvent::Error {
+                                                                    code: "storage".to_string(),
+                                                                    message: err.clone(),
+                                                                    retryable: false,
+                                                                    action: None,
+                                                                };
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }

@@ -39,6 +39,11 @@ pub const KERNEL_MIGRATIONS: &[Migration] = &[
         name: "eviction_watermark",
         sql: include_str!("../migrations/0003_eviction_watermark.sql"),
     },
+    Migration {
+        version: "0004",
+        name: "summary_spans",
+        sql: include_str!("../migrations/0004_summary_spans.sql"),
+    },
 ];
 
 const VERSION_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS _schema_migrations (
@@ -140,22 +145,71 @@ pub async fn run_migrations(
     }
 
     for m in &pending {
-        for stmt in split_statements(m.sql) {
-            execute_both!(store, &stmt)
-                .map_err(|e| KernelError::Storage(format!("迁移 {} 执行失败：{e}", m.version)))?;
-        }
-        let now = Utc::now();
-        execute_both!(
-            store,
-            "INSERT INTO _schema_migrations (version, name, checksum, applied_at) VALUES ($1,$2,$3,$4)",
-            m.version,
-            m.name,
-            checksum(m.sql),
-            now
-        )
-        .map_err(|e| KernelError::Storage(format!("记录迁移 {} 失败：{e}", m.version)))?;
+        apply_migration(store, m).await?;
         tracing::info!("已应用迁移 {}（{}）", m.version, m.name);
     }
 
     Ok(pending.len())
+}
+
+/// 原子应用单条迁移（审计 A2）：全部语句 + 版本记录**同事务**，中途失败整体回滚
+/// （防多语句迁移半应用致 schema 不一致 + 重跑报列已存在）。DDL 两后端皆事务性。
+async fn apply_migration(store: &Store, m: &Migration) -> Result<(), KernelError> {
+    let stmts = split_statements(m.sql);
+    let now = Utc::now();
+    let cs = checksum(m.sql);
+    let ver = m.version;
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool
+                .begin()
+                .await
+                .map_err(|e| KernelError::Storage(format!("迁移 {ver} 开启事务失败：{e}")))?;
+            for stmt in &stmts {
+                sqlx::query(stmt)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| KernelError::Storage(format!("迁移 {ver} 执行失败：{e}")))?;
+            }
+            sqlx::query(
+                "INSERT INTO _schema_migrations (version, name, checksum, applied_at) VALUES (?, ?, ?, ?)",
+            )
+            .bind(m.version)
+            .bind(m.name)
+            .bind(&cs)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| KernelError::Storage(format!("记录迁移 {ver} 失败：{e}")))?;
+            tx.commit()
+                .await
+                .map_err(|e| KernelError::Storage(format!("迁移 {ver} 提交失败：{e}")))?;
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool
+                .begin()
+                .await
+                .map_err(|e| KernelError::Storage(format!("迁移 {ver} 开启事务失败：{e}")))?;
+            for stmt in &stmts {
+                sqlx::query(stmt)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| KernelError::Storage(format!("迁移 {ver} 执行失败：{e}")))?;
+            }
+            sqlx::query(
+                "INSERT INTO _schema_migrations (version, name, checksum, applied_at) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(m.version)
+            .bind(m.name)
+            .bind(&cs)
+            .bind(now)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| KernelError::Storage(format!("记录迁移 {ver} 失败：{e}")))?;
+            tx.commit()
+                .await
+                .map_err(|e| KernelError::Storage(format!("迁移 {ver} 提交失败：{e}")))?;
+        }
+    }
+    Ok(())
 }

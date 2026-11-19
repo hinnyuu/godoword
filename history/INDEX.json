@@ -1010,5 +1010,137 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-18-2241-m1c-second-hardening-design.md",
+    "title": "M1c 二审收尾加固：全量审计核实 + 设计分歧定案",
+    "date": "2026-11-18T22:41+08:00",
+    "keywords": [
+      "m1c",
+      "second-hardening",
+      "transaction",
+      "reset-token",
+      "password-policy",
+      "eviction",
+      "idempotency",
+      "backpressure",
+      "openapi",
+      "trusted-proxy",
+      "audit"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-19-0003-m1c-second-hardening-implementation.md",
+    "title": "M1c 二审收尾加固实现（R1–R9 + A2/A3）",
+    "date": "2026-11-19T00:03+08:00",
+    "keywords": [
+      "m1c",
+      "second-hardening",
+      "implementation",
+      "transaction",
+      "password-policy",
+      "eviction",
+      "idempotency",
+      "backpressure",
+      "openapi",
+      "trusted-proxy",
+      "executor-lifetime"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-19-1324-m1c-third-audit-fixes.md",
+    "title": "M1c 第三次审计收尾（N1–N7）+ 测试缺口补齐",
+    "date": "2026-11-19T13:24+08:00",
+    "keywords": [
+      "m1c",
+      "third-audit",
+      "openapi-security",
+      "end-session",
+      "summarize-failure",
+      "reset-amplification",
+      "rate-limiter",
+      "shutdown",
+      "sidecar",
+      "migration-rollback"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
+  },
+  {
+    "file": "2026-11-19-1529-m1c-fourth-review-fixes.md",
+    "title": "M1c 第四次复核收尾（H1/H2）+ 测试同源偏差增强",
+    "date": "2026-11-19T15:29+08:00",
+    "keywords": [
+      "m1c",
+      "fourth-review",
+      "shutdown-lifecycle",
+      "lock",
+      "finish-reason",
+      "summarize",
+      "openapi-matrix"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
+  },
+  {
+    "file": "2026-11-19-1626-m1c-fifth-review-eof.md",
+    "title": "M1c 第五次复核收尾：summarize 无 Finish 静默 EOF",
+    "date": "2026-11-19T16:26+08:00",
+    "keywords": [
+      "m1c",
+      "fifth-review",
+      "summarize",
+      "eof",
+      "saw-stop",
+      "finish-reason"
+    ],
+    "scope": [
+      "project",
+      "kernel"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
   }
 ]

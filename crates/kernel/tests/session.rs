@@ -57,13 +57,29 @@ async fn run_test(store: Arc<Store>) {
         "{b} summary round-trip"
     );
     assert_eq!(got.evicted_up_to, 7, "{b} 水位 round-trip");
-    // update_eviction 推进水位 + 滚动摘要（审计 C7）。
-    repo.update_eviction(user, sid, Some("新摘要".to_string()), 12)
-        .await
-        .unwrap();
+    // evict_session 原子推进水位 + 滚动摘要 + outbox 同事务（审计 C7/R4）。
+    kernel::evict_session(
+        &store,
+        user.0,
+        sid.0,
+        "teach-gojuon",
+        Some("新摘要".to_string()),
+        12,
+        &["m1".to_string()],
+    )
+    .await
+    .unwrap();
     let got_w = repo.meta(user, sid).await.unwrap().unwrap();
     assert_eq!(got_w.summary.as_deref(), Some("新摘要"), "{b} 水位更新摘要");
     assert_eq!(got_w.evicted_up_to, 12, "{b} 水位推进");
+    let ev: (i64,) = kernel_api::fetch_one_both!(
+        &*store,
+        "SELECT COUNT(*) FROM progress_events WHERE session_id = $1 AND kind = 'session-evicted'",
+        (i64,),
+        sid.0
+    )
+    .unwrap();
+    assert_eq!(ev.0, 1, "{b} evict_session outbox 同事务落事件");
     assert!(repo.exists(user, sid).await.unwrap(), "{b} exists");
     assert!(
         repo.meta(user, SessionId::new()).await.unwrap().is_none(),

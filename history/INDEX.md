@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 43 条。
+共 48 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -47,3 +47,8 @@
 - [M1c 实现：会话运行时接基底 + 认证 + 管理](2026-11-18-1129-m1c-implementation.md) — 2026-11-18T11:29+08:00 · change · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, session, audio, auth, argon2, cookie, csrf, continue, detach, eviction, summarize, outbox, call_log, dev-debt
 - [M1c-hardening：第三方审计驱动的收尾加固](2026-11-18-1618-m1c-hardening.md) — 2026-11-18T16:18+08:00 · change · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c-hardening, audit, authorization, ownership, fail-closed, eviction-watermark, hard-timeout, retry, reset-token, gate-fix, drift
 - [M1c 二审收尾决策 + 文档精炼原则](2026-11-18-2127-m1c-second-audit-decisions.md) — 2026-11-18T21:27+08:00 · decision · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, second-audit, hardening, concurrency, atomicity, reset-token, backpressure, eviction, openapi, doc-lean, discipline
+- [M1c 二审收尾加固：全量审计核实 + 设计分歧定案](2026-11-18-2241-m1c-second-hardening-design.md) — 2026-11-18T22:41+08:00 · decision · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, second-hardening, transaction, reset-token, password-policy, eviction, idempotency, backpressure, openapi, trusted-proxy, audit
+- [M1c 二审收尾加固实现（R1–R9 + A2/A3）](2026-11-19-0003-m1c-second-hardening-implementation.md) — 2026-11-19T00:03+08:00 · change · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, second-hardening, implementation, transaction, password-policy, eviction, idempotency, backpressure, openapi, trusted-proxy, executor-lifetime
+- [M1c 第三次审计收尾（N1–N7）+ 测试缺口补齐](2026-11-19-1324-m1c-third-audit-fixes.md) — 2026-11-19T13:24+08:00 · change · accepted · scope: project, kernel, godoword, auth-local · keywords: m1c, third-audit, openapi-security, end-session, summarize-failure, reset-amplification, rate-limiter, shutdown, sidecar, migration-rollback
+- [M1c 第四次复核收尾（H1/H2）+ 测试同源偏差增强](2026-11-19-1529-m1c-fourth-review-fixes.md) — 2026-11-19T15:29+08:00 · change · accepted · scope: project, kernel, godoword · keywords: m1c, fourth-review, shutdown-lifecycle, lock, finish-reason, summarize, openapi-matrix
+- [M1c 第五次复核收尾：summarize 无 Finish 静默 EOF](2026-11-19-1626-m1c-fifth-review-eof.md) — 2026-11-19T16:26+08:00 · change · accepted · scope: project, kernel · keywords: m1c, fifth-review, summarize, eof, saw-stop, finish-reason

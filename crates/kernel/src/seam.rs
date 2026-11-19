@@ -121,14 +121,6 @@ pub trait SessionRepo: Send + Sync {
     async fn list(&self, user: UserId) -> Result<Vec<SessionId>, KernelError>;
     /// 删除会话（限本用户，含转录）。
     async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError>;
-    /// 更新淘汰水位 + 滚动摘要（审计 C7；限本用户）。
-    async fn update_eviction(
-        &self,
-        user: UserId,
-        id: SessionId,
-        summary: Option<String>,
-        evicted_up_to: i32,
-    ) -> Result<(), KernelError>;
 }
 
 /// 缓存音频。

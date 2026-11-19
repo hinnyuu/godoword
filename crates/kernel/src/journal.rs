@@ -5,9 +5,12 @@
 //! M1c 无教学模块消费者（骨架），LLM 提取报告归 teach-assess M2。双兼容 SQL 子集。
 
 use chrono::{DateTime, Utc};
-use kernel_api::{execute_both, fetch_all_both, KernelError, Store};
-use serde_json::Value;
+use kernel_api::{execute_both, fetch_all_both, fetch_optional_both, KernelError, Store};
+use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
+
+use crate::seam::StoredMessage;
 
 fn storage_err(e: impl std::fmt::Display) -> KernelError {
     KernelError::Storage(e.to_string())
@@ -155,4 +158,226 @@ pub async fn dispatch_once(
         }
     }
     Ok(processed)
+}
+
+/// 会话结束原子落库（审计 R6/N2）：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插入
+/// session-ended outbox → 提交。并发删除仅一个事务取得行（恰好一个事件、一个 true）；不存在/非本用户/已被
+/// 并发删除 → Ok(false)。emit 失败则 DELETE 回滚（不丢事件不伪造结束）；事件提交后才可见 dispatcher 不提前消费。
+pub async fn end_session(
+    store: &Store,
+    user_id: Uuid,
+    session_id: Uuid,
+) -> Result<bool, KernelError> {
+    let now = Utc::now();
+    let skill_tags = json!([]);
+    let detail = json!({});
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "DELETE FROM sessions WHERE id = ? AND user_id = ? RETURNING module_id",
+            )
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "DELETE FROM sessions WHERE id = $1 AND user_id = $2 RETURNING module_id",
+            )
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+    }
+}
+
+/// 淘汰 span 幂等键（审计 R4）：消息 ID 集排序后 sha256。同一 span 跨回合稳定 → summarize 计费去重。
+pub fn summary_span_hash(evicted: &[StoredMessage]) -> String {
+    let mut ids: Vec<String> = evicted.iter().map(|m| m.id.to_string()).collect();
+    ids.sort();
+    let mut h = Sha256::new();
+    for id in &ids {
+        h.update(id.as_bytes());
+        h.update(b"\n");
+    }
+    h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// 查已摘要 span fragment（命中复用，免重复 LLM 计费，审计 R4）。
+pub async fn lookup_summary_span(
+    store: &Store,
+    span_hash: &str,
+) -> Result<Option<String>, KernelError> {
+    let row: Option<(String,)> = fetch_optional_both!(
+        store,
+        "SELECT fragment FROM summary_spans WHERE span_hash = $1",
+        (String,),
+        span_hash
+    )
+    .map_err(storage_err)?;
+    Ok(row.map(|(f,)| f))
+}
+
+/// 持久化摘要 span fragment（LLM 调用后独立提交；evict 失败下回合 lookup 命中复用免重计费，审计 R4）。
+pub async fn store_summary_span(
+    store: &Store,
+    span_hash: &str,
+    session_id: Uuid,
+    fragment: &str,
+) -> Result<(), KernelError> {
+    execute_both!(
+        store,
+        "INSERT INTO summary_spans (span_hash, session_id, fragment, created_at) VALUES ($1,$2,$3,$4)",
+        span_hash,
+        session_id,
+        fragment,
+        Utc::now()
+    )
+    .map_err(storage_err)?;
+    Ok(())
+}
+
+/// 淘汰原子落库（审计 R4）：session-evicted outbox INSERT + 水位/滚动摘要 UPDATE **同事务**。
+/// 任一步失败整体回滚——emit 失败则水位不推进（不丢事件），update 失败则 outbox 回滚（不重复/无孤儿）。限本用户。
+#[allow(clippy::too_many_arguments)]
+pub async fn evict_session(
+    store: &Store,
+    user_id: Uuid,
+    session_id: Uuid,
+    module_id: &str,
+    summary: Option<String>,
+    watermark: i32,
+    message_ids: &[String],
+) -> Result<(), KernelError> {
+    let now = Utc::now();
+    let detail = json!({ "message_ids": message_ids });
+    let skill_tags = json!([]);
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(module_id)
+            .bind("session-evicted")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let n = sqlx::query(
+                "UPDATE sessions SET summary = ?, evicted_up_to = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+            )
+            .bind(&summary)
+            .bind(watermark)
+            .bind(now)
+            .bind(session_id)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?
+            .rows_affected();
+            if n == 0 {
+                return Err(KernelError::Storage(format!(
+                    "会话不存在或非本用户：{session_id}"
+                )));
+            }
+            tx.commit().await.map_err(storage_err)?;
+            Ok(())
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(module_id)
+            .bind("session-evicted")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let n = sqlx::query(
+                "UPDATE sessions SET summary = $1, evicted_up_to = $2, updated_at = $3 WHERE id = $4 AND user_id = $5",
+            )
+            .bind(&summary)
+            .bind(watermark)
+            .bind(now)
+            .bind(session_id)
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?
+            .rows_affected();
+            if n == 0 {
+                return Err(KernelError::Storage(format!(
+                    "会话不存在或非本用户：{session_id}"
+                )));
+            }
+            tx.commit().await.map_err(storage_err)?;
+            Ok(())
+        }
+    }
 }

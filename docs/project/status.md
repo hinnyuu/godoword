@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-18T21:27+08:00
-- 当前里程碑: **M1c 主体加固完成，二审发现剩余收尾项待修复复核（M1d 延后至加固复核完成）→ 下一任专门加固 agent**
-- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ **二审收尾（待加固）**
+- verified: 2026-11-19T16:26+08:00
+- 当前里程碑: **M1c 二审至五审收尾代码完成（R1–R9 + N1–N7 + H1/H2 + EOF，history 2241/0003/1324/1529/1626），待验收复核（M1d 延后）**
+- 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审+三审收尾加固（PR #15 代码完成待验收）**
 
 ## done
 
@@ -42,42 +42,53 @@
 
 ## in-flight
 
-- 无开放实现 PR。二审收尾加固待下一任专门 agent 启动（feat/m1c-second-hardening）。
+- **feat/m1c-second-hardening（PR #15）：R1–R9 + A2/A3 + 三审 N1–N7 + 四审 H1/H2 + 五审 EOF 代码修复完成**（各配失败/并发负例；
+  auth/journal/storage 并发与迁移回滚双后端绿，runtime 回合行为 SQLite；全 workspace 绿，fmt/clippy 净）。
+  待验收闭环：PR #15 CI 重跑绿 + 第三方定向复核 + 合并 + R4 same-tree/main 重测 + 人工残留 sign-off。
 
 ## blocked / 待拍板决策
 
-- **M1c 二审遗留（核实属实，待修复，详见 history 2127 + 下方紧凑清单）**：首轮加固 happy-path 导向，
-  失败/并发/原子性未系统覆盖。**修复完成 + 并发/失败测试 + CI 接入 + 复核前，不恢复"无阻塞/后端已就绪"声明**。
+- **M1c 二审至五审收尾代码修复完成（R1–R9 / N1–N7 / H1/H2 / EOF，history 2241/0003/1324/1529/1626），待验收复核**：
+  验收闭环（CI 重跑 + 定向复核 + 合并 + R4 重测 + 人工 sign-off）前，**不恢复"无阻塞/后端已就绪"声明**。
 - M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
 
-## 下一动作（下一任专门加固 agent）
+## 下一动作（实现序列，设计已定案 history 2241）
 
-1. 读 AGENTS.md → 本文件「二审遗留收尾」清单 → history 2127（修复方案 + 文档精炼原则）→ 二审报告
-   （/tmp/godoword_M1c-hardening_二次审计意见.md）→ 相关源码。交叉验证 git log + history INDEX。
-2. 建分支 feat/m1c-second-hardening，按 P0→P1→P2 修复 R1-R9，**每项配并发/失败负例测试**（机械锚定，非散文），
-   单 PR 多 commit，持续维护本文件（完成项即从清单移除）。
-3. 修复完成 → CI 绿（含 test_gate.py + 新并发/失败回归）+ R4 重测 + 人工残留 sign-off + 二审复核确认无新回归
+设计分歧定案：①事务=驱动专属块（沿用 register，不改 kernel-api）；②R4 计费幂等=新表 summary_spans（0004）+ 修迁移原子性；
+③R9=Config.trusted_proxies + XFF 最右不可信跳；④密码=8–128 字符 + 必含字母与数字（建议加特殊字符，区分大小写），
+统一 validate_password；⑤本期纳入 A2/A3/A4，A5（outbox 消费幂等）留 M2，A6 可选。
+
+1. P0：R1 重置事务+密码校验+双后端并发仅一次负例 → R7 管理员串行化+并发互禁负例。
+2. P0：R2 音频失败语义+故障注入（含 A3 孤儿）→ R3 真 abort+join+try_send/关通道+满 mpsc/shutdown 回归（含 A1 永久 busy）。
+3. P0：R4 emit+水位同事务+0004 幂等表（含 A2 迁移原子性）+summarize 多回合/各失败点测试 → R6 delete 原子。
+4. P0/P1：R5 OpenAPI 系统性标注（cookieAuth/CSRF/403/404）+$ref 全解析测试（A4）→ R8 test_gate 接 CI。
+5. P2：R9 sidecar 升级处理+限流器清理+可信代理。
+6. 收尾：全状态面 reconcile + history + CI 绿（含新并发/失败回归）+ R4 重测 + 人工残留 sign-off + 二审复核无新回归
    → 恢复"M1c 收尾完成无阻塞" → M1d 设计讨论。
-4. **文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
+
+**文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著。
 
 ## 二审遗留收尾（紧凑清单，修复完成即移除；方案见 history 2127）
 
-**P0（恢复无阻塞前必修）**：
-- R1 重置令牌：条件 UPDATE 认领 + 事务（认领→改密→撤销）；密码非空 + 长度校验；双后端并发仅一次成功负例。
-- R2 音频：put 失败 → 错误语义（不发 AudioEnd/成功 ToolResult）+ 故障注入。
-- R3 退出/背压：真 abort+join 后 checkpoint；硬超时后 try_send/关通道（满 mpsc 不消费仍超时退出回归）。
-- R4 淘汰：emit+update 同事务；summarize 计费幂等键去重；emit/update 各失败点 + summarize 多回合行为测试。
-- R5 OpenAPI：注册 CreateSessionReq + cookieAuth + CSRF header + 403/404 + $ref 全解析测试。
-- R7 管理员：禁用事务/锁串行化（防并发互禁→零管理员）+ 并发负例。
+**P0（恢复无阻塞前必修）**：全部完成（R1 重置事务+密码策略 / R2 音频失败关闭 / R3 退出 abort+背压 / R4 淘汰原子+计费幂等 / R5 OpenAPI / R7 管理员串行化）。
 
-**P1（一致性/CI/文档）**：
-- R6 SessionEnded 与 delete 原子（禁吞错伪造结束）。
-- R8 test_gate.py 接入 docs-gate CI。
-- 文档漂移：roadmap SSE 口径/gates 第 14 项/PR 模板越权 404/storage 迁移数/绝对化保证加可靠性边界（本交接 PR 已修 trivial 项）。
+**P1（一致性/CI/文档）**：全部完成（R6 SessionEnded 删除原子 / R8 test_gate 接 docs-gate CI / 文档漂移 trivial 项 #14 已修）。
 
-**P2（运维/精化）**：
-- R9 旧 sidecar 升级处理 + 限流器过期清理 + 可信代理 XFF 解析（Config trusted_proxies，IP 限流不退化全局）。
+**P2（运维/精化）**：全部完成（R9 旧 sidecar 兼容 404 可再生 / 限流器过期清理+容量上限 / 可信代理 XFF 最右不可信跳，Config trusted_proxies + 部署 wiki）。
+
+**第三次审计 N1–N7 全部完成**（history 1324）：N1 OpenAPI 操作级 security 矩阵 / N2 end_session DELETE RETURNING 唯一认领 /
+N3 summarize 中途失败不固化 / N4 重置防 Argon2 放大+改密 rows 校验 / N5 限流容量满 fail-closed 保密禁 /
+N6 shutdown 拒新回合+满队列终态策略 / N7 缺 sidecar 404；N8 迁移回滚探针+OpenAPI 矩阵+真实摘要失败链测试补齐。
+
+**第四次复核 H1/H2 全部完成**（history 1529）：H1 shutdown 准入—注册—快照同 tasks 锁串行化（确定性交错+barrier 并发回归）/
+H2 summarize Finish(Error/Length/ContentFilter/Cancelled) 不固化部分摘要；OpenAPI 测试独立公开操作表（防同源偏差）。
+
+**第五次复核 EOF 完成**（history 1626）：summarize 仅实际收到 Finish(Stop) 才成功，无 Finish 静默 EOF 不固化；
+表驱动覆盖五种非 Stop Finish + EOF 负例。
+
+**R1–R9 + N1–N7 + H1/H2 + EOF 代码修复全部落地**（各配失败/并发负例；auth/journal/storage 并发与迁移回滚双后端，runtime 回合行为 SQLite；
+全 workspace 绿，详见 history 2241/0003/1324/1529/1626 + 各 fix commit）。剩余为验收闭环（见下）。
 
 **重新签收证据**（二审第七节）：重置并发仅一次 + 空密码拒绝 / 音频写失败无假成功 / 淘汰各失败点不丢不重 + summarize 多回合 /
 满 mpsc 超时退出 + shutdown abort/join 后 checkpoint / OpenAPI $ref 全解析 + 认证 CSRF 一致 / 管理员并发互禁不失锁 /
@@ -96,9 +107,9 @@ OpenAPI 修正 + 全状态面 reconcile + 门禁 D6/D7 修复（test_gate.py 回
 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发（en 后置）+ 设置 UI（BYOK provider/binding
 + 测试按钮）+ 会话 UI（SSE 文本/音频播放/词级高亮）+ 认证/管理 UI（注册/登录/邀请/重置令牌/禁用）+ Dockerfile node 构建阶段 + 前端 CI job。
 
-**后端基础就绪但有二审遗留**（M1c + hardening）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
-**OpenAPI 完整性（R5：CreateSessionReq 注册 + cookieAuth/CSRF/403/404 + $ref 解析）须二审收尾修复后，M1d 方可生成 TS 客户端**。
-M1d 不改后端契约（若需契约变更走全量审查）。
+**后端基础就绪**（M1c + hardening + 二审收尾）：REST/SSE/cookie 认证/对象级授权/音频回放/词级时间戳已落地；
+**OpenAPI 完整性已修（R5：CreateSessionReq 注册 + cookieAuth/CSRF/403/404 + $ref 全解析测试），M1d 可生成 TS 客户端**
+（待二审收尾验收复核完成）。M1d 不改后端契约（若需契约变更走全量审查）。
 
 **待讨论设计**（重大者交用户）：前端构建工具（Vite）/Svelte 5 runes 模式/web/core 与 web/shell 分层/OpenAPI→TS 生成方案
 /SSE 客户端重连/AudioWorklet PCM 排队播放/词级高亮同步/i18n 方案/前端测试（vitest）/Dockerfile 多阶段 node 构建。
