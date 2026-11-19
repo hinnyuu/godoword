@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T15:29+08:00
-- 当前里程碑: **M1c 二审+三审+四审收尾代码完成（R1–R9 + N1–N7 + H1/H2，history 2241/0003/1324/1529），待验收复核（M1d 延后）**
+- verified: 2026-11-19T16:26+08:00
+- 当前里程碑: **M1c 二审至五审收尾代码完成（R1–R9 + N1–N7 + H1/H2 + EOF，history 2241/0003/1324/1529/1626），待验收复核（M1d 延后）**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ **二审+三审收尾加固（PR #15 代码完成待验收）**
 
 ## done
@@ -42,13 +42,13 @@
 
 ## in-flight
 
-- **feat/m1c-second-hardening（PR #15）：R1–R9 + A2/A3 + 三审 N1–N7 + 四审 H1/H2 代码修复完成**（各配失败/并发负例；
+- **feat/m1c-second-hardening（PR #15）：R1–R9 + A2/A3 + 三审 N1–N7 + 四审 H1/H2 + 五审 EOF 代码修复完成**（各配失败/并发负例；
   auth/journal/storage 并发与迁移回滚双后端绿，runtime 回合行为 SQLite；全 workspace 绿，fmt/clippy 净）。
   待验收闭环：PR #15 CI 重跑绿 + 第三方定向复核 + 合并 + R4 same-tree/main 重测 + 人工残留 sign-off。
 
 ## blocked / 待拍板决策
 
-- **M1c 二审+三审+四审收尾代码修复完成（R1–R9 / N1–N7 / H1/H2，history 2241/0003/1324/1529），待验收复核**：
+- **M1c 二审至五审收尾代码修复完成（R1–R9 / N1–N7 / H1/H2 / EOF，history 2241/0003/1324/1529/1626），待验收复核**：
   验收闭环（CI 重跑 + 定向复核 + 合并 + R4 重测 + 人工 sign-off）前，**不恢复"无阻塞/后端已就绪"声明**。
 - M1d 延后至二审收尾加固复核完成（主开发者定案：专门加固先于 M1d，避免在缺陷地基上盖 UI）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用（M2）。
@@ -84,8 +84,11 @@ N6 shutdown 拒新回合+满队列终态策略 / N7 缺 sidecar 404；N8 迁移�
 **第四次复核 H1/H2 全部完成**（history 1529）：H1 shutdown 准入—注册—快照同 tasks 锁串行化（确定性交错+barrier 并发回归）/
 H2 summarize Finish(Error/Length/ContentFilter/Cancelled) 不固化部分摘要；OpenAPI 测试独立公开操作表（防同源偏差）。
 
-**R1–R9 + N1–N7 + H1/H2 代码修复全部落地**（各配失败/并发负例；auth/journal/storage 并发与迁移回滚双后端，runtime 回合行为 SQLite；
-全 workspace 绿，详见 history 2241/0003/1324/1529 + 各 fix commit）。剩余为验收闭环（见下）。
+**第五次复核 EOF 完成**（history 1626）：summarize 仅实际收到 Finish(Stop) 才成功，无 Finish 静默 EOF 不固化；
+表驱动覆盖五种非 Stop Finish + EOF 负例。
+
+**R1–R9 + N1–N7 + H1/H2 + EOF 代码修复全部落地**（各配失败/并发负例；auth/journal/storage 并发与迁移回滚双后端，runtime 回合行为 SQLite；
+全 workspace 绿，详见 history 2241/0003/1324/1529/1626 + 各 fix commit）。剩余为验收闭环（见下）。
 
 **重新签收证据**（二审第七节）：重置并发仅一次 + 空密码拒绝 / 音频写失败无假成功 / 淘汰各失败点不丢不重 + summarize 多回合 /
 满 mpsc 超时退出 + shutdown abort/join 后 checkpoint / OpenAPI $ref 全解析 + 认证 CSRF 一致 / 管理员并发互禁不失锁 /

@@ -1120,5 +1120,27 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "15"
+  },
+  {
+    "file": "2026-11-19-1626-m1c-fifth-review-eof.md",
+    "title": "M1c 第五次复核收尾：summarize 无 Finish 静默 EOF",
+    "date": "2026-11-19T16:26+08:00",
+    "keywords": [
+      "m1c",
+      "fifth-review",
+      "summarize",
+      "eof",
+      "saw-stop",
+      "finish-reason"
+    ],
+    "scope": [
+      "project",
+      "kernel"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "15"
   }
 ]
