@@ -14,6 +14,7 @@ use crate::rest::{folder_err_status, AppState};
 
 /// 文件夹命名空间查询（默认 default）。
 #[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FolderQuery {
     #[serde(default = "default_module")]
     pub module: String,

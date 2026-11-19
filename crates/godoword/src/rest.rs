@@ -123,6 +123,7 @@ pub async fn create_session(
 
 /// 会话列表查询（folder 子树过滤 / module 命名空间过滤；page 预留，M1d 全量返回私有规模有界）。
 #[derive(Deserialize, utoipa::IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct SessionListQuery {
     /// 文件夹路径子树过滤（如 /日语/五十音）。
     #[serde(default)]

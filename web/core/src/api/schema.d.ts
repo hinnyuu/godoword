@@ -1601,11 +1601,11 @@ export interface operations {
     };
     list_folders: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                module: string;
+            query?: {
+                module?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -1628,14 +1628,14 @@ export interface operations {
     };
     create_folder: {
         parameters: {
-            query?: never;
+            query?: {
+                module?: string;
+            };
             header: {
                 /** @description CSRF 自定义头（变更请求必带，缺则 403） */
                 "X-Requested-With": string;
             };
-            path: {
-                module: string;
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody: {
@@ -2219,14 +2219,14 @@ export interface operations {
     };
     list_sessions: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description 文件夹路径子树过滤（如 /日语/五十音）。 */
-                folder: string | null;
+                folder?: string;
                 /** @description 模块命名空间过滤（default=无模块）。 */
-                module: string | null;
+                module?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

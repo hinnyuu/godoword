@@ -1,14 +1,118 @@
 <script lang="ts">
-  import AudioSpike from './AudioSpike.svelte';
-  const milestone = 'M1d P1';
+  import Router, { push, location } from 'svelte-spa-router';
+  import { _ } from 'svelte-i18n';
+  import { setUnauthorizedHandler } from '@godoword/core';
+  import './lib/i18n';
+  import { auth } from './lib/auth.svelte';
+  import { prefs } from './lib/prefs.svelte';
+  import Login from './routes/Login.svelte';
+  import Register from './routes/Register.svelte';
+  import Reset from './routes/Reset.svelte';
+  import Home from './routes/Home.svelte';
+  import Sessions from './routes/Sessions.svelte';
+  import Settings from './routes/Settings.svelte';
+  import Admin from './routes/Admin.svelte';
+  import Onboarding from './routes/Onboarding.svelte';
+
+  setUnauthorizedHandler(() => push('/login'));
+
+  const routes = {
+    '/login': Login,
+    '/register': Register,
+    '/reset': Reset,
+    '/': Home,
+    '/sessions': Sessions,
+    '/settings': Settings,
+    '/admin': Admin,
+    '/onboarding': Onboarding,
+    '*': Login,
+  };
+
+  const publicRoutes = ['/login', '/register', '/reset'];
+
+  // 启动加载用户 + 偏好（一次）。
+  $effect(() => {
+    void auth.load();
+    void prefs.load();
+  });
+
+  // 认证门：未登录访问受保护路由 → 跳登录。
+  $effect(() => {
+    if (!auth.loading && !auth.user && !publicRoutes.includes($location ?? '')) {
+      push('/login');
+    }
+  });
+
+  async function logout() {
+    await auth.logout();
+    push('/login');
+  }
+
+  let isPublic = $derived(publicRoutes.includes($location ?? ''));
 </script>
 
-<main class="shell">
-  <h1>godoword</h1>
-  <p>前端骨架（{milestone}）——音频引擎 spike。</p>
-  <AudioSpike />
+{#if auth.loading}
+  <p class="loading">加载中…</p>
+{:else}
+  {#if auth.user && !isPublic}
+    <nav>
+      <a href="#/">{$_('nav.chat')}</a>
+      <a href="#/sessions">{$_('nav.sessions')}</a>
+      <a href="#/settings">{$_('nav.settings')}</a>
+      {#if auth.isAdmin}<a href="#/admin">{$_('nav.admin')}</a>{/if}
+      <span class="spacer"></span>
+      <span class="user">{auth.user.display_name ?? auth.user.username}</span>
+      <button onclick={logout}>{$_('auth.logout')}</button>
+    </nav>
+  {/if}
+  <Router {routes} />
   <footer>
-    许可证 AGPL-3.0 ·
-    <a href="https://github.com/hinnyuu/godoword" target="_blank" rel="noopener">源码</a>
+    {$_('app.license')} ·
+    <a href="https://github.com/hinnyuu/godoword" target="_blank" rel="noopener">{$_('app.source')}</a>
   </footer>
-</main>
+{/if}
+
+<style>
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--gw-border);
+    background: var(--gw-surface);
+    flex-wrap: wrap;
+  }
+  nav a {
+    text-decoration: none;
+    color: var(--gw-fg);
+  }
+  nav a:hover {
+    color: var(--gw-accent);
+  }
+  .spacer {
+    flex: 1;
+  }
+  .user {
+    color: var(--gw-muted);
+    font-size: 0.9rem;
+  }
+  nav button {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--gw-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--gw-fg);
+    cursor: pointer;
+  }
+  .loading {
+    padding: 2rem;
+    color: var(--gw-muted);
+  }
+  footer {
+    padding: 1rem;
+    font-size: 0.8rem;
+    color: var(--gw-muted);
+    border-top: 1px solid var(--gw-border);
+    margin-top: 2rem;
+  }
+</style>

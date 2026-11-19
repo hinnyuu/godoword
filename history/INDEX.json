@@ -1277,5 +1277,32 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-19-2345-m1d-p4-shell-auth.md",
+    "title": "M1d P4 实现：shell 基础 + 认证/管理/引导 UI + core 服务层",
+    "date": "2026-11-19T23:45+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "shell",
+      "svelte",
+      "auth",
+      "admin",
+      "onboarding",
+      "router",
+      "i18n",
+      "services",
+      "intoparams"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

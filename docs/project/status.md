@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-19T23:10+08:00
-- 当前里程碑: **M1d 实施中——P0 合并；P1 音频听音确认；P2 后端 CI 全绿；P3 web/core 领域核心完成（vitest 32）→ 待 CI → P4 shell 认证/管理/引导 UI**
+- verified: 2026-11-19T23:45+08:00
+- 当前里程碑: **M1d 实施中——P0 合并；P1 音频听音确认；P2 后端 CI 全绿；P3 web/core（vitest 32）；P4 shell 认证/管理/引导 UI 代码就绪 → 待 CI + 人工认证流 → P5 设置 UI**
 - 主线: M0（51d16c3）→ M1 前置 C（bf952a3）→ 前置小 PR（f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ M1c-hardening（fa59c4e）→ 二审交接（7fe8bc3）→ 多轮审计收尾（a2bdf17）→ 验收+产品愿景（9d15342）→ **M1d 设计落档（本 PR）→ M1d 实施**
 
 ## done
@@ -18,8 +18,8 @@
 
 ## in-flight
 
-- **M1d 实施 PR #18**（分支 feat/m1d-frontend）：P1 音频引擎（听音确认）+ P2 后端扩展（CI 全绿含 PG/cargo-deny）+
-  **P3 web/core 领域核心**（api 类型 freshness/sse/session/theme/i18n/prefs，vitest 32 绿）已落。待 P3 CI 绿 → P4 shell UI。
+- **M1d 实施 PR #18**（分支 feat/m1d-frontend）：P1 音频（听音确认）+ P2 后端（CI 全绿）+ P3 web/core（vitest 32）+
+  **P4 shell 认证/管理/引导 UI + core 服务层**（svelte-check/build 绿；IntoParams query 契约修复）已落。待 P4 CI + 人工认证流确认 → P5。
 - P0 设计落档已合并（PR #17，bf3a413，R4 main 重测 success）。
 
 ## M1d 实施跟踪（phase 级，详细交接）
@@ -33,7 +33,7 @@
 | P1 | 音频 spike：web/core audio 引擎 + AudioWorklet 出声 + 词级高亮同步，本地真 key + 移动浏览器实测 | **代码就绪（工具链全绿）；待人工浏览器出声+高亮确认** |
 | P2 | 后端扩展：kernel-api 5 类型 ToSchema（**utoipa 耦合→契约级全量审查**）+ 0005 迁移 + path/preferences/folders/sessions-meta + auth-local change_password/UserInfo + godoword REST + schema 补全 + 双后端测试 | **代码+测试 SQLite 绿+契约审查矩阵完成；待 CI PG 双后端/cargo-deny** |
 | P3 | web/core：api（openapi-fetch+生成类型）/sse/session/theme/i18n/prefs + vitest + 类型 freshness | **完成（vitest 32/tsc/svelte-check/build 绿；CI freshness 锚已加）** |
-| P4 | web/shell 认证/管理/引导 UI | 待启动 |
+| P4 | web/shell 认证/管理/引导 UI | **代码就绪（core 服务层 + i18n/auth/prefs store + hash 路由 + Login/Register/Reset/Admin/Onboarding；svelte-check/build 绿）；待人工浏览器认证流确认** |
 | P5 | web/shell 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好） | 待启动 |
 | P6 | web/shell 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage 脚注） | 待启动 |
 | P7 | Dockerfile node 阶段 + axum SPA fallback + 前端 CI job + 冒烟扩展 | 待启动 |
@@ -70,11 +70,10 @@
 
 ## 下一动作
 
-1. **P3 收尾**：PR #18 CI 绿（frontend freshness 步骤首跑）。
-2. **P4 shell 认证/管理/引导 UI**：登录/注册/重置公开页 + 管理页（用户/邀请/重置令牌）+ 引导清单 + 路由 + svelte-i18n 注册 +
-   401 跳登录 + 主题应用；core 补 auth/admin 域函数（封装 api）。
-3. P5 设置 UI（provider 三卡片+高级绑定矩阵+音色试听+主题面板+偏好）→ P6 会话 UI（对话+文件夹树+音频卡片+高亮 live/回放+usage）→
-   P7 Dockerfile node 阶段/SPA fallback/冒烟 → P8 验收（人工感官 + 部署矩阵重 sign-off）。
+1. **P4 收尾**：PR #18 CI 绿 + 人工浏览器认证流确认（注册首用户→登录→管理→邀请→重置→引导）。
+2. **P5 设置 UI**：provider 三卡片（预设一键 + 测试连接）+ 高级绑定矩阵 + 音色试听 + 主题面板（预设/自定义变量/高级 CSS）+ 偏好开关。
+3. P6 会话 UI（对话流 + 文件夹目录树 + 音频卡片 + 高亮 live/回放 + usage 脚注 + 错误分流）→ P7 Dockerfile node 阶段/SPA 伺服/冒烟 →
+   P8 验收（人工感官 + 部署矩阵重 sign-off）。
 
 **文档精炼原则**（history 2127）：加固沉淀测试/code/history，live 文档只记当前事实；产品本质保持显著。
 M1d 因内容较多，status 按主开发者要求做 phase 级详细跟踪（决策指针指 history，不复制叙事）。

@@ -1807,9 +1807,9 @@
                 "operationId": "list_folders",
                 "parameters": [
                     {
-                        "in": "path",
+                        "in": "query",
                         "name": "module",
-                        "required": true,
+                        "required": false,
                         "schema": {
                             "type": "string"
                         }
@@ -1844,9 +1844,9 @@
                 "operationId": "create_folder",
                 "parameters": [
                     {
-                        "in": "path",
+                        "in": "query",
                         "name": "module",
-                        "required": true,
+                        "required": false,
                         "schema": {
                             "type": "string"
                         }
@@ -2568,26 +2568,20 @@
                 "parameters": [
                     {
                         "description": "\u6587\u4ef6\u5939\u8def\u5f84\u5b50\u6811\u8fc7\u6ee4\uff08\u5982 /\u65e5\u8bed/\u4e94\u5341\u97f3\uff09\u3002",
-                        "in": "path",
+                        "in": "query",
                         "name": "folder",
-                        "required": true,
+                        "required": false,
                         "schema": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
+                            "type": "string"
                         }
                     },
                     {
                         "description": "\u6a21\u5757\u547d\u540d\u7a7a\u95f4\u8fc7\u6ee4\uff08default=\u65e0\u6a21\u5757\uff09\u3002",
-                        "in": "path",
+                        "in": "query",
                         "name": "module",
-                        "required": true,
+                        "required": false,
                         "schema": {
-                            "type": [
-                                "string",
-                                "null"
-                            ]
+                            "type": "string"
                         }
                     }
                 ],
