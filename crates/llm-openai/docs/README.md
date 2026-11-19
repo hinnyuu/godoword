@@ -43,3 +43,4 @@
 
 - token 估算当前字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
 - anthropic 兼容另立 llm-anthropic 适配器（roadmap 远期）。
+- kernel-api M1d 新增 utoipa 有意耦合：本适配器返回的 `ModelInfo` 派生 ToSchema（OpenAPI schema 补全→前端类型生成），适配器实现不变。
