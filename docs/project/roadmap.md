@@ -191,6 +191,7 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
 - 角色扮演横切声音基础设施（地基 persona/binding/voice 原语 + 模块编排 + 内核角色音色档案实体；
   音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）——M2+ 方向，见 history 角色扮演条目
 - PWA / 移动端增强
+- 移动端布局优化（M1d 移动视口功能可用但侧栏固定宽挤压对话区；侧栏响应式折叠/抽屉化专项调整，主开发者认可早期测试后延）
 - 对话 Markdown/HTML 渲染（marked/markdown-it + DOMPurify sanitization 防 XSS，M1d 纯文本 pre-wrap，未来与 HTML 支持一起做）
 - E2E 自动化测试（当前单测 + fixture + 人工验收）
 - mid-run 回放缓冲（若需求出现）
