@@ -105,6 +105,9 @@ kernel 拥有 users/sessions/messages/providers/bindings/call_log/progress_event
 
 - 主密钥：env `GODOWORD_MASTER_KEY` 覆盖，否则自动生成 `/data/keys/master.key`（0600）；
   用户 key 以 AES-256-GCM 静态加密（每记录独立 nonce）。威胁模型：防静态泄露，不防运行中服务器被攻破。
+- **BYOK 转发面（风险接受，二审 R2-7）**：provider base_url 用户自填，服务端按址转发（含试听/测试端点）——
+  私有部署信任边界内（邀请制用户），不做内网隔离/URL 白名单；输入边界校验（adapter 已注册 + http(s) + 非空）
+  防误配，适配器 connect/read 超时防停滞。公网多租户部署须另行评估 SSRF 面（M4 OIDC 公网场景再议）。
 - 认证：数据挂稳定内部 user_id；auth-local（argon2）先行，auth-oidc（authentik）M4；
   注册默认 invite（首用户例外成为管理员）；管理员不可读用户 key。
 - 会话 cookie HttpOnly/Secure/SameSite；变更请求 CSRF 防御；登录限流。

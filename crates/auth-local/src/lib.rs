@@ -71,12 +71,14 @@ pub fn validate_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-/// 用户名策略（审计 F4）：trim 后非空、≤64 字符、无控制字符。
+/// 用户名策略（审计 F4 + 二审 R2-3）：trim 后非空、≤64 字符、无控制字符、**首尾无空白**
+/// （存储不 trim，首尾空白会造成视觉同形异码登录陷阱，同路径 NFC 教训）。
 pub fn validate_username(username: &str) -> Result<(), AuthError> {
     let t = username.trim();
-    if t.is_empty() || t.chars().count() > 64 || t.chars().any(|c| c.is_control()) {
+    if t.is_empty() || t.chars().count() > 64 || t.chars().any(|c| c.is_control()) || username != t
+    {
         return Err(AuthError::RegistrationRestricted(
-            "用户名须 1–64 字符（无控制字符）".to_string(),
+            "用户名须 1–64 字符（无控制字符/首尾空白）".to_string(),
         ));
     }
     Ok(())

@@ -1,6 +1,7 @@
 //! 会话文件夹仓储（M1d，虚拟路径即身份）。登记表持久空文件夹；模块 chroot 命名空间。
 //! 改名/移动=前缀批量改写（Rust 侧匹配 + 单事务原子）；删非空文件夹→子树上移一层（绝不级联删会话）。
 //! 读经薄分发宏（pool），写收口驱动专属事务（原子）；私有部署单用户自组织，写事务保完整性。
+//! 并发写 TOCTOU（读改写间隙）fail-closed：UNIQUE/条件冲突 → 事务回滚（无损坏，500 语义），不丢数据。
 //! 审计修复：祖先链登记与改写同事务（A 孤儿路径）；改名冲突预检（B）；改写后上限重校验（D）。
 
 use chrono::{DateTime, Utc};
@@ -188,7 +189,6 @@ pub async fn create_folder(
     raw_path: &str,
 ) -> Result<Folder, FolderError> {
     let path = path::normalize_path(raw_path)?;
-    let now = Utc::now();
     let id = Uuid::new_v4();
     write_tx(
         store,
@@ -201,14 +201,11 @@ pub async fn create_folder(
         None,
     )
     .await?;
-    Ok(Folder {
-        id,
-        user_id: user,
-        module_id: module.to_string(),
-        path,
-        created_at: now,
-        updated_at: now,
-    })
+    // 二审 R2-2：返回落库行（时间戳以事务内为准，不返回构造近似值）。
+    get_folder(store, user, id)
+        .await
+        .map_err(storage_err)?
+        .ok_or_else(|| FolderError::Storage(format!("新建文件夹读回失败：{id}")))
 }
 
 /// 取用户某命名空间所有会话 (id, path)（前缀匹配 Rust 侧）。

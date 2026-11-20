@@ -1485,5 +1485,33 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1320-m1d-second-audit.md",
+    "title": "M1d 审计修复轮二审（修复代码自身审计 + 一审盲点补漏）",
+    "date": "2026-11-20T13:20+08:00",
+    "keywords": [
+      "m1d",
+      "second-audit",
+      "prefs",
+      "reactivity",
+      "provider",
+      "validation",
+      "username",
+      "audio",
+      "dispose",
+      "ssrf"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
   }
 ]

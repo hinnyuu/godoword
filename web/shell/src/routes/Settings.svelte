@@ -1,5 +1,6 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
+  import { onDestroy } from 'svelte';
   import {
     getConfig,
     listProviders,
@@ -66,6 +67,11 @@
   let previewStatus = $state('');
   let testStatus = $state('');
   let engine: AudioEngine | null = null;
+
+  // 二审 R2-5：卸载释放试听音频资源（防 AudioContext 泄漏）。
+  onDestroy(() => {
+    engine?.dispose();
+  });
 
   // 主题自定义。
   let accent = $state('#2563eb');
@@ -162,7 +168,7 @@
   }
 
   async function removeProvider(id: string) {
-    if (!confirm($_('session.deleteConfirm'))) return;
+    if (!confirm($_('settings.providerDeleteConfirm'))) return;
     error = '';
     try {
       await deleteProvider(id);

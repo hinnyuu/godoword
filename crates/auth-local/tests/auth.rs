@@ -79,7 +79,7 @@ async fn run_test(store: Arc<Store>) {
     assert!(dup.is_err(), "{b} username 唯一拒绝重复");
 
     // 用户名/显示名策略（审计 F4）：空/纯空白/超长/控制字符拒绝；显示名超长拒绝。
-    for bad in ["", "   ", &"u".repeat(65), "a\u{0}b"] {
+    for bad in ["", "   ", &"u".repeat(65), "a\u{0}b", " admin", "admin "] {
         assert!(
             register(&store, bad, "valid-pass-123", None, None, false)
                 .await

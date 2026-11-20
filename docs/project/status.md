@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T12:45+08:00
-- 当前里程碑: **M1d 合并前审计修复轮（全量审计+M1d 侧重审计发现全量修复，PR #18 续推）→ CI 绿 + 新增 UI 面复验 → 合并 → M2 待启动**
+- verified: 2026-11-20T13:25+08:00
+- 当前里程碑: **M1d 审计修复轮一审+二审完成（复验通过，history 1240/1320）→ PR #18 CI 绿 → squash merge → M2 待启动**
 - 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施（PR #18）→ **M1d 审计修复（history 1240）→ 待合并**
 
 ## done
@@ -25,7 +25,8 @@
 
 ## in-flight
 
-- **PR #18 审计修复轮**（history 1240）：全量审计+M1d 侧重审计发现已全量修复（A 孤儿路径/B 改名冲突/D 深度越界/M7 改密 403/M1 回放错位/G1 frontend required check + F1–F7 加固 + M2–M6 前端 + Q3/Q4/Q7/Q9/Q12/Q13 覆盖补齐 + i18n 清扫），负例测试同配（kernel 双后端 + godoword handler 级 11 + core vitest 54）。待 CI 全绿 + 主开发者新增 UI 面复验 → squash merge。
+- **PR #18 审计修复轮收尾**：一审（history 1240）+ 二审（history 1320，修复代码自身审计：R2-1 prefs 队列快照时机真缺陷 +
+  R2-2–R2-7 加固/文档）全修，主开发者新增 UI 面复验通过。待 CI 全绿 → squash merge → R4 main 重测。
 
 ## blocked / 待拍板决策
 
@@ -36,8 +37,7 @@
 
 ## 下一动作
 
-- **PR #18 审计修复轮收尾**：CI 全绿（含 frontend required + 冒烟 M1d 断言）→ 主开发者复验新增 UI 面
-  （三卡片/摘要模型绑定/错误分流重试/usage 数字/文件夹改名/密度字号侧栏折叠/provider 编辑换 key/自动播放多段队列）→ squash merge → R4 main 重测。
+- **PR #18 合并**：CI 全绿（含 frontend required + 冒烟 M1d 断言）→ squash merge → R4 main 重测 → M1d 正式闭环。
 - **M2 设计讨论**（合并后待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
   模块迁移按注册序追加 kernel 之后；ModuleContext/emit_progress/current_plan 接缝已立；outbox dispatcher 骨架待消费者。
 - M2 一致性检查留档（上述非阻断观察）+ 重试再生语义（history 1240 取舍）。

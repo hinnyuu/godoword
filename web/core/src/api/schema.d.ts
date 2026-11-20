@@ -2028,6 +2028,12 @@ export interface operations {
                     "application/json": components["schemas"]["Provider"];
                 };
             };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             401: {
                 headers: {
                     [name: string]: unknown;

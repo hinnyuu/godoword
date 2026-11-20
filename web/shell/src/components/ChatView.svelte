@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { push } from 'svelte-spa-router';
-  import { untrack } from 'svelte';
+  import { untrack, onDestroy } from 'svelte';
   import {
     streamTurn,
     cancelSession,
@@ -48,7 +48,15 @@
   let highlight = $state(-1);
   let lastText = '';
   let autoQueue: Segment[] = [];
+  let playPending = false;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // 二审 R2-5：卸载清定时器 + 中止在途回合 + 释放音频资源（防 AudioContext 泄漏）。
+  onDestroy(() => {
+    if (toastTimer) clearTimeout(toastTimer);
+    abort?.abort();
+    engine?.dispose();
+  });
 
   function toMsg(role: string, content: string, reasoning: string | null): Msg {
     return { role, text: content, reasoning: reasoning ?? '', segments: [], showReasoning: false };
@@ -160,7 +168,8 @@
         const seg = findSeg(assistant, ev.audio_id);
         seg.done = true;
         if (prefs.prefs.auto_play) {
-          if (engine?.isPlaying) {
+          // 二审 R2-6：pending 守卫——init/play 异步窗口内亦视为占用，防两段并发 playSeg 交错。
+          if (engine?.isPlaying || playPending) {
             autoQueue.push(seg);
           } else {
             void playSeg(seg, true);
@@ -234,29 +243,34 @@
 
   async function playSeg(seg: Segment, fromQueue = false) {
     if (!fromQueue) autoQueue = [];
-    const eng = ensureEngine();
-    await eng.init();
-    eng.stop();
-    activeAudio = seg.audioId;
-    highlight = -1;
-    // 回放无 chunks（历史音频）→ 拉 PCM + meta 词时间戳。
-    if (seg.chunks.length === 0) {
-      const { getAudioPcm, getAudioMeta } = await import('@godoword/core');
-      try {
-        const meta = await getAudioMeta(seg.audioId);
-        seg.words = meta.words;
-        const { bytes } = await getAudioPcm(seg.audioId);
-        eng.pushPcm(bytes);
-      } catch {
-        showError({ kind: 'info', message: $_('session.replayFailed') });
-        return;
+    playPending = true;
+    try {
+      const eng = ensureEngine();
+      await eng.init();
+      eng.stop();
+      activeAudio = seg.audioId;
+      highlight = -1;
+      // 回放无 chunks（历史音频）→ 拉 PCM + meta 词时间戳。
+      if (seg.chunks.length === 0) {
+        const { getAudioPcm, getAudioMeta } = await import('@godoword/core');
+        try {
+          const meta = await getAudioMeta(seg.audioId);
+          seg.words = meta.words;
+          const { bytes } = await getAudioPcm(seg.audioId);
+          eng.pushPcm(bytes);
+        } catch {
+          showError({ kind: 'info', message: $_('session.replayFailed') });
+          return;
+        }
+      } else {
+        for (const c of seg.chunks) eng.pushChunk(c);
       }
-    } else {
-      for (const c of seg.chunks) eng.pushChunk(c);
+      eng.setWords(seg.words);
+      eng.markComplete();
+      await eng.play();
+    } finally {
+      playPending = false;
     }
-    eng.setWords(seg.words);
-    eng.markComplete();
-    await eng.play();
   }
 
   function stopAudio() {

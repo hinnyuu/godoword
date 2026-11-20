@@ -910,7 +910,7 @@
         }
     },
     "info": {
-        "description": "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。",
+        "description": "私有部署外语学习服务 REST API（M1d）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。",
         "license": {
             "identifier": "AGPL-3.0-only",
             "name": "AGPL-3.0-only"
@@ -2367,6 +2367,9 @@
                                 }
                             }
                         },
+                        "description": ""
+                    },
+                    "400": {
                         "description": ""
                     },
                     "401": {

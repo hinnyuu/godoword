@@ -107,6 +107,20 @@ async fn provider_owned(st: &AppState, user: kernel_api::UserId, id: Uuid) -> bo
     matches!(repo::get_provider(&st.store, user.0, id).await, Ok(Some(_)))
 }
 
+/// provider 输入边界校验（二审 R2-4）：adapter 须已注册、label/base_url 非空、base_url 须 http(s)、key 非空。
+fn provider_input_valid(
+    st: &AppState,
+    adapter_id: &str,
+    label: &str,
+    base_url: &str,
+    key: Option<&str>,
+) -> bool {
+    let adapter_known = adapter_id == st.llm.id() || adapter_id == st.tts.id();
+    let url_ok = base_url.starts_with("http://") || base_url.starts_with("https://");
+    let key_ok = key.map(|k| !k.is_empty()).unwrap_or(true);
+    adapter_known && !label.trim().is_empty() && !base_url.trim().is_empty() && url_ok && key_ok
+}
+
 /// 新建 provider。
 #[utoipa::path(
     post, path = "/api/v1/providers", request_body = CreateProviderReq, tag = "providers",
@@ -121,6 +135,15 @@ pub async fn create_provider(
     AuthUser(user): AuthUser,
     Json(req): Json<CreateProviderReq>,
 ) -> Result<(StatusCode, Json<Provider>), StatusCode> {
+    if !provider_input_valid(
+        &st,
+        &req.adapter_id,
+        &req.label,
+        &req.base_url,
+        Some(&req.key),
+    ) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let p = repo::create_provider(
         &st.store,
         &st.master,
@@ -173,7 +196,7 @@ pub async fn get_provider(
 #[utoipa::path(
     put, path = "/api/v1/providers/{id}", request_body = UpdateProviderReq, tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")),
-    responses((status = 200, body = Provider), (status = 404), (status = 401))
+    responses((status = 200, body = Provider), (status = 400), (status = 404), (status = 401))
 )]
 pub async fn update_provider(
     State(st): State<Arc<AppState>>,
@@ -181,6 +204,22 @@ pub async fn update_provider(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateProviderReq>,
 ) -> Result<Json<Provider>, StatusCode> {
+    // adapter_id 不可改（身份键）；沿用既有行 adapter 校验其余字段。
+    let Some(existing) = repo::get_provider(&st.store, user.0, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    else {
+        return Err(StatusCode::NOT_FOUND);
+    };
+    if !provider_input_valid(
+        &st,
+        &existing.adapter_id,
+        &req.label,
+        &req.base_url,
+        req.key.as_deref(),
+    ) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     repo::update_provider(
         &st.store,
         &st.master,
@@ -761,6 +800,59 @@ mod tests {
         )
         .await;
         assert!(r.is_err(), "挂起流被超时切断");
+    }
+
+    #[tokio::test]
+    async fn provider_input_validation_400() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "pvv").await;
+        let mk = |adapter: &str, key: &str, url: &str| CreateProviderReq {
+            adapter_id: adapter.to_string(),
+            label: "l".to_string(),
+            base_url: url.to_string(),
+            key: key.to_string(),
+            extra: None,
+        };
+        // 二审 R2-4：未知 adapter / 空 key / 非 http(s) / 空端点 → 400。
+        for req in [
+            mk("bogus-adapter", "k", "https://x.example"),
+            mk("tts-qwen-audio", "", "https://x.example"),
+            mk("tts-qwen-audio", "k", "ftp://x.example"),
+            mk("tts-qwen-audio", "k", ""),
+        ] {
+            let r = create_provider(State(st.clone()), AuthUser(user), Json(req)).await;
+            assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "R2-4 输入边界");
+        }
+        // 合法创建 201；更新留空 key 保留原 key（仍可解密）。
+        let ok = create_provider(
+            State(st.clone()),
+            AuthUser(user),
+            Json(mk("tts-qwen-audio", "k", "https://x.example")),
+        )
+        .await
+        .unwrap();
+        let pid = ok.1.id;
+        let upd = update_provider(
+            State(st.clone()),
+            AuthUser(user),
+            Path(pid),
+            Json(UpdateProviderReq {
+                label: "l2".to_string(),
+                base_url: "https://y.example".to_string(),
+                key: None,
+                extra: None,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(upd.label, "l2", "更新生效");
+        assert!(
+            repo::provider_conn(&st.store, &st.master, user.0, pid)
+                .await
+                .unwrap()
+                .is_some(),
+            "留空 key 保留原 key 可解密"
+        );
     }
 
     #[tokio::test]

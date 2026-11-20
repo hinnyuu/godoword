@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 61 条。
+共 62 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -65,3 +65,4 @@
 - [M1d P8 验收修复第三轮（主题偏好登录后丢失 + CSS 样例 + Markdown 延期）](2026-11-20-0240-m1d-p8-prefs-fix.md) — 2026-11-20T02:40+08:00 · change · accepted · scope: project, godoword · keywords: m1d, acceptance, bugfix, preferences, theme, login, markdown, roadmap
 - [M1d 完成合并验收（Svelte 图形界面里程碑闭环）](2026-11-20-0330-m1d-accepted.md) — 2026-11-20T03:30+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, auth-local · keywords: m1d, acceptance, merge, frontend, svelte, complete, milestone
 - [M1d 合并前全量审计 + 侧重审计修复轮（缺陷≠重议）](2026-11-20-1240-m1d-audit-fixes.md) — 2026-11-20T12:40+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, auth-local, llm-openai, tts-qwen-audio · keywords: m1d, audit, folders, virtual-path, change-password, preview, timeout, reactivity, i18n, ci, required-check
+- [M1d 审计修复轮二审（修复代码自身审计 + 一审盲点补漏）](2026-11-20-1320-m1d-second-audit.md) — 2026-11-20T13:20+08:00 · change · accepted · scope: project, kernel, godoword, auth-local · keywords: m1d, second-audit, prefs, reactivity, provider, validation, username, audio, dispose, ssrf

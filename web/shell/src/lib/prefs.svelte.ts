@@ -55,10 +55,11 @@ class PrefsStore {
     }
   }
 
-  /** 更新偏好（串行队列：并发 toggle 按序落库，响应不被旧请求覆盖）。 */
+  /** 更新偏好（串行队列：并发 toggle 按序落库，响应不被旧请求覆盖）。
+   *  二审 R2-1：快照须在队列**执行时**取（调用时取会让连续 patch 基于旧态丢前序变更）。 */
   update(patch: Partial<Preferences>): Promise<void> {
-    const next = { ...this.prefs, ...patch };
     const run = this.queue.then(async () => {
+      const next = { ...this.prefs, ...patch };
       this.prefs = await savePreferences(next);
       this.apply();
     });

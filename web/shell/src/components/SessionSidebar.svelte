@@ -114,8 +114,16 @@
   }
 
   async function removeFolder(path: string) {
-    const f = folders.find((x) => x.path === path);
-    if (!f) return;
+    // 隐式祖先节点（旧数据可能未登记）：先登记再删（二审：与改名一致，防 no-op）。
+    let f = folders.find((x) => x.path === path);
+    if (!f) {
+      try {
+        f = await createFolder(path);
+      } catch (err) {
+        error = err instanceof Error ? err.message : $_('session.folderCreateFailed');
+        return;
+      }
+    }
     if (!confirm($_('session.folderDeleteConfirm', { values: { path } }))) return;
     error = '';
     try {

@@ -117,6 +117,7 @@ export const zhCN = {
     label: '标签',
     unbound: '未配置',
     keyOptional: '新密钥（留空保留原密钥）',
+    providerDeleteConfirm: '删除服务商将级联删除其绑定，确认删除？',
     bindingMatrix: '绑定矩阵（module × capability × role）',
     createBinding: '新建绑定',
     module: '模块',
