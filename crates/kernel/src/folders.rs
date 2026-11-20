@@ -1,9 +1,10 @@
 //! 会话文件夹仓储（M1d，虚拟路径即身份）。登记表持久空文件夹；模块 chroot 命名空间。
 //! 改名/移动=前缀批量改写（Rust 侧匹配 + 单事务原子）；删非空文件夹→子树上移一层（绝不级联删会话）。
 //! 读经薄分发宏（pool），写收口驱动专属事务（原子）；私有部署单用户自组织，写事务保完整性。
+//! 审计修复：祖先链登记与改写同事务（A 孤儿路径）；改名冲突预检（B）；改写后上限重校验（D）。
 
 use chrono::{DateTime, Utc};
-use kernel_api::{execute_both, fetch_all_both, fetch_optional_both, KernelError, Store};
+use kernel_api::{fetch_all_both, fetch_optional_both, KernelError, Store};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -63,35 +64,123 @@ pub async fn get_folder(
         .map_err(|e| KernelError::Storage(e.to_string()))
 }
 
-/// 确保文件夹路径链存在（移动会话自动注册祖先；ON CONFLICT DO NOTHING 幂等）。
-async fn ensure_chain(
+/// 路径的祖先链前缀（`/a/b/c` → `["/a","/a/b","/a/b/c"]`）；include_self=false 去掉末段。
+fn chain(path: &str, include_self: bool) -> Vec<String> {
+    let segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
+    let n = if include_self {
+        segs.len()
+    } else {
+        segs.len().saturating_sub(1)
+    };
+    let mut acc = String::new();
+    let mut out = Vec::new();
+    for seg in segs.iter().take(n) {
+        acc = format!("{acc}/{seg}");
+        out.push(acc.clone());
+    }
+    out
+}
+
+/// 唯一约束冲突识别（两后端；create/改名的 Conflict 语义，区别真实存储故障）。
+fn is_unique_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .map(|d| d.is_unique_violation())
+        .unwrap_or(false)
+}
+
+/// 文件夹写事务（原子）：祖先链登记（DO NOTHING）+ 可选自身插入（冲突即 Conflict）
+/// + 文件夹/会话路径批量改写 + 可选删除。审计 A：链登记与改写同事务，失败整体回滚不留孤儿。
+#[allow(clippy::too_many_arguments)]
+async fn write_tx(
     store: &Store,
     user: Uuid,
     module: &str,
-    path: &str,
+    chain_paths: &[String],
+    insert_self: Option<(Uuid, &str)>,
+    folder_updates: &[(Uuid, String)],
+    session_updates: &[(Uuid, Option<String>)],
+    delete_folder: Option<Uuid>,
 ) -> Result<(), FolderError> {
     let now = Utc::now();
-    let segs: Vec<&str> = path.trim_start_matches('/').split('/').collect();
-    let mut acc = String::new();
-    for seg in segs {
-        acc = format!("{acc}/{seg}");
-        execute_both!(
-            store,
-            "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (user_id, module_id, path) DO NOTHING",
-            Uuid::new_v4(),
-            user,
-            module,
-            &acc,
-            now,
-            now
-        )
-        .map_err(storage_err)?;
+    macro_rules! tx_body {
+        ($pool:expr, $ph:literal) => {{
+            let mut tx = $pool.begin().await.map_err(storage_err)?;
+            for p in chain_paths {
+                sqlx::query(concat!(
+                    "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at) ",
+                    "VALUES (", $ph, "1, ", $ph, "2, ", $ph, "3, ", $ph, "4, ", $ph, "5, ", $ph, "6) ",
+                    "ON CONFLICT (user_id, module_id, path) DO NOTHING"
+                ))
+                .bind(Uuid::new_v4())
+                .bind(user)
+                .bind(module)
+                .bind(p)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            }
+            if let Some((self_id, p)) = insert_self {
+                let r = sqlx::query(concat!(
+                    "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at) ",
+                    "VALUES (", $ph, "1, ", $ph, "2, ", $ph, "3, ", $ph, "4, ", $ph, "5, ", $ph, "6)"
+                ))
+                .bind(self_id)
+                .bind(user)
+                .bind(module)
+                .bind(p)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await;
+                if let Err(e) = r {
+                    if is_unique_violation(&e) {
+                        return Err(FolderError::Conflict(p.to_string()));
+                    }
+                    return Err(storage_err(e));
+                }
+            }
+            for (id, new_path) in folder_updates {
+                sqlx::query(concat!(
+                    "UPDATE session_folders SET path = ", $ph, "1, updated_at = ", $ph, "2 WHERE id = ", $ph, "3"
+                ))
+                .bind(new_path)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            }
+            for (id, new_path) in session_updates {
+                sqlx::query(concat!(
+                    "UPDATE sessions SET path = ", $ph, "1, updated_at = ", $ph, "2 WHERE id = ", $ph, "3"
+                ))
+                .bind(new_path)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            }
+            if let Some(id) = delete_folder {
+                sqlx::query(concat!("DELETE FROM session_folders WHERE id = ", $ph, "1"))
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage_err)?;
+            }
+            tx.commit().await.map_err(storage_err)?;
+        }};
+    }
+    match store {
+        Store::Sqlite(pool) => tx_body!(pool, "?"),
+        Store::Pg(pool) => tx_body!(pool, "$"),
     }
     Ok(())
 }
 
-/// 新建文件夹（归一化 + UNIQUE 冲突→Conflict）。
+/// 新建文件夹（归一化 + 祖先链同事务登记 + UNIQUE 冲突→Conflict）。
 pub async fn create_folder(
     store: &Store,
     user: Uuid,
@@ -101,99 +190,25 @@ pub async fn create_folder(
     let path = path::normalize_path(raw_path)?;
     let now = Utc::now();
     let id = Uuid::new_v4();
-    let res = execute_both!(
+    write_tx(
         store,
-        "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
-        id,
         user,
         module,
-        &path,
-        now,
-        now
-    );
-    match res {
-        Ok(_) => Ok(Folder {
-            id,
-            user_id: user,
-            module_id: module.to_string(),
-            path,
-            created_at: now,
-            updated_at: now,
-        }),
-        Err(e) => Err(FolderError::Conflict(format!("{path}（{e}）"))),
-    }
-}
-
-/// 批量改写事务：对给定 (folder_id, new_path) 与 (session_id, new_path Option) 原子落库。
-async fn apply_rewrites(
-    store: &Store,
-    folder_updates: &[(Uuid, String)],
-    session_updates: &[(Uuid, Option<String>)],
-    delete_folder: Option<Uuid>,
-) -> Result<(), FolderError> {
-    let now = Utc::now();
-    match store {
-        Store::Sqlite(pool) => {
-            let mut tx = pool.begin().await.map_err(storage_err)?;
-            for (id, new_path) in folder_updates {
-                sqlx::query("UPDATE session_folders SET path = ?, updated_at = ? WHERE id = ?")
-                    .bind(new_path)
-                    .bind(now)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            for (id, new_path) in session_updates {
-                sqlx::query("UPDATE sessions SET path = ?, updated_at = ? WHERE id = ?")
-                    .bind(new_path)
-                    .bind(now)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            if let Some(id) = delete_folder {
-                sqlx::query("DELETE FROM session_folders WHERE id = ?")
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            tx.commit().await.map_err(storage_err)?;
-        }
-        Store::Pg(pool) => {
-            let mut tx = pool.begin().await.map_err(storage_err)?;
-            for (id, new_path) in folder_updates {
-                sqlx::query("UPDATE session_folders SET path = $1, updated_at = $2 WHERE id = $3")
-                    .bind(new_path)
-                    .bind(now)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            for (id, new_path) in session_updates {
-                sqlx::query("UPDATE sessions SET path = $1, updated_at = $2 WHERE id = $3")
-                    .bind(new_path)
-                    .bind(now)
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            if let Some(id) = delete_folder {
-                sqlx::query("DELETE FROM session_folders WHERE id = $1")
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
-            }
-            tx.commit().await.map_err(storage_err)?;
-        }
-    }
-    Ok(())
+        &chain(&path, false),
+        Some((id, &path)),
+        &[],
+        &[],
+        None,
+    )
+    .await?;
+    Ok(Folder {
+        id,
+        user_id: user,
+        module_id: module.to_string(),
+        path,
+        created_at: now,
+        updated_at: now,
+    })
 }
 
 /// 取用户某命名空间所有会话 (id, path)（前缀匹配 Rust 侧）。
@@ -217,7 +232,28 @@ async fn session_paths(
         .collect())
 }
 
-/// 改名/移动文件夹：前缀批量改写子树（文件夹 + 会话），目标不可在源子树内（防环），单事务原子。
+/// 改写后路径上限重校验（审计 D：上限是稳定性硬边界，派生路径亦不得越界；段内容不变故段上限天然保持）。
+fn check_caps(paths: impl Iterator<Item = String>) -> Result<(), FolderError> {
+    for p in paths {
+        if path::depth(&p) > path::MAX_DEPTH {
+            return Err(FolderError::Invalid(PathError::Invalid(format!(
+                "改写后嵌套深度超上限 {}：{p}",
+                path::MAX_DEPTH
+            ))));
+        }
+        if p.chars().count() > path::MAX_PATH_CHARS {
+            return Err(FolderError::Invalid(PathError::Invalid(format!(
+                "改写后全路径超上限 {} 字符",
+                path::MAX_PATH_CHARS
+            ))));
+        }
+    }
+    Ok(())
+}
+
+/// 改名/移动文件夹：前缀批量改写子树（文件夹 + 会话），目标不可在源子树内（防环），
+/// 目标/派生路径不得与子树外既有文件夹冲突（审计 B），改写后上限重校验（审计 D），
+/// 目标祖先链同事务登记（审计 A），单事务原子。
 pub async fn rename_folder(
     store: &Store,
     user: Uuid,
@@ -228,20 +264,33 @@ pub async fn rename_folder(
         return Ok(None);
     };
     let new_path = path::normalize_path(raw_new)?;
+    if new_path == old.path {
+        return Ok(Some(old));
+    }
     if path::is_within(&old.path, &new_path) {
         return Err(FolderError::Cycle(new_path));
     }
     let module = &old.module_id;
-    // 子树内文件夹（含自身）改写。
     let folders = list_folders(store, user, module)
         .await
         .map_err(storage_err)?;
+    // 子树外既有路径集（冲突预检基准）。
+    let outside: std::collections::HashSet<&str> = folders
+        .iter()
+        .filter(|f| !path::is_within(&old.path, &f.path))
+        .map(|f| f.path.as_str())
+        .collect();
     let folder_updates: Vec<(Uuid, String)> = folders
         .iter()
         .filter(|f| path::is_within(&old.path, &f.path))
         .map(|f| (f.id, path::rewrite_prefix(&f.path, &old.path, &new_path)))
         .collect();
-    // 子树内会话改写。
+    if let Some((_, p)) = folder_updates
+        .iter()
+        .find(|(_, p)| outside.contains(p.as_str()))
+    {
+        return Err(FolderError::Conflict(p.clone()));
+    }
     let sessions = session_paths(store, user, module).await?;
     let session_updates: Vec<(Uuid, Option<String>)> = sessions
         .iter()
@@ -251,11 +300,28 @@ pub async fn rename_folder(
             (*sid, Some(np))
         })
         .collect();
-    apply_rewrites(store, &folder_updates, &session_updates, None).await?;
+    check_caps(
+        folder_updates
+            .iter()
+            .map(|(_, p)| p.clone())
+            .chain(session_updates.iter().filter_map(|(_, p)| p.clone())),
+    )?;
+    write_tx(
+        store,
+        user,
+        module,
+        &chain(&new_path, false),
+        None,
+        &folder_updates,
+        &session_updates,
+        None,
+    )
+    .await?;
     get_folder(store, user, id).await.map_err(storage_err)
 }
 
-/// 删文件夹：子树（文件夹 + 会话）上移一层（移除本段），绝不级联删会话；单事务原子。
+/// 删文件夹：子树（文件夹 + 会话）上移一层（移除本段），绝不级联删会话；
+/// 父链同事务登记（审计 A：上移目标祖先必在登记表，前端树可见）；单事务原子。
 pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, FolderError> {
     let Some(target) = get_folder(store, user, id).await.map_err(storage_err)? else {
         return Ok(false);
@@ -263,7 +329,6 @@ pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, 
     let module = &target.module_id;
     let parent = path::parent(&target.path);
     let new_base = parent.clone().unwrap_or_default();
-    // 后代文件夹（不含自身）上移。
     let folders = list_folders(store, user, module)
         .await
         .map_err(storage_err)?;
@@ -272,7 +337,6 @@ pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, 
         .filter(|f| f.id != id && path::is_within(&target.path, &f.path))
         .map(|f| (f.id, path::rewrite_prefix(&f.path, &target.path, &new_base)))
         .collect();
-    // 子树内会话上移（根级→NULL 未分类）。
     let sessions = session_paths(store, user, module).await?;
     let session_updates: Vec<(Uuid, Option<String>)> = sessions
         .iter()
@@ -285,11 +349,23 @@ pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, 
             (*sid, if np.is_empty() { None } else { Some(np) })
         })
         .collect();
-    apply_rewrites(store, &folder_updates, &session_updates, Some(id)).await?;
+    // 上移不增深度（删一段），上限天然保持；父链登记保证可见性。
+    let parent_chain = parent.map(|p| chain(&p, true)).unwrap_or_default();
+    write_tx(
+        store,
+        user,
+        module,
+        &parent_chain,
+        None,
+        &folder_updates,
+        &session_updates,
+        Some(id),
+    )
+    .await?;
     Ok(true)
 }
 
-/// 移动会话到路径（None=未分类）；自动注册目标路径链；归属校验 + 自取会话命名空间。
+/// 移动会话到路径（None=未分类）；目标链同事务登记；归属校验 + 自取会话命名空间。
 pub async fn move_session(
     store: &Store,
     user: Uuid,
@@ -313,18 +389,48 @@ pub async fn move_session(
         Some(p) => Some(path::normalize_path(p)?),
         None => None,
     };
-    if let Some(p) = &normalized {
-        ensure_chain(store, user, &module, p).await?;
-    }
     let now = Utc::now();
-    execute_both!(
-        store,
-        "UPDATE sessions SET path = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
-        &normalized,
-        now,
-        session,
-        user
-    )
-    .map_err(storage_err)?;
+    let target_chain = normalized
+        .as_deref()
+        .map(|p| chain(p, true))
+        .unwrap_or_default();
+    // 链登记 + 移动同事务（审计 A：失败整体回滚，不留半登记）。
+    macro_rules! move_tx {
+        ($pool:expr, $ph:literal) => {{
+            let mut tx = $pool.begin().await.map_err(storage_err)?;
+            for p in &target_chain {
+                sqlx::query(concat!(
+                    "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at) ",
+                    "VALUES (", $ph, "1, ", $ph, "2, ", $ph, "3, ", $ph, "4, ", $ph, "5, ", $ph, "6) ",
+                    "ON CONFLICT (user_id, module_id, path) DO NOTHING"
+                ))
+                .bind(Uuid::new_v4())
+                .bind(user)
+                .bind(&module)
+                .bind(p)
+                .bind(now)
+                .bind(now)
+                .execute(&mut *tx)
+                .await
+                .map_err(storage_err)?;
+            }
+            sqlx::query(concat!(
+                "UPDATE sessions SET path = ", $ph, "1, updated_at = ", $ph, "2 ",
+                "WHERE id = ", $ph, "3 AND user_id = ", $ph, "4"
+            ))
+            .bind(&normalized)
+            .bind(now)
+            .bind(session)
+            .bind(user)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+        }};
+    }
+    match store {
+        Store::Sqlite(pool) => move_tx!(pool, "?"),
+        Store::Pg(pool) => move_tx!(pool, "$"),
+    }
     Ok(true)
 }

@@ -15,6 +15,8 @@ export interface AudioEngineOptions {
   onHighlight?: (index: number) => void;
   /** 缓冲水位回调（帧数，UI 缓冲指示用）。 */
   onBuffer?: (frames: number) => void;
+  /** 播放结束回调（已推入样本播完且 markComplete；自动播放队列用）。 */
+  onEnded?: () => void;
 }
 
 /** 流式 PCM 播放引擎。 */
@@ -26,6 +28,9 @@ export class AudioEngine {
   private playing = false;
   private raf = 0;
   private lastHighlight = -2;
+  private pushedMs = 0;
+  private complete = false;
+  private endedFired = false;
   private readonly sampleRate: number;
 
   constructor(private readonly opts: AudioEngineOptions) {
@@ -55,7 +60,9 @@ export class AudioEngine {
 
   /** 推入一段 b64 PCM（live audio-chunk / 回放完整音频）。 */
   pushChunk(b64: string): void {
-    this.node?.port.postMessage({ type: 'push', samples: decodeAudioChunk(b64) });
+    const samples = decodeAudioChunk(b64);
+    this.pushedMs += (samples.length / this.sampleRate) * 1000;
+    this.node?.port.postMessage({ type: 'push', samples });
   }
 
   /** 推入完整 PCM 字节（回放 GET /audio/{id}）。 */
@@ -64,7 +71,13 @@ export class AudioEngine {
     const view = new DataView(bytes.buffer, bytes.byteOffset, frames * 2);
     const samples = new Float32Array(frames);
     for (let i = 0; i < frames; i++) samples[i] = view.getInt16(i * 2, true) / 32768;
+    this.pushedMs += (frames / this.sampleRate) * 1000;
     this.node?.port.postMessage({ type: 'push', samples });
+  }
+
+  /** 标记样本已全部推入（live audio-end / 回放 push 后）；播完触发 onEnded。 */
+  markComplete(): void {
+    this.complete = true;
   }
 
   /** 开始/恢复播放（启动高亮时钟）。 */
@@ -97,6 +110,9 @@ export class AudioEngine {
   stop(): void {
     this.playing = false;
     this.pauseOffset = 0;
+    this.pushedMs = 0;
+    this.complete = false;
+    this.endedFired = false;
     cancelAnimationFrame(this.raf);
     this.node?.port.postMessage({ type: 'clear' });
     this.lastHighlight = -2;
@@ -121,6 +137,15 @@ export class AudioEngine {
     if (idx !== this.lastHighlight) {
       this.lastHighlight = idx;
       this.opts.onHighlight?.(idx);
+    }
+    // 播完检测：样本全部推入且时钟越过总时长 → 结束回调（自动播放队列驱动）。
+    if (this.complete && !this.endedFired && this.pushedMs > 0 && t >= this.pushedMs) {
+      this.endedFired = true;
+      this.playing = false;
+      this.pauseOffset = this.pushedMs / 1000;
+      this.opts.onHighlight?.(-1);
+      this.opts.onEnded?.();
+      return;
     }
     this.raf = requestAnimationFrame(this.tick);
   };

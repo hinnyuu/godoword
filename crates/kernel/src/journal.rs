@@ -5,7 +5,9 @@
 //! M1c 无教学模块消费者（骨架），LLM 提取报告归 teach-assess M2。双兼容 SQL 子集。
 
 use chrono::{DateTime, Utc};
-use kernel_api::{execute_both, fetch_all_both, fetch_optional_both, KernelError, Store};
+use kernel_api::{
+    execute_both, fetch_all_both, fetch_one_both, fetch_optional_both, KernelError, Store,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -64,6 +66,32 @@ pub async fn record_call(store: &Store, rec: CallRecord) -> Result<(), KernelErr
     )
     .map_err(storage_err)?;
     Ok(())
+}
+
+/// 用户 call_log 行（status, characters, total_tokens；用量看板/测试断言用）。
+pub async fn call_log_rows(
+    store: &Store,
+    user_id: Uuid,
+) -> Result<Vec<(String, Option<i32>, Option<i32>)>, KernelError> {
+    fetch_all_both!(
+        store,
+        "SELECT status, characters, total_tokens FROM call_log WHERE user_id = $1 ORDER BY created_at",
+        (String, Option<i32>, Option<i32>),
+        user_id
+    )
+    .map_err(storage_err)
+}
+
+/// 用户 call_log 计数（测试断言用）。
+pub async fn call_log_count(store: &Store, user_id: Uuid) -> Result<i64, KernelError> {
+    let row: (i64,) = fetch_one_both!(
+        store,
+        "SELECT COUNT(*) FROM call_log WHERE user_id = $1",
+        (i64,),
+        user_id
+    )
+    .map_err(storage_err)?;
+    Ok(row.0)
 }
 
 /// 发进度事件入 outbox（processed_at NULL=未处理）。返回事件 id。

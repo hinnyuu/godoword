@@ -7,7 +7,7 @@
   <SessionSidebar />
   <div class="main">
     <h1>{$_('nav.sessions')}</h1>
-    <p>从左侧目录树选择会话继续对话，或新建会话/文件夹整理。删除会话需确认（转录不可恢复）；删除文件夹会话上移一层。</p>
+    <p>{$_('session.sessionsHint')}</p>
   </div>
 </div>
 

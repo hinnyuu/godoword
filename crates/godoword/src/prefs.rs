@@ -33,3 +33,33 @@ pub async fn put_preferences(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(saved))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::AuthUser;
+    use crate::testutil::{state, user_with_token, TtsMode};
+
+    #[tokio::test]
+    async fn prefs_roundtrip_and_user_isolation() {
+        let st = state(TtsMode::Ok).await;
+        let (u1, _) = user_with_token(&st, "pf1").await;
+        let (u2, _) = user_with_token(&st, "pf2").await;
+        let p = Preferences {
+            theme: Some("dark".to_string()),
+            auto_play: Some(true),
+            ..Default::default()
+        };
+        let _ = put_preferences(State(st.clone()), AuthUser(u1), Json(p.clone()))
+            .await
+            .unwrap();
+        let got = get_preferences(State(st.clone()), AuthUser(u1))
+            .await
+            .unwrap();
+        assert_eq!(got.theme.as_deref(), Some("dark"), "偏好 round-trip");
+        let other = get_preferences(State(st.clone()), AuthUser(u2))
+            .await
+            .unwrap();
+        assert!(other.theme.is_none(), "用户隔离：u2 默认空");
+    }
+}

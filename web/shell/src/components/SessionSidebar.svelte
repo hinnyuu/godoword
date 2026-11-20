@@ -8,6 +8,7 @@
     deleteSession,
     moveSession,
     createFolder,
+    renameFolder,
     deleteFolder,
     buildTree,
     type Folder,
@@ -25,7 +26,7 @@
     try {
       [folders, sessions] = await Promise.all([listFolders(), listSessions()]);
     } catch (err) {
-      error = err instanceof Error ? err.message : '加载失败';
+      error = err instanceof Error ? err.message : $_('session.loadFailed');
     }
   }
 
@@ -33,7 +34,15 @@
     void refresh();
   });
 
-  let tree = $derived(buildTree(folders.map((f) => f.path)));
+  // 树 = 登记表 ∪ 会话路径前缀（设计 Q11：会话路径亦渲染文件夹节点，防孤儿路径隐没）。
+  let tree = $derived(
+    buildTree([
+      ...folders.map((f) => f.path),
+      ...sessions.map((s) => s.path).filter((p): p is string => p != null),
+    ]),
+  );
+
+  let collapsed = $derived(prefs.prefs.sidebar_collapsed ?? false);
 
   function sessionsAt(path: string | null): SessionListItem[] {
     return sessions.filter((s) => (s.path ?? null) === path);
@@ -46,7 +55,7 @@
       await refresh();
       push(`/chat/${id}`);
     } catch (err) {
-      error = err instanceof Error ? err.message : '创建失败';
+      error = err instanceof Error ? err.message : $_('session.createFailed');
     }
   }
 
@@ -61,49 +70,68 @@
       await deleteSession(id);
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '删除失败';
+      error = err instanceof Error ? err.message : $_('session.deleteFailed');
     }
   }
 
   async function move(id: string) {
-    const target = prompt($_('session.moveTo'), '/');
+    const target = prompt($_('session.movePrompt'), '');
     if (target === null) return;
     error = '';
     try {
       await moveSession(id, target.trim() === '' ? null : target.trim());
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '移动失败';
+      error = err instanceof Error ? err.message : $_('session.moveFailed');
     }
   }
 
   async function newFolder() {
-    const path = prompt($_('session.newFolder'), '/');
-    if (!path) return;
+    const path = prompt($_('session.newFolderPrompt'), '');
+    if (!path || path.trim() === '') return;
     error = '';
     try {
-      await createFolder(path);
+      await createFolder(path.trim());
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '创建文件夹失败';
+      error = err instanceof Error ? err.message : $_('session.folderCreateFailed');
+    }
+  }
+
+  async function rename(node: TreeNode) {
+    const target = prompt($_('session.renamePrompt'), node.path);
+    if (target === null || target.trim() === '' || target.trim() === node.path) return;
+    error = '';
+    try {
+      // 隐式祖先节点（旧数据可能未登记）：先登记再改名。
+      let f = folders.find((x) => x.path === node.path);
+      if (!f) f = await createFolder(node.path);
+      await renameFolder(f.id, target.trim());
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('session.renameFailed');
     }
   }
 
   async function removeFolder(path: string) {
     const f = folders.find((x) => x.path === path);
     if (!f) return;
-    if (!confirm(`删除文件夹 ${path}？会话上移一层，不会删除会话。`)) return;
+    if (!confirm($_('session.folderDeleteConfirm', { values: { path } }))) return;
     error = '';
     try {
       await deleteFolder(f.id);
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '删除文件夹失败';
+      error = err instanceof Error ? err.message : $_('session.folderDeleteFailed');
     }
   }
 
   function toggle(path: string) {
     expanded[path] = !expanded[path];
+  }
+
+  function toggleCollapse() {
+    void prefs.update({ sidebar_collapsed: !collapsed });
   }
 </script>
 
@@ -122,6 +150,7 @@
       <div class="folder-head">
         <button class="toggle" onclick={() => toggle(node.path)}>{expanded[node.path] ? '▼' : '▶'}</button>
         <button class="folder-name" onclick={() => toggle(node.path)}>{node.name}</button>
+        <button class="icon" onclick={() => rename(node)} title={$_('session.rename')}>✎</button>
         <button class="icon" onclick={() => removeFolder(node.path)} title={$_('session.delete')}>✕</button>
       </div>
       {#if expanded[node.path]}
@@ -136,23 +165,30 @@
   {/each}
 {/snippet}
 
-<aside class="sidebar">
+<aside class="sidebar" class:collapsed>
   <div class="sidebar-head">
-    <button onclick={newSession}>+ {$_('session.new')}</button>
-    <button onclick={newFolder} title={$_('session.newFolder')}>📁</button>
+    <button class="collapse" onclick={toggleCollapse} title={collapsed ? $_('session.expand') : $_('session.collapse')}>
+      {collapsed ? '»' : '«'}
+    </button>
+    {#if !collapsed}
+      <button onclick={newSession}>+ {$_('session.new')}</button>
+      <button onclick={newFolder} title={$_('session.newFolder')}>📁</button>
+    {/if}
   </div>
-  {#if error}<p class="error">{error}</p>{/if}
-  <div class="tree">
-    {@render folderNode(tree)}
-    <div class="folder">
-      <div class="folder-head"><span class="folder-name">{$_('session.uncategorized')}</span></div>
-      <div class="folder-body">
-        {#each sessionsAt(null) as s (s.id)}
-          {@render sessionRow(s)}
-        {/each}
+  {#if !collapsed}
+    {#if error}<p class="error">{error}</p>{/if}
+    <div class="tree">
+      {@render folderNode(tree)}
+      <div class="folder">
+        <div class="folder-head"><span class="folder-name">{$_('session.uncategorized')}</span></div>
+        <div class="folder-body">
+          {#each sessionsAt(null) as s (s.id)}
+            {@render sessionRow(s)}
+          {/each}
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 </aside>
 
 <style>
@@ -164,6 +200,10 @@
     flex-direction: column;
     height: calc(100vh - 8rem);
     overflow-y: auto;
+    flex-shrink: 0;
+  }
+  .sidebar.collapsed {
+    width: 2.5rem;
   }
   .sidebar-head {
     display: flex;
@@ -180,6 +220,11 @@
     color: #fff;
     cursor: pointer;
     font-size: 0.8rem;
+  }
+  .sidebar-head .collapse {
+    flex: 0 0 auto;
+    background: transparent;
+    color: var(--gw-muted);
   }
   .tree {
     padding: 0.5rem;

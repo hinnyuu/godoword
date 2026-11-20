@@ -134,7 +134,7 @@ pub struct SessionListQuery {
 }
 
 /// 会话列表响应。
-#[derive(serde::Serialize, utoipa::ToSchema)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct SessionListResp {
     pub sessions: Vec<kernel::SessionListItem>,
 }
@@ -146,8 +146,13 @@ pub async fn list_sessions(
     AuthUser(user): AuthUser,
     Query(q): Query<SessionListQuery>,
 ) -> Result<Json<SessionListResp>, StatusCode> {
+    // folder 过滤服务端 NFC 归一化（与存储路径同形；非法 → 400）。
+    let folder = match q.folder.as_deref() {
+        Some(f) => Some(kernel::normalize_path(f).map_err(|_| StatusCode::BAD_REQUEST)?),
+        None => None,
+    };
     let sessions =
-        kernel::list_sessions_meta(&st.store, user.0, q.module.as_deref(), q.folder.as_deref())
+        kernel::list_sessions_meta(&st.store, user.0, q.module.as_deref(), folder.as_deref())
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(SessionListResp { sessions }))
@@ -215,7 +220,7 @@ pub async fn move_session_path(
 }
 
 /// 音频元数据响应（回放词级高亮出口）。
-#[derive(serde::Serialize, utoipa::ToSchema)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct AudioMetaResp {
     pub words: Vec<WordTimestamp>,
     pub format: AudioFormat,
@@ -339,4 +344,75 @@ pub async fn get_audio(
         cached.pcm,
     )
         .into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::AuthUser;
+    use crate::testutil::{state, user_with_token, TtsMode};
+    use kernel_api::{AudioId, WordTimestamp};
+
+    #[tokio::test]
+    async fn audio_meta_owner_only() {
+        let st = state(TtsMode::Ok).await;
+        let (u1, _) = user_with_token(&st, "am1").await;
+        let (u2, _) = user_with_token(&st, "am2").await;
+        let aid = AudioId::new();
+        st.audio
+            .put(
+                aid,
+                kernel::CachedAudio {
+                    pcm: bytes::Bytes::from(vec![0u8; 48]),
+                    words: vec![WordTimestamp {
+                        text: "あ".to_string(),
+                        begin_index: 0,
+                        end_index: 1,
+                        begin_time: 0,
+                        end_time: 100,
+                    }],
+                    format: AudioFormat::Pcm,
+                    sample_rate: 24000,
+                    owner: u1,
+                },
+            )
+            .await
+            .unwrap();
+        let ok = audio_meta(State(st.clone()), AuthUser(u1), Path(aid.0))
+            .await
+            .unwrap();
+        assert_eq!(ok.words.len(), 1, "owner 可读 meta");
+        let cross = audio_meta(State(st.clone()), AuthUser(u2), Path(aid.0)).await;
+        assert_eq!(cross.unwrap_err(), StatusCode::NOT_FOUND, "越权 meta 404");
+    }
+
+    #[tokio::test]
+    async fn list_sessions_folder_nfc_and_invalid() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "ls1").await;
+        let sid = SessionId::new();
+        st.sessions
+            .create(user, sid, SessionMeta::default())
+            .await
+            .unwrap();
+        kernel::move_session(&st.store, user.0, sid.0, Some("/が"))
+            .await
+            .unwrap();
+        // NFD 查询（か+组合浊音符）服务端 NFC 归一化后命中。
+        let q = SessionListQuery {
+            folder: Some("/か\u{3099}".to_string()),
+            module: None,
+        };
+        let resp = list_sessions(State(st.clone()), AuthUser(user), Query(q))
+            .await
+            .unwrap();
+        assert_eq!(resp.sessions.len(), 1, "NFC 归一化过滤命中");
+        // 非法路径 → 400。
+        let bad = SessionListQuery {
+            folder: Some("/a//b".to_string()),
+            module: None,
+        };
+        let r = list_sessions(State(st.clone()), AuthUser(user), Query(bad)).await;
+        assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "非法 folder 400");
+    }
 }

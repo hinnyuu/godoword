@@ -287,3 +287,191 @@ async fn m1d_preferences_folders_meta() {
         eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
     }
 }
+
+/// 审计修复负例（A 孤儿路径 / B 改名冲突 / D 上限溢出 / 越权 rename / 祖先登记）。
+async fn run_audit_negatives(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let user = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, user).await.unwrap();
+    let ns = kernel::DEFAULT_NAMESPACE;
+    let sessions = DbSessions::new(store.clone());
+
+    async fn new_session(sessions: &DbSessions, user: Uuid) -> SessionId {
+        let sid = SessionId::new();
+        sessions
+            .create(UserId(user), sid, SessionMeta::default())
+            .await
+            .unwrap();
+        sessions
+            .append(UserId(user), sid, msg("user", "hi"))
+            .await
+            .unwrap();
+        sid
+    }
+
+    // ── B：改名到已存在路径 → Conflict（非 Storage/500）。
+    let fa = kernel::create_folder(&store, user, ns, "/a").await.unwrap();
+    kernel::create_folder(&store, user, ns, "/b").await.unwrap();
+    let r = kernel::rename_folder(&store, user, fa.id, "/b").await;
+    assert!(
+        matches!(r, Err(kernel::FolderError::Conflict(_))),
+        "{b} 改名冲突须 Conflict，实得 {r:?}"
+    );
+    // 子树外派生冲突：/a/sub 与 /x/sub 并存，改名 /a→/x → /x/sub 冲突。
+    kernel::create_folder(&store, user, ns, "/a/sub")
+        .await
+        .unwrap();
+    kernel::create_folder(&store, user, ns, "/x/sub")
+        .await
+        .unwrap();
+    let r = kernel::rename_folder(&store, user, fa.id, "/x").await;
+    assert!(
+        matches!(r, Err(kernel::FolderError::Conflict(_))),
+        "{b} 派生路径冲突须 Conflict，实得 {r:?}"
+    );
+    // 改名自身 = 无操作成功。
+    let same = kernel::rename_folder(&store, user, fa.id, "/a")
+        .await
+        .unwrap();
+    assert_eq!(same.unwrap().path, "/a", "{b} 改名自身无操作");
+
+    // ── 越权 rename：他人文件夹 → Ok(None)（REST 404）。
+    let other = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, other).await.unwrap();
+    assert!(
+        kernel::rename_folder(&store, other, fa.id, "/y")
+            .await
+            .unwrap()
+            .is_none(),
+        "{b} 越权改名 None"
+    );
+
+    // ── A：rename 到新深层路径 → 删该文件夹 → 上移目标祖先必在登记表（会话可见）。
+    let fx = kernel::create_folder(&store, user, ns, "/x2")
+        .await
+        .unwrap();
+    let sid = new_session(&sessions, user).await;
+    kernel::move_session(&store, user, sid.0, Some("/x2"))
+        .await
+        .unwrap();
+    kernel::rename_folder(&store, user, fx.id, "/a2/b2")
+        .await
+        .unwrap()
+        .unwrap();
+    let folders = kernel::list_folders(&store, user, ns).await.unwrap();
+    assert!(
+        folders.iter().any(|f| f.path == "/a2"),
+        "{b} rename 目标祖先 /a2 同事务登记"
+    );
+    let fb = folders.into_iter().find(|f| f.path == "/a2/b2").unwrap();
+    kernel::delete_folder(&store, user, fb.id).await.unwrap();
+    let path = kernel::get_session_path(&store, user, sid.0).await.unwrap();
+    assert_eq!(path.as_deref(), Some("/a2"), "{b} 删后上移一层");
+    let folders = kernel::list_folders(&store, user, ns).await.unwrap();
+    assert!(
+        folders.iter().any(|f| f.path == "/a2"),
+        "{b} 上移目标 /a2 在登记表（前端树可见，不隐没）"
+    );
+    assert!(
+        sessions.exists(UserId(user), sid).await.unwrap(),
+        "{b} 会话未删"
+    );
+
+    // ── create 深层文件夹登记祖先链。
+    kernel::create_folder(&store, user, ns, "/c1/c2/c3")
+        .await
+        .unwrap();
+    let folders = kernel::list_folders(&store, user, ns).await.unwrap();
+    for p in ["/c1", "/c1/c2", "/c1/c2/c3"] {
+        assert!(
+            folders.iter().any(|f| f.path == p),
+            "{b} create 祖先链登记 {p}"
+        );
+    }
+
+    // ── D：深 8 子树改名到深 4 目标 → 派生深度 11 > 8 → Invalid 拒绝，原路径不变。
+    let deep = format!("/d1/{}", ["d"; 7].join("/"));
+    let sid2 = new_session(&sessions, user).await;
+    kernel::move_session(&store, user, sid2.0, Some(&deep))
+        .await
+        .unwrap();
+    let fd = kernel::list_folders(&store, user, ns)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|f| f.path == "/d1")
+        .unwrap();
+    let target = format!("/{}", ["t"; 4].join("/"));
+    let r = kernel::rename_folder(&store, user, fd.id, &target).await;
+    assert!(
+        matches!(r, Err(kernel::FolderError::Invalid(_))),
+        "{b} 改写后深度越界须 Invalid，实得 {r:?}"
+    );
+    assert_eq!(
+        kernel::get_session_path(&store, user, sid2.0)
+            .await
+            .unwrap()
+            .as_deref(),
+        Some(deep.as_str()),
+        "{b} 拒绝后原路径不变（事务未应用）"
+    );
+
+    // 清理。
+    kernel_api::execute_both!(&*store, "DELETE FROM sessions WHERE user_id = $1", user).unwrap();
+    kernel_api::execute_both!(
+        &*store,
+        "DELETE FROM session_folders WHERE user_id = $1",
+        user
+    )
+    .unwrap();
+    kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", user).unwrap();
+    kernel_api::execute_both!(&*store, "DELETE FROM users WHERE id = $1", other).unwrap();
+}
+
+#[tokio::test]
+async fn m1d_folder_audit_negatives() {
+    let sqlite = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::query("PRAGMA foreign_keys=ON")
+        .execute(&sqlite)
+        .await
+        .unwrap();
+    run_audit_negatives(Arc::new(Store::Sqlite(sqlite))).await;
+
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_m1dn_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(2)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        run_audit_negatives(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}

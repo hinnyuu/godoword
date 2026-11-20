@@ -167,6 +167,7 @@ dist 拷入 web/shell/public）；前端 CI job（类型 freshness + core tsc + 
   **M1d 完成**：前端 Svelte 5 SPA（web/core 框架无关 + web/shell，认证/管理/引导/设置/对话/会话文件夹 + 音频词级高亮 live/回放 +
   主题自定义 + 偏好跨设备）；后端扩展（0005 虚拟路径文件夹/偏好/会话元数据/音色试听/回放时间戳出口/自助改密）+
   **OpenAPI schema 补全（kernel-api 5 类型 + UserInfo + 新 DTO ToSchema，utoipa 有意耦合→契约级审查）**；Dockerfile 三阶段 node 构建。
-  Markdown/HTML 渲染 + 移动布局优化延期远期。
-- 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 生产仍静态占位（P7 切 SPA 伺服）；
+  Markdown/HTML 渲染 + 移动布局优化延期远期。**合并前审计修复**（history 1240）：文件夹祖先链原子登记 + 改名冲突预检 + 上限重校验、
+  改密错旧密 403、试听上限/超时/计量、适配器 connect/read 超时、错误分流/usage 数字/三卡片/布局偏好/改名 UI、frontend required check。
+- 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；
   outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

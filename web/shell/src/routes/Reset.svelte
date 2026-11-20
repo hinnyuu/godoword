@@ -28,7 +28,7 @@
 <div class="auth-card">
   <h1>{$_('auth.resetPassword')}</h1>
   {#if done}
-    <p class="ok">重置成功，跳转登录…</p>
+    <p class="ok">{$_('auth.resetDone')}</p>
   {:else}
     <form onsubmit={submit}>
       <label>

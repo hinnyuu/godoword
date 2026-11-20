@@ -17,7 +17,11 @@ export function normalizePath(input: string): string {
     if (seg === '') throw new Error('含空段（连续斜杠）');
     if (seg === '.' || seg === '..') throw new Error('段不可为 . 或 ..');
     if ([...seg].length > MAX_SEGMENT_CHARS) throw new Error(`段长度超上限 ${MAX_SEGMENT_CHARS} 字符`);
-    if ([...seg].some((c) => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) {
+    if ([...seg].some((c) => {
+      const code = c.charCodeAt(0);
+      // C0 + DEL + C1（镜像 Rust char::is_control 的 Cc 类别）。
+      return code < 32 || code === 127 || (code >= 0x80 && code <= 0x9f);
+    })) {
       throw new Error('段含控制字符');
     }
     if (seg.trim() !== seg) throw new Error('段首尾不可有空白');

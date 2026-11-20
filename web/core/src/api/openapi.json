@@ -2,7 +2,7 @@
     "components": {
         "schemas": {
             "AudioFormat": {
-                "description": "\u97f3\u9891\u7f16\u7801\u3002",
+                "description": "音频编码。",
                 "enum": [
                     "pcm",
                     "wav",
@@ -12,7 +12,7 @@
                 "type": "string"
             },
             "AudioMetaResp": {
-                "description": "\u97f3\u9891\u5143\u6570\u636e\u54cd\u5e94\uff08\u56de\u653e\u8bcd\u7ea7\u9ad8\u4eae\u51fa\u53e3\uff09\u3002",
+                "description": "音频元数据响应（回放词级高亮出口）。",
                 "properties": {
                     "format": {
                         "$ref": "#/components/schemas/AudioFormat"
@@ -37,7 +37,7 @@
                 "type": "object"
             },
             "Binding": {
-                "description": "binding \u57df\u7c7b\u578b\uff1acapability/role \u4e3a lowercase \u5b57\u7b26\u4e32\uff08llm/tts/stt\uff1bdefault/summarizer/extractor/assessor\uff09\u3002",
+                "description": "binding 域类型：capability/role 为 lowercase 字符串（llm/tts/stt；default/summarizer/extractor/assessor）。",
                 "properties": {
                     "capability": {
                         "type": "string"
@@ -88,7 +88,7 @@
                 "type": "object"
             },
             "ChangePasswordReq": {
-                "description": "\u81ea\u52a9\u6539\u5bc6\u8bf7\u6c42\u3002",
+                "description": "自助改密请求。",
                 "properties": {
                     "new_password": {
                         "type": "string"
@@ -104,7 +104,7 @@
                 "type": "object"
             },
             "ChatMessage": {
-                "description": "\u804a\u5929\u6d88\u606f\u3002",
+                "description": "聊天消息。",
                 "properties": {
                     "content": {
                         "type": "string"
@@ -133,7 +133,7 @@
                 "type": "object"
             },
             "ConfigView": {
-                "description": "\u914d\u7f6e\u8131\u654f\u53ea\u8bfb\u89c6\u56fe\uff08REST \u5e8f\u5217\u5316\uff09\u3002",
+                "description": "配置脱敏只读视图（REST 序列化）。",
                 "properties": {
                     "data_dir": {
                         "type": "string"
@@ -171,7 +171,7 @@
                 "type": "object"
             },
             "CreateBindingReq": {
-                "description": "\u65b0\u5efa binding \u8bf7\u6c42\u3002",
+                "description": "新建 binding 请求。",
                 "properties": {
                     "capability": {
                         "type": "string"
@@ -180,7 +180,7 @@
                         "type": "string"
                     },
                     "module_id": {
-                        "description": "\u6a21\u5757 id\uff1b\u7701\u7565\u6216 `*` \u8868\u5168\u6a21\u5757\u9ed8\u8ba4\u3002",
+                        "description": "模块 id；省略或 `*` 表全模块默认。",
                         "type": "string"
                     },
                     "params": {},
@@ -201,10 +201,10 @@
                 "type": "object"
             },
             "CreateFolderReq": {
-                "description": "\u65b0\u5efa\u6587\u4ef6\u5939\u8bf7\u6c42\u3002",
+                "description": "新建文件夹请求。",
                 "properties": {
                     "path": {
-                        "description": "\u865a\u62df\u8def\u5f84\uff08\u5982 /\u65e5\u8bed/\u4e94\u5341\u97f3\uff09\u3002",
+                        "description": "虚拟路径（如 /日语/五十音）。",
                         "type": "string"
                     }
                 },
@@ -214,7 +214,7 @@
                 "type": "object"
             },
             "CreateProviderReq": {
-                "description": "\u65b0\u5efa provider \u8bf7\u6c42\u3002",
+                "description": "新建 provider 请求。",
                 "properties": {
                     "adapter_id": {
                         "type": "string"
@@ -224,7 +224,7 @@
                     },
                     "extra": {},
                     "key": {
-                        "description": "\u7528\u6237 API key\uff08\u52a0\u5bc6\u5b58\u50a8\uff0c\u4e0d\u56de\u663e\uff09\u3002",
+                        "description": "用户 API key（加密存储，不回显）。",
                         "type": "string"
                     },
                     "label": {
@@ -240,23 +240,23 @@
                 "type": "object"
             },
             "CreateSessionReq": {
-                "description": "\u521b\u5efa\u4f1a\u8bdd\u8bf7\u6c42\uff08\u53ef\u9009\u914d\u7f6e\u65ad\u5f00\u884c\u4e3a\u4e0e\u8fd0\u884c\u65f6\u53c2\u6570\uff0c\u5ba1\u8ba1 C5\uff1acontinue \u516c\u5f00\u53ef\u914d\uff09\u3002",
+                "description": "创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配）。",
                 "properties": {
                     "on_disconnect": {
-                        "description": "\u65ad\u5f00\u884c\u4e3a cancel/continue\uff08\u9ed8\u8ba4 cancel\uff09\u3002",
+                        "description": "断开行为 cancel/continue（默认 cancel）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "params": {
-                        "description": "\u8fd0\u884c\u65f6\u53c2\u6570\uff08\u9884\u7b97/\u6dd8\u6c70/\u5de5\u5177\u4e0a\u9650\uff0c\u9ed8\u8ba4\u503c\u89c1 SessionParams\uff1bJSON \u5bf9\u8c61\uff09\u3002"
+                        "description": "运行时参数（预算/淘汰/工具上限，默认值见 SessionParams；JSON 对象）。"
                     }
                 },
                 "type": "object"
             },
             "Folder": {
-                "description": "\u6587\u4ef6\u5939\u57df\u7c7b\u578b\uff08\u767b\u8bb0\u8868\u884c\uff09\u3002",
+                "description": "文件夹域类型（登记表行）。",
                 "properties": {
                     "created_at": {
                         "format": "date-time",
@@ -292,7 +292,7 @@
                 "type": "object"
             },
             "FolderListResp": {
-                "description": "\u6587\u4ef6\u5939\u5217\u8868\u54cd\u5e94\u3002",
+                "description": "文件夹列表响应。",
                 "properties": {
                     "folders": {
                         "items": {
@@ -307,7 +307,7 @@
                 "type": "object"
             },
             "InviteReq": {
-                "description": "\u521b\u5efa\u9080\u8bf7\u7801\u8bf7\u6c42\u3002",
+                "description": "创建邀请码请求。",
                 "properties": {
                     "max_uses": {
                         "format": "int32",
@@ -317,7 +317,7 @@
                 "type": "object"
             },
             "LoginReq": {
-                "description": "\u767b\u5f55\u8bf7\u6c42\u3002",
+                "description": "登录请求。",
                 "properties": {
                     "password": {
                         "type": "string"
@@ -333,10 +333,10 @@
                 "type": "object"
             },
             "MessageReq": {
-                "description": "\u56de\u5408\u6d88\u606f\u8bf7\u6c42\u4f53\u3002",
+                "description": "回合消息请求体。",
                 "properties": {
                     "text": {
-                        "description": "\u7528\u6237\u6d88\u606f\u6587\u672c\u3002",
+                        "description": "用户消息文本。",
                         "type": "string"
                     }
                 },
@@ -346,7 +346,7 @@
                 "type": "object"
             },
             "ModelInfo": {
-                "description": "\u6a21\u578b\u4fe1\u606f\uff08list_models \u8fd4\u56de\uff09\u3002",
+                "description": "模型信息（list_models 返回）。",
                 "properties": {
                     "display_name": {
                         "type": [
@@ -364,7 +364,7 @@
                 "type": "object"
             },
             "MoveSessionReq": {
-                "description": "\u79fb\u52a8\u4f1a\u8bdd\u8bf7\u6c42\uff08path=null \u56de\u672a\u5206\u7c7b\uff09\u3002",
+                "description": "移动会话请求（path=null 回未分类）。",
                 "properties": {
                     "path": {
                         "type": [
@@ -376,31 +376,31 @@
                 "type": "object"
             },
             "Preferences": {
-                "description": "\u7528\u6237\u504f\u597d\uff08typed \u5df2\u77e5\u952e\uff1b\u672a\u77e5\u952e serde \u5ffd\u7565\uff0c\u6269\u5c55\u52a0\u5b57\u6bb5\u514d\u8fc1\u79fb\u2014\u2014JSON \u6574\u53d6\uff09\u3002",
+                "description": "用户偏好（typed 已知键；未知键 serde 忽略，扩展加字段免迁移——JSON 整取）。",
                 "properties": {
                     "auto_play": {
-                        "description": "\u97f3\u9891\u81ea\u52a8\u64ad\u653e\uff08\u9ed8\u8ba4\u624b\u52a8\uff09\u3002",
+                        "description": "音频自动播放（默认手动）。",
                         "type": [
                             "boolean",
                             "null"
                         ]
                     },
                     "custom_css": {
-                        "description": "\u9ad8\u7ea7\u81ea\u5b9a\u4e49 CSS\uff08scoped \u6ce8\u5165\uff0c\u4e00\u952e\u91cd\u7f6e\uff09\u3002",
+                        "description": "高级自定义 CSS（scoped 注入，一键重置）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "density": {
-                        "description": "\u5bc6\u5ea6\uff08compact/comfortable\uff09\u3002",
+                        "description": "密度（compact/comfortable）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "font_size": {
-                        "description": "\u5b57\u53f7\uff08px\uff09\u3002",
+                        "description": "字号（px）。",
                         "format": "int32",
                         "minimum": 0,
                         "type": [
@@ -409,40 +409,40 @@
                         ]
                     },
                     "on_disconnect_default": {
-                        "description": "\u4f1a\u8bdd\u65ad\u5f00\u884c\u4e3a\u5168\u5c40\u9ed8\u8ba4\uff08cancel/continue\uff09\u3002",
+                        "description": "会话断开行为全局默认（cancel/continue）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "sidebar_collapsed": {
-                        "description": "\u4fa7\u680f\u6298\u53e0\u6001\u3002",
+                        "description": "侧栏折叠态。",
                         "type": [
                             "boolean",
                             "null"
                         ]
                     },
                     "theme": {
-                        "description": "\u4e3b\u9898\u9884\u8bbe id\uff08\u5982 light/dark/\u81ea\u5b9a\u4e49\uff09\u3002",
+                        "description": "主题预设 id（如 light/dark/自定义）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "theme_vars": {
-                        "description": "\u7528\u6237\u81ea\u5b9a\u4e49\u4e3b\u9898\u53d8\u91cf\uff08CSS \u53d8\u91cf\u540d\u2192\u503c\uff09\u3002"
+                        "description": "用户自定义主题变量（CSS 变量名→值）。"
                     }
                 },
                 "type": "object"
             },
             "PreviewReq": {
-                "description": "\u97f3\u8272\u8bd5\u542c\u8bf7\u6c42\u3002",
+                "description": "音色试听请求。",
                 "properties": {
                     "model": {
                         "type": "string"
                     },
                     "text": {
-                        "description": "\u53ef\u9009\u81ea\u5b9a\u4e49\u6587\u672c\uff08\u7f3a\u7701\u56fa\u5b9a\u77ed\u6587\u672c\uff09\u3002",
+                        "description": "可选自定义文本（缺省固定短文本，≤500 字符）。",
                         "type": [
                             "string",
                             "null"
@@ -459,7 +459,7 @@
                 "type": "object"
             },
             "PreviewResp": {
-                "description": "\u97f3\u8272\u8bd5\u542c\u54cd\u5e94\uff08\u5408\u6210\u97f3\u9891 id\uff0c\u7ecf GET /audio/{id} + /meta \u64ad\u653e/\u9ad8\u4eae\uff09\u3002",
+                "description": "音色试听响应（合成音频 id，经 GET /audio/{id} + /meta 播放/高亮）。",
                 "properties": {
                     "audio_id": {
                         "format": "uuid",
@@ -472,7 +472,7 @@
                 "type": "object"
             },
             "Provider": {
-                "description": "provider \u57df\u7c7b\u578b\uff08\u4e0d\u542b key\uff09\uff1a\u65e2\u662f DB \u884c\u4e5f\u662f REST \u5e8f\u5217\u5316\u4f53\u3002",
+                "description": "provider 域类型（不含 key）：既是 DB 行也是 REST 序列化体。",
                 "properties": {
                     "adapter_id": {
                         "type": "string"
@@ -513,33 +513,33 @@
                 "type": "object"
             },
             "ProviderPreset": {
-                "description": "provider \u9884\u8bbe\uff08\u914d\u7f6e\u6587\u4ef6\u5b9a\u4e49\uff0c\u4e0d\u542b key\uff09\u3002",
+                "description": "provider 预设（配置文件定义，不含 key）。",
                 "properties": {
                     "adapter_id": {
-                        "description": "\u9002\u914d\u5668 id\uff08\u5982 llm-openai / tts-qwen-audio\uff09\u3002",
+                        "description": "适配器 id（如 llm-openai / tts-qwen-audio）。",
                         "type": "string"
                     },
                     "base_url": {
-                        "description": "\u7aef\u70b9 base_url\u3002",
+                        "description": "端点 base_url。",
                         "type": "string"
                     },
                     "capability": {
-                        "description": "\u80fd\u529b\u63d0\u793a\uff08llm/tts\uff0c\u53ef\u9009\uff09\u3002",
+                        "description": "能力提示（llm/tts，可选）。",
                         "type": [
                             "string",
                             "null"
                         ]
                     },
                     "id": {
-                        "description": "\u9884\u8bbe\u6807\u8bc6\u3002",
+                        "description": "预设标识。",
                         "type": "string"
                     },
                     "label": {
-                        "description": "\u663e\u793a\u540d\u3002",
+                        "description": "显示名。",
                         "type": "string"
                     },
                     "suggested_models": {
-                        "description": "\u5efa\u8bae\u6a21\u578b\u5217\u8868\u3002",
+                        "description": "建议模型列表。",
                         "items": {
                             "type": "string"
                         },
@@ -555,7 +555,7 @@
                 "type": "object"
             },
             "RegisterReq": {
-                "description": "\u6ce8\u518c\u8bf7\u6c42\u3002",
+                "description": "注册请求。",
                 "properties": {
                     "display_name": {
                         "type": [
@@ -583,7 +583,7 @@
                 "type": "object"
             },
             "RegistrationMode": {
-                "description": "\u6ce8\u518c\u6a21\u5f0f\uff08\u9ed8\u8ba4 invite\uff0c\u9996\u7528\u6237\u4f8b\u5916\u6210\u7ba1\u7406\u5458\uff1bM1c \u8ba4\u8bc1\u843d\u5730\uff09\u3002",
+                "description": "注册模式（默认 invite，首用户例外成管理员；M1c 认证落地）。",
                 "enum": [
                     "invite",
                     "open",
@@ -592,7 +592,7 @@
                 "type": "string"
             },
             "RenameFolderReq": {
-                "description": "\u6539\u540d/\u79fb\u52a8\u6587\u4ef6\u5939\u8bf7\u6c42\u3002",
+                "description": "改名/移动文件夹请求。",
                 "properties": {
                     "path": {
                         "type": "string"
@@ -604,7 +604,7 @@
                 "type": "object"
             },
             "ResetPasswordReq": {
-                "description": "\u7528\u6237\u6301\u4ee4\u724c\u91cd\u7f6e\u5bc6\u7801\u8bf7\u6c42\u3002",
+                "description": "用户持令牌重置密码请求。",
                 "properties": {
                     "new_password": {
                         "type": "string"
@@ -620,7 +620,7 @@
                 "type": "object"
             },
             "ResetReq": {
-                "description": "\u7ba1\u7406\u5458\u53d1\u8d77\u5bc6\u7801\u91cd\u7f6e\u8bf7\u6c42\uff08\u751f\u6210\u91cd\u7f6e\u4ee4\u724c\uff0c\u5ba1\u8ba1 C8 token \u5316\uff09\u3002",
+                "description": "管理员发起密码重置请求（生成重置令牌，审计 C8 token 化）。",
                 "properties": {
                     "user_id": {
                         "format": "uuid",
@@ -633,7 +633,7 @@
                 "type": "object"
             },
             "SessionDetailResp": {
-                "description": "\u4f1a\u8bdd\u8f6c\u5f55\u54cd\u5e94\uff08\u542b\u865a\u62df\u8def\u5f84\uff09\u3002",
+                "description": "会话转录响应（含虚拟路径）。",
                 "properties": {
                     "id": {
                         "format": "uuid",
@@ -659,7 +659,7 @@
                 "type": "object"
             },
             "SessionListItem": {
-                "description": "\u4f1a\u8bdd\u5217\u8868\u9879\uff08\u5143\u6570\u636e\uff09\u3002",
+                "description": "会话列表项（元数据）。",
                 "properties": {
                     "created_at": {
                         "format": "date-time",
@@ -705,7 +705,7 @@
                 "type": "object"
             },
             "SessionListResp": {
-                "description": "\u4f1a\u8bdd\u5217\u8868\u54cd\u5e94\u3002",
+                "description": "会话列表响应。",
                 "properties": {
                     "sessions": {
                         "items": {
@@ -720,10 +720,10 @@
                 "type": "object"
             },
             "StatusReq": {
-                "description": "\u8bbe\u7528\u6237\u72b6\u6001\u8bf7\u6c42\u3002",
+                "description": "设用户状态请求。",
                 "properties": {
                     "status": {
-                        "description": "active / disabled\u3002",
+                        "description": "active / disabled。",
                         "type": "string"
                     }
                 },
@@ -733,7 +733,7 @@
                 "type": "object"
             },
             "UpdateBindingReq": {
-                "description": "\u66f4\u65b0 binding \u8bf7\u6c42\uff08provider/model/params\uff09\u3002",
+                "description": "更新 binding 请求（provider/model/params）。",
                 "properties": {
                     "model": {
                         "type": "string"
@@ -751,7 +751,7 @@
                 "type": "object"
             },
             "UpdateMeReq": {
-                "description": "\u7f16\u8f91\u663e\u793a\u540d\u8bf7\u6c42\u3002",
+                "description": "编辑显示名请求。",
                 "properties": {
                     "display_name": {
                         "type": "string"
@@ -763,7 +763,7 @@
                 "type": "object"
             },
             "UpdateProviderReq": {
-                "description": "\u66f4\u65b0 provider \u8bf7\u6c42\uff08key \u4e3a None \u65f6\u4fdd\u7559\u539f key\uff09\u3002",
+                "description": "更新 provider 请求（key 为 None 时保留原 key）。",
                 "properties": {
                     "base_url": {
                         "type": "string"
@@ -786,7 +786,7 @@
                 "type": "object"
             },
             "UserInfo": {
-                "description": "\u7528\u6237\u4fe1\u606f\uff08\u7ba1\u7406\u5217\u8868\u7528\uff0c\u4e0d\u542b\u5bc6\u7801\uff09\u3002",
+                "description": "用户信息（管理列表用，不含密码）。",
                 "properties": {
                     "created_at": {
                         "format": "date-time",
@@ -824,7 +824,7 @@
                 "type": "object"
             },
             "VoiceInfo": {
-                "description": "\u97f3\u8272\u4fe1\u606f\uff08list_voices \u8fd4\u56de\uff09\u3002",
+                "description": "音色信息（list_voices 返回）。",
                 "properties": {
                     "gender": {
                         "type": [
@@ -865,7 +865,7 @@
                 "type": "object"
             },
             "WordTimestamp": {
-                "description": "\u8bcd\u7ea7\u65f6\u95f4\u6233\uff08\u6beb\u79d2\uff09\u3002",
+                "description": "词级时间戳（毫秒）。",
                 "properties": {
                     "begin_index": {
                         "format": "int32",
@@ -910,7 +910,7 @@
         }
     },
     "info": {
-        "description": "\u79c1\u6709\u90e8\u7f72\u5916\u8bed\u5b66\u4e60\u670d\u52a1 REST API\uff08M1c\uff09\u3002\u7528\u6237\u7ea7\u7aef\u70b9\u7ecf cookie \u4f1a\u8bdd\u8ba4\u8bc1\uff08auth-local\uff0c\u672a\u8ba4\u8bc1 401\uff09\uff1b\u53d8\u66f4\u8bf7\u6c42\u987b\u5e26 CSRF \u81ea\u5b9a\u4e49\u5934 X-Requested-With\uff08\u7f3a\u5219 403\uff09\u3002SSE /messages path \u5165 OpenAPI\uff0cSessionEvent \u4e8b\u4ef6 schema \u5355\u72ec\u7ef4\u62a4\u3002",
+        "description": "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。",
         "license": {
             "identifier": "AGPL-3.0-only",
             "name": "AGPL-3.0-only"
@@ -925,7 +925,7 @@
                 "operationId": "admin_invite",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -953,6 +953,9 @@
                         },
                         "description": ""
                     },
+                    "400": {
+                        "description": ""
+                    },
                     "401": {
                         "description": ""
                     },
@@ -965,7 +968,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u7ba1\u7406\u5458\u521b\u5efa\u9080\u8bf7\u7801\u3002",
+                "summary": "管理员创建邀请码。",
                 "tags": [
                     "admin"
                 ]
@@ -976,7 +979,7 @@
                 "operationId": "admin_reset",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1019,7 +1022,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u7ba1\u7406\u5458\u91cd\u7f6e\u7528\u6237\u5bc6\u7801\u3002",
+                "summary": "管理员重置用户密码。",
                 "tags": [
                     "admin"
                 ]
@@ -1054,7 +1057,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u7ba1\u7406\u5458\u5217\u51fa\u7528\u6237\u3002",
+                "summary": "管理员列出用户。",
                 "tags": [
                     "admin"
                 ]
@@ -1065,7 +1068,7 @@
                 "operationId": "admin_set_status",
                 "parameters": [
                     {
-                        "description": "\u7528\u6237 id",
+                        "description": "用户 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -1075,7 +1078,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1121,7 +1124,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u7ba1\u7406\u5458\u8bbe\u7528\u6237\u72b6\u6001\uff08\u7981\u7528\u64a4\u9500\u4f1a\u8bdd\uff1b\u9632\u81ea\u7981/\u9632\u7981\u6700\u540e\u4e00\u4e2a\u7ba1\u7406\u5458\uff0c\u5ba1\u8ba1 C3\uff09\u3002",
+                "summary": "管理员设用户状态（禁用撤销会话；防自禁/防禁最后一个管理员，审计 C3）。",
                 "tags": [
                     "admin"
                 ]
@@ -1132,7 +1135,7 @@
                 "operationId": "get_audio",
                 "parameters": [
                     {
-                        "description": "\u97f3\u9891 id",
+                        "description": "音频 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -1147,7 +1150,7 @@
                         "content": {
                             "application/octet-stream": {}
                         },
-                        "description": "\u88f8 PCM"
+                        "description": "裸 PCM"
                     },
                     "401": {
                         "description": ""
@@ -1161,7 +1164,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u56de\u653e\u7f13\u5b58\u97f3\u9891\uff08\u88f8 PCM\uff09\u3002",
+                "summary": "回放缓存音频（裸 PCM）。",
                 "tags": [
                     "sessions"
                 ]
@@ -1172,7 +1175,7 @@
                 "operationId": "audio_meta",
                 "parameters": [
                     {
-                        "description": "\u97f3\u9891 id",
+                        "description": "音频 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -1205,7 +1208,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u56de\u653e\u97f3\u9891\u5143\u6570\u636e\uff08\u8bcd\u7ea7\u65f6\u95f4\u6233 + \u7f16\u7801 + \u91c7\u6837\u7387\uff1b\u5f52\u5c5e\u6821\u9a8c\uff0c\u8d8a\u6743/\u7f3a\u5931 404\uff09\u3002",
+                "summary": "回放音频元数据（词级时间戳 + 编码 + 采样率；归属校验，越权/缺失 404）。",
                 "tags": [
                     "sessions"
                 ]
@@ -1216,7 +1219,7 @@
                 "operationId": "change_password",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1255,6 +1258,9 @@
                     },
                     "404": {
                         "description": ""
+                    },
+                    "429": {
+                        "description": ""
                     }
                 },
                 "security": [
@@ -1262,7 +1268,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u81ea\u52a9\u6539\u5bc6\uff08\u9a8c\u65e7\u5bc6\u2192\u7edf\u4e00\u7b56\u7565\u2192\u64a4\u9500\u5176\u4ed6\u4f1a\u8bdd\u4fdd\u7559\u5f53\u524d\uff09\u3002",
+                "summary": "自助改密（验旧密→统一策略→撤销其他会话保留当前；IP/用户限流防旧密在线 brute-force，审计 F5）。",
                 "tags": [
                     "auth"
                 ]
@@ -1273,7 +1279,7 @@
                 "operationId": "login",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1314,7 +1320,7 @@
                     }
                 },
                 "security": [],
-                "summary": "\u767b\u5f55\uff08\u9a8c\u8eab\u6210\u529f\u53d1\u4f1a\u8bdd cookie\uff09\u3002",
+                "summary": "登录（验身成功发会话 cookie）。",
                 "tags": [
                     "auth"
                 ]
@@ -1325,7 +1331,7 @@
                 "operationId": "logout",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1344,11 +1350,11 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [],
-                "summary": "\u767b\u51fa\uff08\u5220\u4f1a\u8bdd\u4ee4\u724c + \u6e05 cookie\uff09\u3002",
+                "summary": "登出（删会话令牌 + 清 cookie）。",
                 "tags": [
                     "auth"
                 ]
@@ -1377,7 +1383,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5f53\u524d\u7528\u6237\u4fe1\u606f\u3002",
+                "summary": "当前用户信息。",
                 "tags": [
                     "auth"
                 ]
@@ -1386,7 +1392,7 @@
                 "operationId": "update_me",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1416,11 +1422,14 @@
                         },
                         "description": ""
                     },
+                    "400": {
+                        "description": ""
+                    },
                     "401": {
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -1431,7 +1440,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u7f16\u8f91\u5f53\u524d\u7528\u6237\u663e\u793a\u540d\u3002",
+                "summary": "编辑当前用户显示名。",
                 "tags": [
                     "auth"
                 ]
@@ -1442,7 +1451,7 @@
                 "operationId": "register",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1483,7 +1492,7 @@
                     }
                 },
                 "security": [],
-                "summary": "\u6ce8\u518c\uff08\u9996\u7528\u6237\u6210\u7ba1\u7406\u5458\uff1b\u6ce8\u518c\u6a21\u5f0f\u7531\u914d\u7f6e\uff1b\u6210\u529f\u53d1\u4f1a\u8bdd cookie\uff09\u3002",
+                "summary": "注册（首用户成管理员；注册模式由配置；成功发会话 cookie）。",
                 "tags": [
                     "auth"
                 ]
@@ -1494,7 +1503,7 @@
                 "operationId": "reset_password",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1526,14 +1535,14 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "429": {
                         "description": ""
                     }
                 },
                 "security": [],
-                "summary": "\u7528\u6237\u6301\u91cd\u7f6e\u4ee4\u724c\u8bbe\u65b0\u5bc6\u7801\uff08\u5355\u6b21/\u8fc7\u671f\u6821\u9a8c\uff1b\u65e0\u9700\u767b\u5f55\uff0c\u4ee4\u724c\u5373\u51ed\u636e\uff1bIP \u9650\u6d41\u9632\u653e\u5927\uff0c\u5ba1\u8ba1 N4\uff09\u3002",
+                "summary": "用户持重置令牌设新密码（单次/过期校验；无需登录，令牌即凭据；IP 限流防放大，审计 N4）。",
                 "tags": [
                     "auth"
                 ]
@@ -1565,7 +1574,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5217\u51fa\u7528\u6237 bindings\u3002",
+                "summary": "列出用户 bindings。",
                 "tags": [
                     "bindings"
                 ]
@@ -1574,7 +1583,7 @@
                 "operationId": "create_binding",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1605,13 +1614,13 @@
                         "description": ""
                     },
                     "400": {
-                        "description": "\u8bf7\u6c42\u65e0\u6548\u6216 UNIQUE \u51b2\u7a81"
+                        "description": "请求无效或 UNIQUE 冲突"
                     },
                     "401": {
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [
@@ -1619,7 +1628,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u65b0\u5efa binding\u3002",
+                "summary": "新建 binding。",
                 "tags": [
                     "bindings"
                 ]
@@ -1640,7 +1649,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1657,7 +1666,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -1668,7 +1677,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5220\u9664 binding\u3002",
+                "summary": "删除 binding。",
                 "tags": [
                     "bindings"
                 ]
@@ -1710,7 +1719,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u53d6\u5355\u4e2a binding\u3002",
+                "summary": "取单个 binding。",
                 "tags": [
                     "bindings"
                 ]
@@ -1729,7 +1738,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1763,7 +1772,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -1774,7 +1783,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u66f4\u65b0 binding\u3002",
+                "summary": "更新 binding。",
                 "tags": [
                     "bindings"
                 ]
@@ -1796,7 +1805,7 @@
                     }
                 },
                 "security": [],
-                "summary": "\u914d\u7f6e\u8131\u654f\u53ea\u8bfb\u89c6\u56fe\u3002",
+                "summary": "配置脱敏只读视图。",
                 "tags": [
                     "system"
                 ]
@@ -1835,7 +1844,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5217\u51fa\u6587\u4ef6\u5939\u3002",
+                "summary": "列出文件夹。",
                 "tags": [
                     "folders"
                 ]
@@ -1852,7 +1861,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1889,7 +1898,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [
@@ -1897,7 +1906,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u65b0\u5efa\u6587\u4ef6\u5939\u3002",
+                "summary": "新建文件夹。",
                 "tags": [
                     "folders"
                 ]
@@ -1908,7 +1917,7 @@
                 "operationId": "delete_folder",
                 "parameters": [
                     {
-                        "description": "\u6587\u4ef6\u5939 id",
+                        "description": "文件夹 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -1918,7 +1927,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -1935,7 +1944,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -1946,7 +1955,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5220\u6587\u4ef6\u5939\uff08\u5b50\u6811\u4e0a\u79fb\u4e00\u5c42\uff0c\u7edd\u4e0d\u7ea7\u8054\u5220\u4f1a\u8bdd\uff09\u3002",
+                "summary": "删文件夹（子树上移一层，绝不级联删会话）。",
                 "tags": [
                     "folders"
                 ]
@@ -1955,7 +1964,7 @@
                 "operationId": "rename_folder",
                 "parameters": [
                     {
-                        "description": "\u6587\u4ef6\u5939 id",
+                        "description": "文件夹 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -1965,7 +1974,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2002,7 +2011,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2013,7 +2022,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u6539\u540d/\u79fb\u52a8\u6587\u4ef6\u5939\uff08\u5b50\u6811\u524d\u7f00\u6279\u91cf\u6539\u5199\uff09\u3002",
+                "summary": "改名/移动文件夹（子树前缀批量改写）。",
                 "tags": [
                     "folders"
                 ]
@@ -2033,7 +2042,7 @@
                     }
                 },
                 "security": [],
-                "summary": "\u670d\u52a1\u5143\u4fe1\u606f\u3002",
+                "summary": "服务元信息。",
                 "tags": [
                     "system"
                 ]
@@ -2051,7 +2060,7 @@
                                 }
                             }
                         },
-                        "description": "OpenAPI \u6587\u6863"
+                        "description": "OpenAPI 文档"
                     }
                 },
                 "security": [],
@@ -2083,7 +2092,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u8bfb\u7528\u6237\u504f\u597d\uff08\u65e0\u5219\u9ed8\u8ba4\uff09\u3002",
+                "summary": "读用户偏好（无则默认）。",
                 "tags": [
                     "preferences"
                 ]
@@ -2092,7 +2101,7 @@
                 "operationId": "put_preferences",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2126,7 +2135,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [
@@ -2134,7 +2143,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5199\u7528\u6237\u504f\u597d\uff08last-write-wins\uff09\u3002",
+                "summary": "写用户偏好（last-write-wins）。",
                 "tags": [
                     "preferences"
                 ]
@@ -2155,7 +2164,7 @@
                                 }
                             }
                         },
-                        "description": "provider \u5217\u8868"
+                        "description": "provider 列表"
                     },
                     "401": {
                         "description": ""
@@ -2166,7 +2175,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5217\u51fa\u7528\u6237 providers\u3002",
+                "summary": "列出用户 providers。",
                 "tags": [
                     "providers"
                 ]
@@ -2175,7 +2184,7 @@
                 "operationId": "create_provider",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2203,16 +2212,16 @@
                                 }
                             }
                         },
-                        "description": "\u5df2\u521b\u5efa"
+                        "description": "已创建"
                     },
                     "400": {
-                        "description": "\u8bf7\u6c42\u65e0\u6548"
+                        "description": "请求无效"
                     },
                     "401": {
-                        "description": "\u672a\u8ba4\u8bc1"
+                        "description": "未认证"
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [
@@ -2220,7 +2229,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u65b0\u5efa provider\u3002",
+                "summary": "新建 provider。",
                 "tags": [
                     "providers"
                 ]
@@ -2241,7 +2250,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2252,13 +2261,13 @@
                 ],
                 "responses": {
                     "204": {
-                        "description": "\u5df2\u5220\u9664"
+                        "description": "已删除"
                     },
                     "401": {
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2269,7 +2278,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5220\u9664 provider\uff08\u7ea7\u8054\u5220\u5176 bindings\uff09\u3002",
+                "summary": "删除 provider（级联删其 bindings）。",
                 "tags": [
                     "providers"
                 ]
@@ -2311,7 +2320,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u53d6\u5355\u4e2a provider\u3002",
+                "summary": "取单个 provider。",
                 "tags": [
                     "providers"
                 ]
@@ -2330,7 +2339,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2364,7 +2373,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2375,7 +2384,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u66f4\u65b0 provider\u3002",
+                "summary": "更新 provider。",
                 "tags": [
                     "providers"
                 ]
@@ -2408,7 +2417,7 @@
                                 }
                             }
                         },
-                        "description": "\u6a21\u578b\u5217\u8868"
+                        "description": "模型列表"
                     },
                     "401": {
                         "description": ""
@@ -2417,7 +2426,7 @@
                         "description": ""
                     },
                     "502": {
-                        "description": "\u4e0a\u6e38\u9519\u8bef"
+                        "description": "上游错误"
                     }
                 },
                 "security": [
@@ -2425,7 +2434,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u6d4b\u8bd5\u7aef\u70b9\uff1a\u62c9\u53d6 provider \u53ef\u7528\u6a21\u578b\uff08\u8bbe\u7f6e\u9875\u201c\u6d4b\u8bd5\u8fde\u63a5\u201d\uff09\u3002",
+                "summary": "测试端点：拉取 provider 可用模型（设置页“测试连接”）。",
                 "tags": [
                     "providers"
                 ]
@@ -2446,7 +2455,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2483,12 +2492,15 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
                     },
                     "502": {
+                        "description": ""
+                    },
+                    "504": {
                         "description": ""
                     }
                 },
@@ -2497,7 +2509,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u97f3\u8272\u8bd5\u542c\uff08\u8bbe\u7f6e\u9875\u9009\u97f3\u8272\u542c\u4e00\u53e5\uff09\uff1a\u8d70\u7528\u6237 key \u5408\u6210 + \u7f13\u5b58 + call_log \u8ba1\u91cf\uff08\u5ba1\u8ba1 C9\uff09\u3002",
+                "summary": "音色试听（设置页选音色听一句）：走用户 key 合成 + 缓存 + call_log 计量（审计 C9）。\n文本上限 400 / 总超时 504 / 缓存写失败关闭 R2（审计 F2）。",
                 "tags": [
                     "providers"
                 ]
@@ -2518,7 +2530,7 @@
                         }
                     },
                     {
-                        "description": "\u6a21\u578b id\uff08\u7701\u7565\u53d6\u9002\u914d\u5668\u9996\u4e2a\uff09",
+                        "description": "模型 id（省略取适配器首个）",
                         "in": "query",
                         "name": "model",
                         "required": false,
@@ -2539,7 +2551,7 @@
                                 }
                             }
                         },
-                        "description": "\u97f3\u8272\u5217\u8868"
+                        "description": "音色列表"
                     },
                     "401": {
                         "description": ""
@@ -2556,7 +2568,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u6d4b\u8bd5\u7aef\u70b9\uff1a\u62c9\u53d6 provider \u97f3\u8272\uff08\u8bbe\u7f6e\u9875\u201c\u6d4b\u8bd5\u8fde\u63a5\u201d\uff09\u3002",
+                "summary": "测试端点：拉取 provider 音色（设置页“测试连接”）。",
                 "tags": [
                     "providers"
                 ]
@@ -2567,7 +2579,7 @@
                 "operationId": "list_sessions",
                 "parameters": [
                     {
-                        "description": "\u6587\u4ef6\u5939\u8def\u5f84\u5b50\u6811\u8fc7\u6ee4\uff08\u5982 /\u65e5\u8bed/\u4e94\u5341\u97f3\uff09\u3002",
+                        "description": "文件夹路径子树过滤（如 /日语/五十音）。",
                         "in": "query",
                         "name": "folder",
                         "required": false,
@@ -2576,7 +2588,7 @@
                         }
                     },
                     {
-                        "description": "\u6a21\u5757\u547d\u540d\u7a7a\u95f4\u8fc7\u6ee4\uff08default=\u65e0\u6a21\u5757\uff09\u3002",
+                        "description": "模块命名空间过滤（default=无模块）。",
                         "in": "query",
                         "name": "module",
                         "required": false,
@@ -2605,7 +2617,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5217\u51fa\u7528\u6237\u4f1a\u8bdd\uff08\u5143\u6570\u636e\uff1atitle/created_at/last_active/message_count/path\uff09\u3002",
+                "summary": "列出用户会话（元数据：title/created_at/last_active/message_count/path）。",
                 "tags": [
                     "sessions"
                 ]
@@ -2614,7 +2626,7 @@
                 "operationId": "create_session",
                 "parameters": [
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2649,7 +2661,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     }
                 },
                 "security": [
@@ -2657,7 +2669,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u521b\u5efa\u4f1a\u8bdd\u3002",
+                "summary": "创建会话。",
                 "tags": [
                     "sessions"
                 ]
@@ -2668,7 +2680,7 @@
                 "operationId": "delete_session",
                 "parameters": [
                     {
-                        "description": "\u4f1a\u8bdd id",
+                        "description": "会话 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -2678,7 +2690,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2695,7 +2707,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2706,7 +2718,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u5220\u9664\u4f1a\u8bdd\uff08\u542b\u8f6c\u5f55\uff0cSessionEnded outbox \u540c\u4e8b\u52a1\u539f\u5b50\uff0c\u5ba1\u8ba1 R6\uff09\u3002",
+                "summary": "删除会话（含转录，SessionEnded outbox 同事务原子，审计 R6）。",
                 "tags": [
                     "sessions"
                 ]
@@ -2715,7 +2727,7 @@
                 "operationId": "get_session",
                 "parameters": [
                     {
-                        "description": "\u4f1a\u8bdd id",
+                        "description": "会话 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -2748,7 +2760,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u8bfb\u4f1a\u8bdd\u8f6c\u5f55\uff08\u542b path\uff09\u3002",
+                "summary": "读会话转录（含 path）。",
                 "tags": [
                     "sessions"
                 ]
@@ -2759,7 +2771,7 @@
                 "operationId": "cancel",
                 "parameters": [
                     {
-                        "description": "\u4f1a\u8bdd id",
+                        "description": "会话 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -2769,7 +2781,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2791,7 +2803,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2802,7 +2814,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u663e\u5f0f\u53d6\u6d88\u6d3b\u8dc3\u56de\u5408\u3002",
+                "summary": "显式取消活跃回合。",
                 "tags": [
                     "sessions"
                 ]
@@ -2813,7 +2825,7 @@
                 "operationId": "messages",
                 "parameters": [
                     {
-                        "description": "\u4f1a\u8bdd id",
+                        "description": "会话 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -2823,7 +2835,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2847,13 +2859,13 @@
                         "content": {
                             "text/event-stream": {}
                         },
-                        "description": "SessionEvent SSE \u6d41"
+                        "description": "SessionEvent SSE 流"
                     },
                     "401": {
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2864,7 +2876,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u53d1\u6d88\u606f \u2192 \u8be5\u56de\u5408 SSE \u4e8b\u4ef6\u6d41\uff08SSE \u4e0d\u5165 OpenAPI schema\uff09\u3002",
+                "summary": "发消息 → 该回合 SSE 事件流（SSE 不入 OpenAPI schema）。",
                 "tags": [
                     "sessions"
                 ]
@@ -2875,7 +2887,7 @@
                 "operationId": "move_session_path",
                 "parameters": [
                     {
-                        "description": "\u4f1a\u8bdd id",
+                        "description": "会话 id",
                         "in": "path",
                         "name": "id",
                         "required": true,
@@ -2885,7 +2897,7 @@
                         }
                     },
                     {
-                        "description": "CSRF \u81ea\u5b9a\u4e49\u5934\uff08\u53d8\u66f4\u8bf7\u6c42\u5fc5\u5e26\uff0c\u7f3a\u5219 403\uff09",
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
                         "in": "header",
                         "name": "X-Requested-With",
                         "required": true,
@@ -2920,7 +2932,7 @@
                         "description": ""
                     },
                     "403": {
-                        "description": "CSRF \u5934\u7f3a\u5931\u6216\u975e\u7ba1\u7406\u5458"
+                        "description": "CSRF 头缺失或非管理员"
                     },
                     "404": {
                         "description": ""
@@ -2931,7 +2943,7 @@
                         "cookieAuth": []
                     }
                 ],
-                "summary": "\u79fb\u52a8\u4f1a\u8bdd\u5230\u6587\u4ef6\u5939\u8def\u5f84\uff08\u81ea\u52a8\u6ce8\u518c\u76ee\u6807\u94fe\uff1b\u5f52\u5c5e\u6821\u9a8c\uff09\u3002",
+                "summary": "移动会话到文件夹路径（自动注册目标链；归属校验）。",
                 "tags": [
                     "sessions"
                 ]
@@ -2947,11 +2959,11 @@
                                 "schema": {}
                             }
                         },
-                        "description": "\u5b58\u6d3b"
+                        "description": "存活"
                     }
                 },
                 "security": [],
-                "summary": "\u5b58\u6d3b\u63a2\u9488\u3002",
+                "summary": "存活探针。",
                 "tags": [
                     "system"
                 ]
@@ -2970,11 +2982,11 @@
                         "description": ""
                     },
                     "503": {
-                        "description": "\u5b58\u50a8\u672a\u5c31\u7eea"
+                        "description": "存储未就绪"
                     }
                 },
                 "security": [],
-                "summary": "\u5c31\u7eea\u63a2\u9488\uff1a\u5b58\u50a8\u8fde\u901a\uff08SELECT 1\uff09\u624d\u7b97\u5c31\u7eea\u3002",
+                "summary": "就绪探针：存储连通（SELECT 1）才算就绪。",
                 "tags": [
                     "system"
                 ]
@@ -2983,35 +2995,35 @@
     },
     "tags": [
         {
-            "description": "\u5b58\u6d3b/\u5c31\u7eea/\u5143\u4fe1\u606f/\u914d\u7f6e",
+            "description": "存活/就绪/元信息/配置",
             "name": "system"
         },
         {
-            "description": "\u6ce8\u518c/\u767b\u5f55/\u767b\u51fa/\u5f53\u524d\u7528\u6237/\u81ea\u52a9\u6539\u5bc6",
+            "description": "注册/登录/登出/当前用户/自助改密",
             "name": "auth"
         },
         {
-            "description": "\u7ba1\u7406\u5458\u91cd\u7f6e/\u9080\u8bf7\u7801/\u7528\u6237\u7ba1\u7406",
+            "description": "管理员重置/邀请码/用户管理",
             "name": "admin"
         },
         {
-            "description": "\u4f1a\u8bdd\u4e0e\u56de\u5408\uff08SSE\uff09+ \u865a\u62df\u8def\u5f84\u79fb\u52a8",
+            "description": "会话与回合（SSE）+ 虚拟路径移动",
             "name": "sessions"
         },
         {
-            "description": "\u4f1a\u8bdd\u6587\u4ef6\u5939\uff08\u865a\u62df\u8def\u5f84\u76ee\u5f55\u6811\uff09",
+            "description": "会话文件夹（虚拟路径目录树）",
             "name": "folders"
         },
         {
-            "description": "\u7528\u6237\u504f\u597d\uff08\u8de8\u8bbe\u5907\u968f\u8d26\u6237\uff09",
+            "description": "用户偏好（跨设备随账户）",
             "name": "preferences"
         },
         {
-            "description": "BYOK provider \u7ba1\u7406 + \u6d4b\u8bd5\u8fde\u63a5 + \u97f3\u8272\u8bd5\u542c",
+            "description": "BYOK provider 管理 + 测试连接 + 音色试听",
             "name": "providers"
         },
         {
-            "description": "\u6a21\u5757\u2192provider \u7ed1\u5b9a",
+            "description": "模块→provider 绑定",
             "name": "bindings"
         }
     ]

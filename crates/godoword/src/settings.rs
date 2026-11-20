@@ -81,11 +81,30 @@ fn extra_val(o: Option<Value>) -> Value {
     o.unwrap_or_else(|| serde_json::json!({}))
 }
 
-fn map_storage_err(e: kernel_api::KernelError) -> StatusCode {
-    match e {
-        kernel_api::KernelError::Storage(_) => StatusCode::BAD_REQUEST,
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
+fn map_storage_err(_e: kernel_api::KernelError) -> StatusCode {
+    // 审计 F6：真实存储故障 → 500（用户输入冲突/归属由 handler 预检 → 400，不混淆）。
+    StatusCode::INTERNAL_SERVER_ERROR
+}
+
+/// binding 身份键冲突预检（UNIQUE(user,module,cap,role)）：已存在 → 400（区别存储故障 500）。
+async fn binding_conflict(
+    st: &AppState,
+    user: kernel_api::UserId,
+    module: &str,
+    cap: &str,
+    role: &str,
+) -> bool {
+    match repo::list_bindings(&st.store, user.0).await {
+        Ok(bs) => bs
+            .iter()
+            .any(|b| b.module_id == module && b.capability == cap && b.role == role),
+        Err(_) => false,
     }
+}
+
+/// provider 归属预检（审计 C2 的 REST 语义）：不存在/非本用户 → 400。
+async fn provider_owned(st: &AppState, user: kernel_api::UserId, id: Uuid) -> bool {
+    matches!(repo::get_provider(&st.store, user.0, id).await, Ok(Some(_)))
 }
 
 /// 新建 provider。
@@ -312,6 +331,12 @@ pub async fn create_binding(
     AuthUser(user): AuthUser,
     Json(req): Json<CreateBindingReq>,
 ) -> Result<(StatusCode, Json<Binding>), StatusCode> {
+    if !provider_owned(&st, user, req.provider_id).await {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    if binding_conflict(&st, user, &req.module_id, &req.capability, &req.role).await {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let b = repo::create_binding(
         &st.store,
         user.0,
@@ -372,6 +397,9 @@ pub async fn update_binding(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateBindingReq>,
 ) -> Result<Json<Binding>, StatusCode> {
+    if !provider_owned(&st, user, req.provider_id).await {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     repo::update_binding(
         &st.store,
         user.0,
@@ -409,28 +437,109 @@ pub async fn delete_binding(
 
 /// 音色试听默认短文本。
 const DEFAULT_PREVIEW_TEXT: &str = "こんにちは、始めましょう。";
+/// 试听自定义文本上限（审计 F2：防巨量文本→内存 PCM 缓冲放大；500 字符远超试听需求）。
+const PREVIEW_TEXT_CAP: usize = 500;
+/// 试听合成总超时（审计 F2：独立于回合硬超时，测试端点不得无限挂起）。
+const PREVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// 音色试听请求。
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct PreviewReq {
     pub model: String,
     pub voice: String,
-    /// 可选自定义文本（缺省固定短文本）。
+    /// 可选自定义文本（缺省固定短文本，≤500 字符）。
     #[serde(default)]
     pub text: Option<String>,
 }
 
 /// 音色试听响应（合成音频 id，经 GET /audio/{id} + /meta 播放/高亮）。
-#[derive(serde::Serialize, utoipa::ToSchema)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct PreviewResp {
     pub audio_id: Uuid,
 }
 
+/// 试听合成排空（可注入超时供测试）：收集完整 PCM + 词时间戳 + Usage（计量完整，审计 F2）。
+async fn drain_preview(
+    tts: &Arc<dyn kernel_api::TtsProvider>,
+    conn: &kernel_api::ProviderConn,
+    req: TtsRequest,
+) -> Result<
+    (
+        Vec<u8>,
+        Vec<kernel_api::WordTimestamp>,
+        Option<kernel_api::TtsUsage>,
+    ),
+    ProviderError,
+> {
+    let mut stream = tts.synthesize_stream(conn, req).await?;
+    let mut complete: Vec<u8> = Vec::new();
+    let mut words = Vec::new();
+    let mut usage = None;
+    while let Some(item) = stream.next().await {
+        match item? {
+            AudioEvent::Chunk { pcm, .. } => complete.extend_from_slice(&pcm),
+            AudioEvent::Words(w) => words.extend(w),
+            AudioEvent::Usage(u) => usage = Some(u),
+            AudioEvent::End { complete: end } => {
+                if let Some(b) = end {
+                    complete = b.to_vec();
+                }
+            }
+            AudioEvent::Start { .. } => {}
+        }
+    }
+    Ok((complete, words, usage))
+}
+
+/// 试听计量（call_log 含 characters/tokens，与 speak 计量对称；审计 C9/F2）。
+#[allow(clippy::too_many_arguments)]
+async fn meter_preview(
+    store: &kernel_api::Store,
+    user: kernel_api::UserId,
+    adapter_id: &str,
+    model: &str,
+    start: std::time::Instant,
+    usage: Option<kernel_api::TtsUsage>,
+    status: &str,
+    error_code: Option<String>,
+) {
+    let _ = kernel::record_call(
+        store,
+        kernel::CallRecord {
+            user_id: user.0,
+            session_id: None,
+            run_id: None,
+            capability: "tts".to_string(),
+            adapter_id: adapter_id.to_string(),
+            model: model.to_string(),
+            prompt_tokens: usage
+                .as_ref()
+                .and_then(|u| u.input_tokens)
+                .map(|t| t as i32),
+            completion_tokens: usage
+                .as_ref()
+                .and_then(|u| u.output_tokens)
+                .map(|t| t as i32),
+            reasoning_tokens: None,
+            total_tokens: usage
+                .as_ref()
+                .and_then(|u| u.input_tokens.zip(u.output_tokens))
+                .map(|(i, o)| (i + o) as i32),
+            characters: usage.as_ref().and_then(|u| u.characters).map(|t| t as i32),
+            latency_ms: start.elapsed().as_millis() as i32,
+            status: status.to_string(),
+            error_code,
+        },
+    )
+    .await;
+}
+
 /// 音色试听（设置页选音色听一句）：走用户 key 合成 + 缓存 + call_log 计量（审计 C9）。
+/// 文本上限 400 / 总超时 504 / 缓存写失败关闭 R2（审计 F2）。
 #[utoipa::path(
     post, path = "/api/v1/providers/{id}/preview", tag = "providers",
     params(("id" = Uuid, Path, description = "provider id")), request_body = PreviewReq,
-    responses((status = 200, body = PreviewResp), (status = 400), (status = 401), (status = 404), (status = 502))
+    responses((status = 200, body = PreviewResp), (status = 400), (status = 401), (status = 404), (status = 502), (status = 504))
 )]
 pub async fn provider_preview(
     State(st): State<Arc<AppState>>,
@@ -438,6 +547,11 @@ pub async fn provider_preview(
     Path(id): Path<Uuid>,
     Json(req): Json<PreviewReq>,
 ) -> Result<Json<PreviewResp>, StatusCode> {
+    if let Some(t) = &req.text {
+        if t.chars().count() > PREVIEW_TEXT_CAP {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+    }
     let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -457,59 +571,58 @@ pub async fn provider_preview(
         extra: serde_json::json!({}),
     };
     let start = std::time::Instant::now();
-    let init = st.tts.synthesize_stream(&conn, tts_req).await;
-    let mut stream = match init {
-        Ok(s) => s,
-        Err(e) => {
+    let drained =
+        tokio::time::timeout(PREVIEW_TIMEOUT, drain_preview(&st.tts, &conn, tts_req)).await;
+    let (pcm, words, usage) = match drained {
+        Err(_) => {
+            meter_preview(
+                &st.store,
+                user,
+                st.tts.id(),
+                &model,
+                start,
+                None,
+                "error",
+                Some("timeout".to_string()),
+            )
+            .await;
+            return Err(StatusCode::GATEWAY_TIMEOUT);
+        }
+        Ok(Err(e)) => {
             let status = upstream_status(&e);
-            let r: Result<(), ProviderError> = Err(e);
-            meter_test(&st.store, user, "tts", st.tts.id(), &model, start, &r).await;
+            meter_preview(
+                &st.store,
+                user,
+                st.tts.id(),
+                &model,
+                start,
+                None,
+                "error",
+                Some(status.to_string()),
+            )
+            .await;
             return Err(status);
         }
+        Ok(Ok(v)) => v,
     };
-    let audio_id = AudioId::new();
-    let mut complete: Vec<u8> = Vec::new();
-    let mut words = Vec::new();
-    let mut stream_err: Option<ProviderError> = None;
-    while let Some(item) = stream.next().await {
-        match item {
-            Ok(AudioEvent::Chunk { pcm, .. }) => complete.extend_from_slice(&pcm),
-            Ok(AudioEvent::Words(w)) => words.extend(w),
-            Ok(AudioEvent::End { complete: end }) => {
-                if let Some(b) = end {
-                    complete = b.to_vec();
-                }
-            }
-            Ok(_) => {}
-            Err(e) => {
-                stream_err = Some(e);
-                break;
-            }
-        }
-    }
-    let final_result: Result<(), ProviderError> = match stream_err {
-        Some(e) => Err(e),
-        None => Ok(()),
-    };
-    meter_test(
+    meter_preview(
         &st.store,
         user,
-        "tts",
         st.tts.id(),
         &model,
         start,
-        &final_result,
+        usage,
+        "ok",
+        None,
     )
     .await;
-    if let Err(e) = final_result {
-        return Err(upstream_status(&e));
-    }
     // 缓存写失败关闭（审计 R2）：put 失败不假成功。
+    let audio_id = AudioId::new();
     st.audio
         .put(
             audio_id,
             CachedAudio {
-                pcm: Bytes::from(complete),
+                pcm: Bytes::from(pcm),
                 words,
                 format: AudioFormat::Pcm,
                 sample_rate: 24000,
@@ -521,4 +634,161 @@ pub async fn provider_preview(
     Ok(Json(PreviewResp {
         audio_id: audio_id.0,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::AuthUser;
+    use crate::testutil::{state, tts_provider, user_with_token, TtsMode};
+
+    fn preview_req(text: Option<String>) -> PreviewReq {
+        PreviewReq {
+            model: "mock-tts".to_string(),
+            voice: "longanlingxin".to_string(),
+            text,
+        }
+    }
+
+    #[tokio::test]
+    async fn preview_ok_meters_usage_and_caches() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "pv1").await;
+        let pid = tts_provider(&st, user).await;
+        let resp = provider_preview(
+            State(st.clone()),
+            AuthUser(user),
+            Path(pid),
+            Json(preview_req(None)),
+        )
+        .await
+        .expect("试听成功");
+        // 缓存归属 + 回放元数据出口。
+        let cached = st
+            .audio
+            .get(kernel_api::AudioId(resp.audio_id), user)
+            .await
+            .unwrap();
+        assert!(cached.is_some(), "试听音频入缓存（owner）");
+        assert_eq!(cached.unwrap().words.len(), 1, "词时间戳入 sidecar");
+        // 计量含 characters/tokens（F2：与 speak 对称）。
+        let rows = kernel::call_log_rows(&st.store, user.0).await.unwrap();
+        assert_eq!(rows.len(), 1, "试听计量一条");
+        assert_eq!(rows[0].0, "ok");
+        assert_eq!(rows[0].1, Some(5), "characters 计量");
+        assert_eq!(rows[0].2, Some(13), "total_tokens=2+11");
+    }
+
+    #[tokio::test]
+    async fn preview_text_cap_400() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "pv2").await;
+        let pid = tts_provider(&st, user).await;
+        let long = "あ".repeat(PREVIEW_TEXT_CAP + 1);
+        let r = provider_preview(
+            State(st.clone()),
+            AuthUser(user),
+            Path(pid),
+            Json(preview_req(Some(long))),
+        )
+        .await;
+        assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "F2 文本上限");
+        let n = kernel::call_log_count(&st.store, user.0).await.unwrap();
+        assert_eq!(n, 0, "上限拒绝不调上游不计量");
+    }
+
+    #[tokio::test]
+    async fn preview_cross_user_404() {
+        let st = state(TtsMode::Ok).await;
+        let (u1, _) = user_with_token(&st, "pv3a").await;
+        let (u2, _) = user_with_token(&st, "pv3b").await;
+        let pid = tts_provider(&st, u1).await;
+        let r = provider_preview(
+            State(st.clone()),
+            AuthUser(u2),
+            Path(pid),
+            Json(preview_req(None)),
+        )
+        .await;
+        assert_eq!(r.unwrap_err(), StatusCode::NOT_FOUND, "越权试听 404");
+    }
+
+    #[tokio::test]
+    async fn preview_upstream_auth_502_not_401() {
+        let st = state(TtsMode::AuthErr).await;
+        let (user, _) = user_with_token(&st, "pv4").await;
+        let pid = tts_provider(&st, user).await;
+        let r = provider_preview(
+            State(st.clone()),
+            AuthUser(user),
+            Path(pid),
+            Json(preview_req(None)),
+        )
+        .await;
+        assert_eq!(
+            r.unwrap_err(),
+            StatusCode::BAD_GATEWAY,
+            "上游 key 无效 → 502（401 专属用户会话）"
+        );
+    }
+
+    #[tokio::test]
+    async fn preview_drain_timeout() {
+        let st = state(TtsMode::Hang).await;
+        let (user, _) = user_with_token(&st, "pv5").await;
+        let pid = tts_provider(&st, user).await;
+        let conn = repo::provider_conn(&st.store, &st.master, user.0, pid)
+            .await
+            .unwrap()
+            .unwrap();
+        let req = TtsRequest {
+            model: "mock-tts".to_string(),
+            text: "hi".to_string(),
+            voice: "v".to_string(),
+            format: AudioFormat::Pcm,
+            sample_rate: 24000,
+            rate: None,
+            pitch: None,
+            instruction: None,
+            language_hints: vec![],
+            word_timestamps: true,
+            extra: serde_json::json!({}),
+        };
+        // F2：挂起上游在总超时内被切断（handler 用 60s 常量，此处注入短超时验证机制）。
+        let r = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            drain_preview(&st.tts, &conn, req),
+        )
+        .await;
+        assert!(r.is_err(), "挂起流被超时切断");
+    }
+
+    #[tokio::test]
+    async fn binding_conflict_and_ownership_400() {
+        let st = state(TtsMode::Ok).await;
+        let (u1, _) = user_with_token(&st, "bd1").await;
+        let (u2, _) = user_with_token(&st, "bd2").await;
+        let p1 = tts_provider(&st, u1).await;
+        let mk = |pid: Uuid| CreateBindingReq {
+            module_id: "*".to_string(),
+            capability: "tts".to_string(),
+            role: "default".to_string(),
+            provider_id: pid,
+            model: "m".to_string(),
+            params: None,
+        };
+        let _ = create_binding(State(st.clone()), AuthUser(u1), Json(mk(p1)))
+            .await
+            .unwrap();
+        // UNIQUE 冲突预检 → 400（非 500）。
+        let dup = create_binding(State(st.clone()), AuthUser(u1), Json(mk(p1))).await;
+        assert_eq!(dup.unwrap_err(), StatusCode::BAD_REQUEST, "F6 冲突 400");
+        // 跨用户 provider → 400（C2 REST 语义）。
+        let cross = create_binding(State(st.clone()), AuthUser(u2), Json(mk(p1))).await;
+        assert_eq!(
+            cross.unwrap_err(),
+            StatusCode::BAD_REQUEST,
+            "跨用户绑定 400"
+        );
+    }
 }

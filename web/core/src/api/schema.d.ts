@@ -115,7 +115,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 自助改密（验旧密→统一策略→撤销其他会话保留当前）。 */
+        /** 自助改密（验旧密→统一策略→撤销其他会话保留当前；IP/用户限流防旧密在线 brute-force，审计 F5）。 */
         post: operations["change_password"];
         delete?: never;
         options?: never;
@@ -413,7 +413,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 音色试听（设置页选音色听一句）：走用户 key 合成 + 缓存 + call_log 计量（审计 C9）。 */
+        /**
+         * 音色试听（设置页选音色听一句）：走用户 key 合成 + 缓存 + call_log 计量（审计 C9）。
+         *     文本上限 400 / 总超时 504 / 缓存写失败关闭 R2（审计 F2）。
+         */
         post: operations["provider_preview"];
         delete?: never;
         options?: never;
@@ -713,7 +716,7 @@ export interface components {
         /** @description 音色试听请求。 */
         PreviewReq: {
             model: string;
-            /** @description 可选自定义文本（缺省固定短文本）。 */
+            /** @description 可选自定义文本（缺省固定短文本，≤500 字符）。 */
             text?: string | null;
             voice: string;
         };
@@ -891,6 +894,12 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: {
                 headers: {
@@ -1151,6 +1160,12 @@ export interface operations {
                 };
                 content?: never;
             };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     login: {
@@ -1274,6 +1289,12 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["UserInfo"];
                 };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             401: {
                 headers: {
@@ -2166,6 +2187,12 @@ export interface operations {
                 content?: never;
             };
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

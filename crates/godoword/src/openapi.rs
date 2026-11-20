@@ -1,6 +1,6 @@
 //! OpenAPI 文档聚合（utoipa）。M1c 落 REST 标注，M1d 由此生成 TS 客户端。
 //! SSE 精确表述（审计 D4）：`/messages` **path 入** OpenAPI，`SessionEvent` **事件 schema 不入**（单独协议文档维护）。
-//! models/voices 响应暂以通用 object 标注（ModelInfo/VoiceInfo 为 kernel-api 契约类型，精确 schema 待契约演进补）。
+//! models/voices 响应 typed（M1d 决策 B：kernel-api ModelInfo/VoiceInfo ToSchema）。
 //! **完整性（审计 R5/N1）**：CreateSessionReq 注册；`build_openapi` 注入 cookieAuth securityScheme + **操作级 security 矩阵**
 //! （公开 operation security:[]、受保护 cookieAuth，不用根级全局以免误伤公开端点）+ 所有 /api/v1 变更操作 CSRF
 //! `X-Requested-With` header + 403；单元测试锚定所有本地 `$ref` 可解析 + 独立公开操作矩阵。
@@ -15,7 +15,7 @@ use utoipa::OpenApi;
     info(
         title = "godoword API",
         version = "0.0.0",
-        description = "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；\
+        description = "私有部署外语学习服务 REST API（M1d）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；\
         变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。"
     ),
     paths(

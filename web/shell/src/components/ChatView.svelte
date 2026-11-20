@@ -1,5 +1,7 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
+  import { push } from 'svelte-spa-router';
+  import { untrack } from 'svelte';
   import {
     streamTurn,
     cancelSession,
@@ -7,8 +9,12 @@
     createSession,
     AudioEngine,
     appendWords,
+    routeError,
+    parseUsage,
     type SessionEvent,
     type WordTimestamp,
+    type UsageNote,
+    type ErrorRoute,
   } from '@godoword/core';
   import workletUrl from '@godoword/core/audio/worklet?worker&url';
   import { prefs } from '../lib/prefs.svelte';
@@ -33,68 +39,102 @@
   let messages = $state<Msg[]>([]);
   let input = $state('');
   let streaming = $state(false);
-  let error = $state('');
-  let errorAction = $state<string | null>(null);
+  let errorRoute = $state<ErrorRoute | null>(null);
+  let usageLlm = $state<UsageNote | null>(null);
+  let usageTts = $state<UsageNote | null>(null);
   let abort: AbortController | null = null;
   let engine: AudioEngine | null = null;
   let activeAudio = $state<string | null>(null);
   let highlight = $state(-1);
-  let usageNote = $state('');
+  let lastText = '';
+  let autoQueue: Segment[] = [];
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function toMsg(role: string, content: string, reasoning: string | null, toolCalls: unknown): Msg {
-    const segments: Segment[] = [];
-    // 从 tool 消息 content 提取 audio_id（回放）。
-    if (role === 'tool') {
-      try {
-        const c = JSON.parse(content) as { audio_id?: string };
-        if (c.audio_id) segments.push({ audioId: c.audio_id, words: [], chunks: [], done: true });
-      } catch {
-        /* 非 JSON 忽略 */
-      }
-    }
-    void toolCalls;
-    return { role, text: content, reasoning: reasoning ?? '', segments, showReasoning: false };
+  function toMsg(role: string, content: string, reasoning: string | null): Msg {
+    return { role, text: content, reasoning: reasoning ?? '', segments: [], showReasoning: false };
   }
 
   async function loadHistory(id: string) {
     try {
       const detail = await getSession(id);
-      messages = detail.messages
-        .filter((m) => m.role !== 'tool')
-        .map((m) => toMsg(m.role, m.content, m.reasoning ?? null, m.tool_calls));
-      // 回放：从 tool 消息补音频段到 preceding assistant。
+      // 单遍构建：tool 消息的音频段挂到**其前驱** assistant（M1：多轮 speak 回放不错位）。
+      const msgs: Msg[] = [];
       for (const m of detail.messages) {
         if (m.role === 'tool') {
           try {
             const c = JSON.parse(m.content) as { audio_id?: string };
             if (c.audio_id) {
-              const lastAssistant = [...messages].reverse().find((x) => x.role === 'assistant');
-              lastAssistant?.segments.push({ audioId: c.audio_id, words: [], chunks: [], done: true });
+              const prev = [...msgs].reverse().find((x) => x.role === 'assistant');
+              prev?.segments.push({ audioId: c.audio_id, words: [], chunks: [], done: true });
             }
           } catch {
-            /* ignore */
+            /* 非 JSON 忽略 */
           }
+          continue;
         }
+        msgs.push(toMsg(m.role, m.content, m.reasoning ?? null));
       }
+      messages = msgs;
     } catch (err) {
-      error = err instanceof Error ? err.message : '加载会话失败';
+      errorRoute = { kind: 'info', message: err instanceof Error ? err.message : $_('session.loadFailed') };
     }
   }
 
+  // 会话切换：中止在途回合 + 重置（M4）；懒创建后的路由同步（sessionId===currentId）不重置。
+  // untrack currentId：避免 send 内设置 currentId 触发本 effect 误重置。
   $effect(() => {
-    currentId = sessionId;
+    const sid = sessionId;
+    if (sid === untrack(() => currentId)) return;
+    abort?.abort();
+    streaming = false;
+    currentId = sid;
     messages = [];
-    error = '';
-    if (sessionId) void loadHistory(sessionId);
+    errorRoute = null;
+    usageLlm = null;
+    usageTts = null;
+    autoQueue = [];
+    engine?.stop();
+    activeAudio = null;
+    highlight = -1;
+    if (sid) void loadHistory(sid);
   });
+
+  function ensureEngine(): AudioEngine {
+    if (!engine) {
+      engine = new AudioEngine({
+        workletUrl,
+        onHighlight: (i) => (highlight = i),
+        onEnded: () => {
+          // 自动播放队列：当前段播完接续下一段（M3：多 speak 段不互相打断）。
+          const next = autoQueue.shift();
+          if (next) {
+            void playSeg(next, true);
+          } else {
+            activeAudio = null;
+            highlight = -1;
+          }
+        },
+      });
+    }
+    return engine;
+  }
 
   function findSeg(assistant: Msg, audioId: string): Segment {
     let seg = assistant.segments.find((s) => s.audioId === audioId);
     if (!seg) {
-      seg = { audioId, words: [], chunks: [], done: false };
-      assistant.segments.push(seg);
+      assistant.segments.push({ audioId, words: [], chunks: [], done: false });
+      // 取 $state 代理引用（M2 加固：新建段亦经代理 mutate）。
+      seg = assistant.segments[assistant.segments.length - 1]!;
     }
     return seg;
+  }
+
+  function showError(route: ErrorRoute) {
+    if (toastTimer) clearTimeout(toastTimer);
+    errorRoute = route;
+    if (route.kind === 'toast') {
+      toastTimer = setTimeout(() => (errorRoute = null), 3000);
+    }
   }
 
   function handleEvent(ev: SessionEvent, assistant: Msg) {
@@ -116,20 +156,59 @@
         seg.words = appendWords(seg.words, ev.words);
         break;
       }
-      case 'audio-end':
-        findSeg(assistant, ev.audio_id).done = true;
-        if (prefs.prefs.auto_play) void playSeg(findSeg(assistant, ev.audio_id));
+      case 'audio-end': {
+        const seg = findSeg(assistant, ev.audio_id);
+        seg.done = true;
+        if (prefs.prefs.auto_play) {
+          if (engine?.isPlaying) {
+            autoQueue.push(seg);
+          } else {
+            void playSeg(seg, true);
+          }
+        }
         break;
-      case 'usage':
-        usageNote = `${ev.capability} · ${ev.model}`;
+      }
+      case 'usage': {
+        const note = parseUsage(ev.capability, ev.model, ev.usage);
+        if (ev.capability === 'tts') usageTts = note;
+        else usageLlm = note;
         break;
+      }
       case 'error':
-        error = ev.message;
-        errorAction = ev.action;
+        showError(routeError(ev.code, ev.message, ev.retryable, ev.action));
         break;
       case 'run-end':
         streaming = false;
         break;
+    }
+  }
+
+  async function doSend(text: string) {
+    errorRoute = null;
+    usageLlm = null;
+    usageTts = null;
+    messages.push({ role: 'user', text, reasoning: '', segments: [], showReasoning: false });
+    messages.push({ role: 'assistant', text: '', reasoning: '', segments: [], showReasoning: false });
+    // 取 $state 代理引用（mutate 原始对象不触发响应式，Svelte 5 runes 陷阱）。
+    const assistant = messages[messages.length - 1]!;
+    streaming = true;
+    lastText = text;
+    abort = new AbortController();
+    try {
+      let id = currentId;
+      if (!id) {
+        id = await createSession(prefs.prefs.on_disconnect_default ?? undefined);
+        currentId = id;
+        // 懒创建后同步 URL（M4：刷新/分享不丢会话；effect 见 currentId 相等不重置）。
+        push(`/chat/${id}`);
+      }
+      await streamTurn(id, text, (ev) => handleEvent(ev, assistant), abort.signal);
+    } catch (err) {
+      if (!abort.signal.aborted) {
+        showError({ kind: 'info', message: err instanceof Error ? err.message : $_('session.turnFailed') });
+      }
+    } finally {
+      streaming = false;
     }
   }
 
@@ -138,26 +217,13 @@
     const text = input.trim();
     if (!text || streaming) return;
     input = '';
-    error = '';
-    errorAction = null;
-    messages.push({ role: 'user', text, reasoning: '', segments: [], showReasoning: false });
-    messages.push({ role: 'assistant', text: '', reasoning: '', segments: [], showReasoning: false });
-    // 取 $state 代理引用（mutate 原始对象不触发响应式，Svelte 5 runes 陷阱）。
-    const assistant = messages[messages.length - 1]!;
-    streaming = true;
-    abort = new AbortController();
-    try {
-      let id = currentId;
-      if (!id) {
-        id = await createSession(prefs.prefs.on_disconnect_default ?? undefined);
-        currentId = id;
-      }
-      await streamTurn(id, text, (ev) => handleEvent(ev, assistant), abort.signal);
-    } catch (err) {
-      if (!abort.signal.aborted) error = err instanceof Error ? err.message : '回合失败';
-    } finally {
-      streaming = false;
-    }
+    await doSend(text);
+  }
+
+  // Q13 retryable 重试：重发上一文本（服务端已持久失败回合的用户消息，重试=新回合提交）。
+  async function retry() {
+    if (streaming || !lastText) return;
+    await doSend(lastText);
   }
 
   async function cancel() {
@@ -166,34 +232,35 @@
     streaming = false;
   }
 
-  async function playSeg(seg: Segment) {
-    if (!engine) {
-      engine = new AudioEngine({ workletUrl, onHighlight: (i) => (highlight = i) });
-    }
-    await engine.init();
-    engine.stop();
+  async function playSeg(seg: Segment, fromQueue = false) {
+    if (!fromQueue) autoQueue = [];
+    const eng = ensureEngine();
+    await eng.init();
+    eng.stop();
     activeAudio = seg.audioId;
     highlight = -1;
-    // 回放无 chunks（历史音频）→ 拉 PCM。
+    // 回放无 chunks（历史音频）→ 拉 PCM + meta 词时间戳。
     if (seg.chunks.length === 0) {
       const { getAudioPcm, getAudioMeta } = await import('@godoword/core');
       try {
         const meta = await getAudioMeta(seg.audioId);
         seg.words = meta.words;
         const { bytes } = await getAudioPcm(seg.audioId);
-        engine.pushPcm(bytes);
+        eng.pushPcm(bytes);
       } catch {
-        error = '音频回放失败（可能已过期）';
+        showError({ kind: 'info', message: $_('session.replayFailed') });
         return;
       }
     } else {
-      for (const c of seg.chunks) engine.pushChunk(c);
+      for (const c of seg.chunks) eng.pushChunk(c);
     }
-    engine.setWords(seg.words);
-    await engine.play();
+    eng.setWords(seg.words);
+    eng.markComplete();
+    await eng.play();
   }
 
   function stopAudio() {
+    autoQueue = [];
     engine?.stop();
     activeAudio = null;
     highlight = -1;
@@ -210,16 +277,16 @@
           </button>
           {#if m.showReasoning}<pre class="reasoning">{m.reasoning}</pre>{/if}
         {/if}
-        {#if m.role === 'tool'}
-          <div class="tool">{$_('session.speaking')}</div>
-        {:else}
-          <div class="text">{m.text}</div>
-        {/if}
+        <div class="text">{m.text}</div>
         {#each m.segments as seg (seg.audioId)}
           <div class="audio-card">
-            <button onclick={() => playSeg(seg)}>{activeAudio === seg.audioId ? '⏹' : '▶'}</button>
+            <button
+              onclick={() => playSeg(seg)}
+              disabled={!seg.done}
+              title={seg.done ? $_('session.play') : $_('session.synthesizing')}
+            >{activeAudio === seg.audioId ? '⏹' : '▶'}</button>
             {#if activeAudio === seg.audioId}
-              <button onclick={stopAudio}>停</button>
+              <button onclick={stopAudio}>{$_('session.stop')}</button>
             {/if}
             <span class="words">
               {#each seg.words as w, i (i)}
@@ -233,13 +300,30 @@
     {#if streaming}<div class="streaming">…</div>{/if}
   </div>
 
-  {#if error}
+  {#if errorRoute && errorRoute.kind === 'toast'}
+    <div class="toast">{errorRoute.message}</div>
+  {:else if errorRoute}
     <div class="error-banner">
-      {error}
-      {#if errorAction === 'settings'}<a href="#/settings">{$_('error.goSettings')}</a>{/if}
+      {errorRoute.message}
+      {#if errorRoute.kind === 'settings'}<a href="#/settings">{$_('error.goSettings')}</a>{/if}
+      {#if errorRoute.kind === 'retry'}<button class="retry" onclick={retry}>{$_('error.retry')}</button>{/if}
+      {#if errorRoute.kind === 'shutdown'}<span class="hint">{$_('error.shuttingDown')}</span>{/if}
     </div>
   {/if}
-  {#if usageNote}<div class="usage">{usageNote}</div>{/if}
+  {#if usageLlm || usageTts}
+    <div class="usage">
+      {#if usageLlm}
+        LLM · {usageLlm.model}
+        {#if usageLlm.promptTokens != null || usageLlm.completionTokens != null}
+          · {usageLlm.promptTokens ?? 0}+{usageLlm.completionTokens ?? 0} {$_('usage.tokens')}
+        {/if}
+      {/if}
+      {#if usageTts}
+        · TTS · {usageTts.model}
+        {#if usageTts.characters != null}· {usageTts.characters} {$_('usage.characters')}{/if}
+      {/if}
+    </div>
+  {/if}
 
   <form class="composer" onsubmit={send}>
     <input bind:value={input} placeholder={$_('session.placeholder')} disabled={streaming} />
@@ -310,6 +394,10 @@
     color: var(--gw-fg);
     cursor: pointer;
   }
+  .audio-card button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   .words span {
     padding: 0 0.05rem;
     border-radius: 2px;
@@ -330,6 +418,31 @@
   }
   .error-banner a {
     margin-left: 0.5rem;
+  }
+  .error-banner .hint {
+    margin-left: 0.5rem;
+    color: var(--gw-muted);
+  }
+  .retry {
+    margin-left: 0.5rem;
+    padding: 0.1rem 0.5rem;
+    border: 1px solid #dc2626;
+    border-radius: 4px;
+    background: transparent;
+    color: #dc2626;
+    cursor: pointer;
+  }
+  .toast {
+    position: fixed;
+    bottom: 5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--gw-fg);
+    color: var(--gw-bg);
+    padding: 0.4rem 1rem;
+    border-radius: var(--gw-radius);
+    font-size: 0.85rem;
+    z-index: 10;
   }
   .usage {
     color: var(--gw-muted);

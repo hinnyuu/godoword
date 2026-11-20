@@ -32,11 +32,13 @@ api.use({
     return request;
   },
   onResponse({ request, response }) {
-    // 401 仅用户会话过期触发登出；认证端点（登录/注册/重置）的 401 是凭据错误，不跳转。
+    // 401 仅用户会话过期触发登出；认证端点（登录/注册/重置/改密）的 401/403 是凭据错误，不跳转。
+    // 改密错旧密后端映射 403（M7），此处排除为双保险。
     const isAuthEndpoint =
       request.url.includes('/auth/login') ||
       request.url.includes('/auth/register') ||
-      request.url.includes('/auth/reset-password');
+      request.url.includes('/auth/reset-password') ||
+      request.url.includes('/auth/change-password');
     if (response.status === 401 && !isAuthEndpoint && onUnauthorized) {
       onUnauthorized();
     }

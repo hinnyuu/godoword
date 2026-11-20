@@ -7,8 +7,8 @@ use std::sync::Arc;
 use auth_local::{
     active_admin_count, admin_reset_password, change_password, create_invite, create_reset_token,
     create_session, delete_session, hash_password, is_admin, list_users, register,
-    reset_with_token, set_user_status, set_user_status_guarded, validate_session, verify_login,
-    verify_password, LocalAuth,
+    reset_with_token, set_user_status, set_user_status_guarded, update_display_name,
+    validate_session, verify_login, verify_password, LocalAuth,
 };
 use chrono::{Duration, Utc};
 use kernel::{run_migrations, KERNEL_MIGRATIONS};
@@ -77,6 +77,45 @@ async fn run_test(store: Arc<Store>) {
     // username 唯一。
     let dup = register(&store, "admin", "x-pass-12345", None, None, false).await;
     assert!(dup.is_err(), "{b} username 唯一拒绝重复");
+
+    // 用户名/显示名策略（审计 F4）：空/纯空白/超长/控制字符拒绝；显示名超长拒绝。
+    for bad in ["", "   ", &"u".repeat(65), "a\u{0}b"] {
+        assert!(
+            register(&store, bad, "valid-pass-123", None, None, false)
+                .await
+                .is_err(),
+            "{b} 非法用户名拒绝：{bad:?}"
+        );
+    }
+    assert!(
+        register(
+            &store,
+            "validdisplay",
+            "valid-pass-123",
+            Some(&"d".repeat(65)),
+            None,
+            false
+        )
+        .await
+        .is_err(),
+        "{b} 超长显示名拒绝"
+    );
+    let vd = register(&store, "validdisplay", "valid-pass-123", None, None, false)
+        .await
+        .unwrap();
+    assert!(
+        update_display_name(&store, vd, &"d".repeat(65))
+            .await
+            .is_err(),
+        "{b} 改显示名超长拒绝"
+    );
+    assert!(
+        update_display_name(&store, vd, "正常名")
+            .await
+            .unwrap()
+            .is_some(),
+        "{b} 改显示名正常接受"
+    );
 
     // 非首用户 require_invite 无码 → 拒绝。
     let no_invite = register(&store, "user1", "user-pass-123", None, None, true).await;

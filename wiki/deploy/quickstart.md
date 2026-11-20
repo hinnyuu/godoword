@@ -1,8 +1,8 @@
 # 部署快速开始
 
-> 面向部署者。M1c 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
-> + provider/binding/config REST + 本地账户认证（auth-local）。用户级 REST 经 cookie 会话认证（未认证 401）；
-> 图形配置界面随 M1d 落地。架构见 [架构](../../docs/project/architecture.md)。
+> 面向部署者。M1d 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
+> + provider/binding/config REST + 本地账户认证（auth-local）+ **Svelte 图形界面**（浏览器访问即用）。
+> 用户级 REST 经 cookie 会话认证（未认证 401）。架构见 [架构](../../docs/project/architecture.md)。
 
 ## 前置
 

@@ -111,6 +111,17 @@ assert_eq "user2 跨用户读 admin 会话 404" "404" "$(http_code -b "$JAR2" ht
 assert_eq "user2 跨用户删 admin 会话 404" "404" "$(http_code -b "$JAR2" -X DELETE http://127.0.0.1:18080/api/v1/sessions/$SID -H 'X-Requested-With: godoword')"
 assert_eq "user2 访问 admin 面 403" "403" "$(http_code -b "$JAR2" http://127.0.0.1:18080/api/v1/admin/users)"
 assert_eq "admin 会话未被 user2 删除" "200" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/sessions/$SID)"
+# M1d REST 面（审计修复轮）：偏好 round-trip / 文件夹祖先链 / 改密错旧密 403 / 试听上限 400 / meta 缺失 404。
+assert_eq "preferences PUT 200" "200" "$(http_code -b "$JAR" -X PUT http://127.0.0.1:18080/api/v1/preferences -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"theme":"dark"}')"
+assert_contains "preferences GET round-trip" "$(curl -s --max-time 8 -b "$JAR" http://127.0.0.1:18080/api/v1/preferences)" '"theme":"dark"'
+FID=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/folders -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"path":"/冒烟/子层"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+assert_contains "folders 祖先链登记（审计 A）" "$(curl -s --max-time 8 -b "$JAR" http://127.0.0.1:18080/api/v1/folders)" '"/冒烟"'
+assert_eq "folders DELETE 204" "204" "$(http_code -b "$JAR" -X DELETE "http://127.0.0.1:18080/api/v1/folders/$FID" -H 'X-Requested-With: godoword')"
+assert_eq "改密错旧密 403（审计 M7）" "403" "$(http_code -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/auth/change-password -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"old_password":"wrong","new_password":"new-pass-123"}')"
+PVD=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/providers -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"adapter_id":"tts-qwen-audio","label":"smoke-tts","base_url":"https://mock.invalid","key":"smoke-placeholder-key"}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+LONGTEXT=$(python3 -c "print('あ'*501)")
+assert_eq "试听文本上限 400（审计 F2）" "400" "$(http_code -b "$JAR" -X POST "http://127.0.0.1:18080/api/v1/providers/$PVD/preview" -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d "{\"model\":\"m\",\"voice\":\"v\",\"text\":\"$LONGTEXT\"}")"
+assert_eq "audio-meta 缺失 404" "404" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/audio/00000000-0000-0000-0000-000000000000/meta)"
 # 登录限流（审计 C10：声明覆盖限流须有 429 断言）：11 次错密码 → 第 11 次 429。
 LAST=""
 for i in $(seq 1 11); do LAST=$(http_code -X POST http://127.0.0.1:18080/api/v1/auth/login -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"username":"smoke-admin","password":"wrong"}'); done

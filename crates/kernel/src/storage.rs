@@ -41,6 +41,21 @@ pub async fn open_pg(url: &str) -> Result<Store, KernelError> {
     Ok(Store::Pg(pool))
 }
 
+/// 内存 SQLite 测试夹具（单连接——多连接各自独立内存库；外键启用）。
+/// 供双后端测试与组合根 handler 级测试用，生产路径不走此函数。
+pub async fn open_memory_sqlite() -> Result<Store, KernelError> {
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .map_err(|e| KernelError::Storage(format!("打开内存 SQLite 失败：{e}")))?;
+    sqlx::query("PRAGMA foreign_keys=ON")
+        .execute(&pool)
+        .await
+        .map_err(|e| KernelError::Storage(format!("启用外键失败：{e}")))?;
+    Ok(Store::Sqlite(pool))
+}
+
 /// 优雅退出持久化屏障（审计 C6）：SQLite WAL checkpoint（TRUNCATE）确保落盘；PG 自管 WAL，无操作。
 pub async fn checkpoint(store: &Store) -> Result<(), KernelError> {
     match store {

@@ -20,9 +20,15 @@ pub struct OpenAiProvider {
 
 impl OpenAiProvider {
     /// 新建适配器（共享 reqwest 连接池）。
+    /// 超时（审计 F1）：connect 10s + read 30s（块间隔，流式安全——长流逐块到达不触发；
+    /// 上游停滞 → Network(retryable) 由 kernel 重试/硬超时兜底；测试端点不再无限挂起）。
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .read_timeout(Duration::from_secs(30))
+                .build()
+                .expect("reqwest client 构建"),
         }
     }
 }

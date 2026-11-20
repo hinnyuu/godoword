@@ -2,7 +2,7 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1c + M1c-hardening 加固）
+## 当前事实（M1c + M1c-hardening 加固 + M1d 用户级扩展）
 
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
@@ -59,11 +59,14 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 
 - `src/path.rs`：会话虚拟路径域逻辑（NFC 归一化 + 固定上限校验 + 前缀匹配/子树改写 helpers，服务端权威）。详见 [storage.md](storage.md)。
 - `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema）+ get/put（UPSERT last-write-wins，跨设备随账户）。
-- `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+UNIQUE / rename 子树批量改写防环 / delete 子树上移一层绝不删会话 /
-  move_session 自动注册路径链+自取命名空间）；读经薄分发宏、写收口驱动专属事务原子。
+- `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+祖先链同事务登记+UNIQUE 冲突→Conflict /
+  rename 子树批量改写防环+**冲突预检（子树外既有路径）+改写后上限重校验**+目标祖先链登记 /
+  delete 子树上移一层绝不删会话+父链登记 / move_session 目标链同事务登记+自取命名空间）；
+  读经薄分发宏、写收口驱动专属事务原子（审计修复 A/B/D：孤儿路径/冲突 500/深度越界）。
 - `src/session_meta.rs`：`SessionListItem`（title 首条用户消息截断 / created_at / last_active=MAX(messages.created_at) /
   message_count / path / module_id）+ `list_sessions_meta`（SQL GROUP BY 聚合 + Rust 侧首条消息/前缀/模块过滤）+ `get_session_path`。
-- 双后端测试 `tests/m1d.rs`（偏好 UPSERT / 文件夹归一化/UNIQUE/子树改写/删非空上移/移动注册/防环/越权 / 会话元数据+过滤）。
+- 双后端测试 `tests/m1d.rs`（偏好 UPSERT / 文件夹归一化/UNIQUE/子树改写/删非空上移/移动注册/防环/越权 / 会话元数据+过滤；
+  **审计负例**：改名冲突 Conflict / 派生路径冲突 / 越权 rename / 孤儿路径祖先登记 / create 祖先链 / 改写深度越界拒绝）。
 
 ## 加密（M1b）
 

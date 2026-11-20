@@ -18,6 +18,7 @@
 - 错误归一化（`map_error`）：401/403→Auth、429→RateLimit、404→ModelUnavailable、
   InvalidApiKey/AccessDenied→Auth、Throttling/quota→Quota、5xx→Network(retryable)、其余→Internal。
 - `base_url` 为 host 根（如 `https://host`），适配器追加 DashScope 路径。
+- **超时（审计 F1）**：reqwest connect 10s + read 30s（块间隔，流式安全；URL 模式下载亦受约束）。
 
 测试：`src/sse.rs` 单元测试用 fixture 黄金锚定（流式单块 + 13 字节切片，7 事件精确断言含 complete=52800 字节；
 URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。

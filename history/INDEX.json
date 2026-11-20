@@ -1453,5 +1453,37 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1240-m1d-audit-fixes.md",
+    "title": "M1d 合并前全量审计 + 侧重审计修复轮（缺陷≠重议）",
+    "date": "2026-11-20T12:40+08:00",
+    "keywords": [
+      "m1d",
+      "audit",
+      "folders",
+      "virtual-path",
+      "change-password",
+      "preview",
+      "timeout",
+      "reactivity",
+      "i18n",
+      "ci",
+      "required-check"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local",
+      "llm-openai",
+      "tts-qwen-audio"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
   }
 ]

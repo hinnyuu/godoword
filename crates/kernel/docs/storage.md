@@ -64,8 +64,9 @@ auth_sessions(token_hash)、auth_sessions(user_id)、summary_spans(session_id)�
 服务端权威 **NFC 归一化**（`unicode-normalization`，日语浊音 `が` 单码位 vs `か`+组合符 NFD 同形异码→裂文件夹陷阱）
 + 校验（禁 `/`/控制字符/空段/`.`/`..`/段首尾空白）；**上限固定常量**（深度≤8/段≤64 字符/全路径≤1024，**不进 config**，
 校验仅写入时已存数据永不回溯失效）。前缀匹配/子树改写在 Rust 侧（`is_within`/`rewrite_prefix`/`parent`，不用 SQL LIKE 免转义）。
-文件夹改名/移动=子树（文件夹+会话）前缀批量改写单事务原子（防环：目标不可在源子树内）；删非空文件夹=子树上移一层
-（`parent`，根级→NULL，**绝不级联删会话**）；移动会话自动注册目标路径链（`ensure_chain` ON CONFLICT DO NOTHING）。
+文件夹改名/移动=子树（文件夹+会话）前缀批量改写单事务原子（防环：目标不可在源子树内；**冲突预检：改写后路径不得与子树外既有文件夹冲突→Conflict；改写后深度/全路径上限重校验→Invalid**，审计 B/D）；删非空文件夹=子树上移一层
+（`parent`，根级→NULL，**绝不级联删会话**）；移动会话自动注册目标路径链（`chain` 前缀集 ON CONFLICT DO NOTHING）。
+**祖先链登记与改写同事务**（create/rename/delete/move 皆然，审计 A：上移/改名目标祖先必在登记表，前端树=登记表∪会话路径前缀不隐没会话）。
 模块 chroot：module_id 隐式根命名空间（哨兵 `default`↔sessions.module_id NULL），创建时固定杜绝跨模块移动。
 
 **bindings 哨兵 `*`**：取代 NULL 表全模块默认——两后端 NULL 皆互不相等致 UNIQUE 失效，
@@ -85,7 +86,7 @@ auth_sessions(token_hash)、auth_sessions(user_id)、summary_spans(session_id)�
 `backends()` 夹具（SQLite 恒跑 + `TEST_PG_URL` 驱动 PG，未设显式 skip）。schema 表名固定，
 故 CRUD 集中于单测试函数内顺序遍历两后端避并行竞态：
 
-- `migrations_and_schema_crud`：迁移幂等（首次 4/重跑 0）+ 版本表 + users/providers/bindings/sessions/messages
+- `migrations_and_schema_crud`：迁移幂等（首次 5/重跑 0）+ 版本表 + users/providers/bindings/sessions/messages
   CRUD round-trip（uuid/bool/json/bytea/可空/timestamp）+ bindings 哨兵 `*` UNIQUE 拒绝重复。
 - `sqlite_backup_creates_file`：生产路径 `open_sqlite`（文件库）触发 VACUUM INTO 备份，断言备份文件含版本表。
 - `checksum_drift_rejected`：已应用迁移改 SQL → 拒绝（runner 逻辑，独立内存库）。

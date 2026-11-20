@@ -15,4 +15,5 @@ regexes = [
   '''GODOWORD_MASTER_KEY''',
   '''postgres://postgres:postgres@''',
   '''POSTGRES_PASSWORD: postgres''',
+  '''smoke-placeholder-key''',
 ]

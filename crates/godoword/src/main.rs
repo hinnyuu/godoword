@@ -9,6 +9,8 @@ mod openapi;
 mod prefs;
 mod rest;
 mod settings;
+#[cfg(test)]
+mod testutil;
 
 use axum::{
     middleware,
@@ -224,7 +226,7 @@ async fn main() {
         Err(e) => panic!("绑定端口失败：{e}"),
     };
     let local = listener.local_addr().expect("读取本地地址");
-    tracing::info!("godoword M1c 监听 {local}");
+    tracing::info!("godoword 监听 {local}");
 
     axum::serve(
         listener,

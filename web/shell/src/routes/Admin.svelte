@@ -19,7 +19,7 @@
     try {
       users = await adminUsers();
     } catch (err) {
-      error = err instanceof Error ? err.message : '加载失败';
+      error = err instanceof Error ? err.message : $_('common.loadFailed');
     }
   }
 
@@ -33,7 +33,7 @@
       await adminSetStatus(u.id, u.status === 'active' ? 'disabled' : 'active');
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '操作失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -43,7 +43,7 @@
       const r = await adminCreateInvite(maxUses);
       inviteCode = r.code;
     } catch (err) {
-      error = err instanceof Error ? err.message : '生成失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -53,7 +53,7 @@
     try {
       resetToken = await adminResetToken(u.id);
     } catch (err) {
-      error = err instanceof Error ? err.message : '生成失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 </script>
@@ -61,7 +61,7 @@
 <section>
   <h1>{$_('nav.admin')}</h1>
   {#if !auth.isAdmin}
-    <p class="error">需要管理员权限</p>
+    <p class="error">{$_('admin.needAdmin')}</p>
   {:else}
     {#if error}<p class="error">{error}</p>{/if}
 

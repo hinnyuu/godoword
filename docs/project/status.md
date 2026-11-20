@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T03:30+08:00
-- 当前里程碑: **M1d 完成验收（产品流+音质+移动功能+部署矩阵 pr-18 sign-off 全过，CI 全 8 绿）→ PR #18 合并闭环 → M2 待启动设计讨论**
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ **M1d 实施（PR #18）→ M2 待启动**
+- verified: 2026-11-20T12:45+08:00
+- 当前里程碑: **M1d 合并前审计修复轮（全量审计+M1d 侧重审计发现全量修复，PR #18 续推）→ CI 绿 + 新增 UI 面复验 → 合并 → M2 待启动**
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施（PR #18）→ **M1d 审计修复（history 1240）→ 待合并**
 
 ## done
 
@@ -19,23 +19,28 @@
   - Dockerfile 三阶段 node 构建镜像含界面；冒烟 SPA 伺服。
   - 验收：CI 全 8 绿 + 完整产品流 + TTS 音质 + 词级高亮 + 移动功能 + 部署矩阵 pr-18（SELinux/quadlet/docker）sign-off。
   - **延期远期**：Markdown/HTML 渲染、移动端布局优化；布局拖拽永久放弃。
+- **M1d 合并前审计修复轮**（history 1240，主开发者拍板全量修复+负例同配）：实验确证 A/B/D/M7/M1/G1 修复 +
+  F1–F7 加固 + M2–M6 前端正确性 + Q3/Q4/Q7/Q9/Q12/Q13 需求覆盖补齐 + i18n 清扫 + 文档漂移修复；
+  契约层未变更；kernel 双后端负例 + godoword handler 级测试 + core vitest 54 + 冒烟 M1d 断言。
 
 ## in-flight
 
-- 无开放实现 PR（M1d PR #18 合并后）。M2 启动设计讨论待主开发者发起。
+- **PR #18 审计修复轮**（history 1240）：全量审计+M1d 侧重审计发现已全量修复（A 孤儿路径/B 改名冲突/D 深度越界/M7 改密 403/M1 回放错位/G1 frontend required check + F1–F7 加固 + M2–M6 前端 + Q3/Q4/Q7/Q9/Q12/Q13 覆盖补齐 + i18n 清扫），负例测试同配（kernel 双后端 + godoword handler 级 11 + core vitest 54）。待 CI 全绿 + 主开发者新增 UI 面复验 → squash merge。
 
 ## blocked / 待拍板决策
 
-- **无阻塞**。M2 启动待主开发者发起（teach-assess 评估模块 + teach-gojuon 五十音，placement→plan→自适应课程黄金路径；
+- **无阻塞**。合并后 M2 启动待主开发者发起（teach-assess 评估模块 + teach-gojuon 五十音，placement→plan→自适应课程黄金路径；
   评估实现细节另开专轮，history 0630）。
 - 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用 + 静态资产；
   M1c 六轮复核非阻断观察（summarize usage Finish 后或漏记 / 主循环与 summarize Finish 处理不对称 / 断言助手增强）+ outbox 消费幂等（A5）一致性检查。
 
 ## 下一动作
 
-- **M2 设计讨论**（待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
+- **PR #18 审计修复轮收尾**：CI 全绿（含 frontend required + 冒烟 M1d 断言）→ 主开发者复验新增 UI 面
+  （三卡片/摘要模型绑定/错误分流重试/usage 数字/文件夹改名/密度字号侧栏折叠/provider 编辑换 key/自动播放多段队列）→ squash merge → R4 main 重测。
+- **M2 设计讨论**（合并后待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
   模块迁移按注册序追加 kernel 之后；ModuleContext/emit_progress/current_plan 接缝已立；outbox dispatcher 骨架待消费者。
-- M2 一致性检查留档（上述非阻断观察）。
+- M2 一致性检查留档（上述非阻断观察）+ 重试再生语义（history 1240 取舍）。
 
 **文档精炼原则**（history 2127）：加固/实现沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著（README 愿景权威清单）。
 
@@ -64,3 +69,7 @@
   本机 PG 测试用内网镜像 uhub.service.ucloud.cn/hinnyuu/postgres:16（devenv.md，不入仓库）。
 - 测试 key 仅经 env（/root/.config/agents/shared/env，QWEN_TOKEN_PLAN_KEY），严禁入仓库/文档/日志；CI 永不用真 key。
 - 治理：人工残留清单纪律（history 2302，逐项命令+具体 tag+标准+清理，PR 残留章节代码块格式）；治理克制（最稀缺的是真实实现）。
+- **审计修复轮关键事实**（history 1240）：文件夹写操作统一 write_tx（祖先链+改写+删除同事务）；rename 冲突预检+上限重校验；
+  改密错旧密 403（401 专属会话）；preview 500 字符/60s/Usage 计量；适配器 connect 10s/read 30s；
+  前端树=登记表∪会话路径；auto_play 队列靠引擎 onEnded（pushedMs+markComplete）；prefs 串行队列+清残留变量；
+  core session/ux.ts（routeError/parseUsage）；frontend 已入 main required checks + image needs。

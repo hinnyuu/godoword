@@ -4,18 +4,21 @@
     getConfig,
     listProviders,
     createProvider,
+    updateProvider,
     deleteProvider,
     providerModels,
     providerVoices,
     previewVoice,
     listBindings,
     createBinding,
+    updateBinding,
     deleteBinding,
     getAudioPcm,
     getAudioMeta,
     updateMe,
     changePassword,
     AudioEngine,
+    PRESETS,
     type Provider,
     type Binding,
     type ConfigView,
@@ -24,7 +27,6 @@
   import workletUrl from '@godoword/core/audio/worklet?worker&url';
   import { prefs } from '../lib/prefs.svelte';
   import { auth } from '../lib/auth.svelte';
-  import { PRESETS } from '@godoword/core';
 
   let cfg = $state<ConfigView | null>(null);
   let providers = $state<Provider[]>([]);
@@ -38,6 +40,22 @@
   let label = $state('');
   let baseUrl = $state('');
   let key = $state('');
+
+  // provider 编辑（换 key 不删建，保绑定）。
+  let editId = $state('');
+  let editLabel = $state('');
+  let editBaseUrl = $state('');
+  let editKey = $state('');
+
+  // 三卡片（Q3：默认 LLM / 默认 TTS+音色 / 可选摘要模型）。
+  let llmProviderId = $state('');
+  let llmModel = $state('');
+  let ttsProviderId = $state('');
+  let ttsModel = $state('');
+  let ttsVoice = $state('');
+  let cardVoices = $state<VoiceInfo[]>([]);
+  let sumProviderId = $state('');
+  let sumModel = $state('');
 
   // 音色试听。
   let voices = $state<VoiceInfo[]>([]);
@@ -59,13 +77,42 @@
   let newPassword = $state('');
   let accountMsg = $state('');
 
+  // 高级绑定矩阵。
+  let advModule = $state('*');
+  let advCap = $state('llm');
+  let advRole = $state('default');
+  let advProvider = $state('');
+  let advModel = $state('');
+  let advVoice = $state('');
+  let rowModels = $state<Record<string, string>>({});
+  let rowProviders = $state<Record<string, string>>({});
+
+  function bindingFor(cap: string, role = 'default'): Binding | undefined {
+    return bindings.find((b) => b.module_id === '*' && b.capability === cap && b.role === role);
+  }
+
   async function refresh() {
     try {
       [cfg, providers, bindings] = await Promise.all([getConfig(), listProviders(), listBindings()]);
       customCss = prefs.prefs.custom_css ?? '';
       displayName = auth.user?.display_name ?? '';
+      const llm = bindingFor('llm');
+      llmProviderId = llm?.provider_id ?? '';
+      const llmPreset = cfg?.provider_presets.find((p) => p.capability === 'llm');
+      llmModel = llm?.model ?? llmPreset?.suggested_models?.at(0) ?? '';
+      const tts = bindingFor('tts');
+      ttsProviderId = tts?.provider_id ?? '';
+      const ttsPreset = cfg?.provider_presets.find((p) => p.capability === 'tts');
+      ttsModel = tts?.model ?? ttsPreset?.suggested_models?.at(0) ?? '';
+      ttsVoice = (tts?.params_json as { voice?: string } | undefined)?.voice ?? '';
+      const sum = bindingFor('llm', 'summarizer');
+      sumProviderId = sum?.provider_id ?? '';
+      sumModel = sum?.model ?? llmModel;
+      rowModels = Object.fromEntries(bindings.map((b) => [b.id, b.model]));
+      rowProviders = Object.fromEntries(bindings.map((b) => [b.id, b.provider_id]));
+      if (ttsProviderId) await loadCardVoices();
     } catch (err) {
-      error = err instanceof Error ? err.message : '加载失败';
+      error = err instanceof Error ? err.message : $_('common.loadFailed');
     }
   }
 
@@ -91,17 +138,37 @@
       label = '';
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '创建失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  function startEdit(p: Provider) {
+    editId = p.id;
+    editLabel = p.label;
+    editBaseUrl = p.base_url;
+    editKey = '';
+  }
+
+  async function saveEdit(e: SubmitEvent) {
+    e.preventDefault();
+    error = '';
+    try {
+      await updateProvider(editId, editLabel, editBaseUrl, editKey || undefined);
+      editId = '';
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
   async function removeProvider(id: string) {
+    if (!confirm($_('session.deleteConfirm'))) return;
     error = '';
     try {
       await deleteProvider(id);
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '删除失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -110,14 +177,23 @@
     testStatus = '';
     try {
       if (p.adapter_id === 'tts-qwen-audio') {
-        const voices = await providerVoices(p.id);
-        testStatus = `${p.label} 音色：${voices.map((v) => v.name).join(', ') || '（空）'}`;
+        const vs = await providerVoices(p.id);
+        testStatus = `${p.label} ${$_('settings.testVoices')}：${vs.map((v) => v.name).join(', ') || $_('settings.empty')}`;
       } else {
-        const models = await providerModels(p.id);
-        testStatus = `${p.label} 模型：${models.map((m) => m.id).join(', ') || '（空）'}`;
+        const ms = await providerModels(p.id);
+        testStatus = `${p.label} ${$_('settings.testModels')}：${ms.map((m) => m.id).join(', ') || $_('settings.empty')}`;
       }
     } catch (err) {
-      error = err instanceof Error ? err.message : '测试失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  async function loadCardVoices() {
+    try {
+      cardVoices = await providerVoices(ttsProviderId, ttsModel || undefined);
+      if (!ttsVoice && cardVoices.length > 0) ttsVoice = cardVoices[0]!.id;
+    } catch {
+      cardVoices = [];
     }
   }
 
@@ -127,13 +203,13 @@
       voices = await providerVoices(previewProviderId, previewModel);
       if (voices.length > 0) previewVoiceId = voices[0]!.id;
     } catch (err) {
-      error = err instanceof Error ? err.message : '拉取音色失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
   async function doPreview() {
     error = '';
-    previewStatus = '合成中…';
+    previewStatus = $_('settings.previewSynthesizing');
     try {
       if (!engine) engine = new AudioEngine({ workletUrl });
       await engine.init();
@@ -143,33 +219,55 @@
       const { bytes } = await getAudioPcm(audioId);
       engine.setWords(meta.words);
       engine.pushPcm(bytes);
+      engine.markComplete();
       await engine.play();
-      previewStatus = '试听播放中';
+      previewStatus = $_('settings.previewPlaying');
     } catch (err) {
-      error = err instanceof Error ? err.message : '试听失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
       previewStatus = '';
     }
   }
 
-  // 简化绑定卡片：找 (*, cap, default) 绑定。
-  function defaultBinding(cap: string): Binding | undefined {
-    return bindings.find((b) => b.module_id === '*' && b.capability === cap && b.role === 'default');
-  }
-
-  function ttsVoice(): string {
-    const params = defaultBinding('tts')?.params_json as { voice?: string } | undefined;
-    return params?.voice ?? '';
-  }
-
-  async function setDefaultBinding(cap: string, providerId: string, model: string, voice?: string) {
+  // 简化卡片绑定：存在则 update（不删建，防中途失败丢绑定），否则 create。
+  async function setDefaultBinding(cap: string, role: string, providerId: string, model: string, params?: Record<string, unknown>) {
     error = '';
     try {
-      const existing = defaultBinding(cap);
-      if (existing) await deleteBinding(existing.id);
-      await createBinding(cap, 'default', providerId, model, voice ? { voice } : undefined);
+      const existing = bindingFor(cap, role);
+      if (existing) {
+        await updateBinding(existing.id, providerId, model, params ?? (existing.params_json as Record<string, unknown>));
+      } else {
+        await createBinding(cap, role, providerId, model, params);
+      }
       await refresh();
     } catch (err) {
-      error = err instanceof Error ? err.message : '绑定失败';
+      error = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  async function bindLlm() {
+    if (llmProviderId && llmModel) await setDefaultBinding('llm', 'default', llmProviderId, llmModel);
+  }
+
+  async function bindTts() {
+    if (ttsProviderId && ttsModel) {
+      await setDefaultBinding('tts', 'default', ttsProviderId, ttsModel, ttsVoice ? { voice: ttsVoice } : {});
+    }
+  }
+
+  async function bindSummarizer() {
+    if (sumProviderId && sumModel) await setDefaultBinding('llm', 'summarizer', sumProviderId, sumModel);
+  }
+
+  async function unbindSummarizer() {
+    const sum = bindingFor('llm', 'summarizer');
+    if (!sum) return;
+    error = '';
+    try {
+      await deleteBinding(sum.id);
+      sumProviderId = '';
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -195,9 +293,9 @@
     accountMsg = '';
     try {
       auth.user = await updateMe(displayName);
-      accountMsg = '显示名已保存';
+      accountMsg = $_('auth.displayNameSaved');
     } catch (err) {
-      accountMsg = err instanceof Error ? err.message : '保存失败';
+      accountMsg = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -208,9 +306,44 @@
       await changePassword(oldPassword, newPassword);
       oldPassword = '';
       newPassword = '';
-      accountMsg = '密码已修改（其他设备会话已失效）';
+      accountMsg = $_('auth.passwordChanged');
     } catch (err) {
-      accountMsg = err instanceof Error ? err.message : '改密失败';
+      accountMsg = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  async function createAdvanced(e: SubmitEvent) {
+    e.preventDefault();
+    if (!advProvider || !advModel) return;
+    error = '';
+    try {
+      const params = advCap === 'tts' && advVoice ? { voice: advVoice } : undefined;
+      await createBinding(advCap, advRole, advProvider, advModel, params, advModule || '*');
+      advModel = '';
+      advVoice = '';
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  async function saveRow(b: Binding) {
+    error = '';
+    try {
+      await updateBinding(b.id, rowProviders[b.id] ?? b.provider_id, rowModels[b.id] ?? b.model, b.params_json as Record<string, unknown>);
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('common.opFailed');
+    }
+  }
+
+  async function removeRow(b: Binding) {
+    error = '';
+    try {
+      await deleteBinding(b.id);
+      await refresh();
+    } catch (err) {
+      error = err instanceof Error ? err.message : $_('common.opFailed');
     }
   }
 
@@ -222,46 +355,65 @@
   <h1>{$_('nav.settings')}</h1>
   {#if error}<p class="error">{error}</p>{/if}
 
-  <!-- 简化三卡片 -->
+  <!-- 简化三卡片（Q3） -->
   <div class="cards">
     <div class="card">
       <h2>{$_('settings.defaultLlm')}</h2>
-      {#if defaultBinding('llm')}
-        <p class="bound">{defaultBinding('llm')!.model}</p>
+      {#if bindingFor('llm')}
+        <p class="bound">{bindingFor('llm')!.model}</p>
       {:else}
-        <p class="unbound">未配置</p>
+        <p class="unbound">{$_('settings.unbound')}</p>
       {/if}
-      <select
-        onchange={(e) => {
-          const p = llmProviders.find((x) => x.id === e.currentTarget.value);
-          if (p) void setDefaultBinding('llm', p.id, 'qwen4-max-preview');
-        }}
-      >
-        <option value="">选择服务商…</option>
+      <select bind:value={llmProviderId}>
+        <option value="">{$_('settings.selectProvider')}</option>
         {#each llmProviders as p (p.id)}
           <option value={p.id}>{p.label}</option>
         {/each}
       </select>
+      <input placeholder={$_('settings.model')} bind:value={llmModel} />
+      <button onclick={bindLlm} disabled={!llmProviderId || !llmModel}>{$_('common.bind')}</button>
     </div>
 
     <div class="card">
       <h2>{$_('settings.defaultTts')}</h2>
-      {#if defaultBinding('tts')}
-        <p class="bound">{defaultBinding('tts')!.model} · {ttsVoice()}</p>
+      {#if bindingFor('tts')}
+        <p class="bound">{bindingFor('tts')!.model} · {ttsVoice}</p>
       {:else}
-        <p class="unbound">未配置</p>
+        <p class="unbound">{$_('settings.unbound')}</p>
       {/if}
-      <select
-        onchange={(e) => {
-          const p = ttsProviders.find((x) => x.id === e.currentTarget.value);
-          if (p) void setDefaultBinding('tts', p.id, 'qwen-audio-3.0-tts-plus', 'longanlingxin');
-        }}
-      >
-        <option value="">选择服务商…</option>
+      <select bind:value={ttsProviderId} onchange={loadCardVoices}>
+        <option value="">{$_('settings.selectProvider')}</option>
         {#each ttsProviders as p (p.id)}
           <option value={p.id}>{p.label}</option>
         {/each}
       </select>
+      <select bind:value={ttsVoice}>
+        <option value="">{$_('settings.voice')}</option>
+        {#each cardVoices as v (v.id)}
+          <option value={v.id}>{v.name}（{v.id}）</option>
+        {/each}
+      </select>
+      <input placeholder={$_('settings.model')} bind:value={ttsModel} />
+      <button onclick={bindTts} disabled={!ttsProviderId || !ttsModel}>{$_('common.bind')}</button>
+    </div>
+
+    <div class="card">
+      <h2>{$_('settings.summarizer')}</h2>
+      <p class="hint">{$_('settings.summarizerHint')}</p>
+      {#if bindingFor('llm', 'summarizer')}
+        <p class="bound">{bindingFor('llm', 'summarizer')!.model}</p>
+      {:else}
+        <p class="unbound">{$_('settings.unbound')}</p>
+      {/if}
+      <select bind:value={sumProviderId}>
+        <option value="">{$_('settings.selectProvider')}</option>
+        {#each llmProviders as p (p.id)}
+          <option value={p.id}>{p.label}</option>
+        {/each}
+      </select>
+      <input placeholder={$_('settings.model')} bind:value={sumModel} />
+      <button onclick={bindSummarizer} disabled={!sumProviderId || !sumModel}>{$_('common.bind')}</button>
+      <button class="ghost" onclick={unbindSummarizer} disabled={!bindingFor('llm', 'summarizer')}>{$_('common.unbind')}</button>
     </div>
   </div>
 
@@ -270,7 +422,7 @@
     <h2>{$_('settings.preview')}</h2>
     <div class="row">
       <select bind:value={previewProviderId} onchange={loadVoices}>
-        <option value="">TTS 服务商…</option>
+        <option value="">{$_('settings.selectProvider')}</option>
         {#each ttsProviders as p (p.id)}
           <option value={p.id}>{p.label}</option>
         {/each}
@@ -280,7 +432,7 @@
           <option value={v.id}>{v.name}（{v.id}）</option>
         {/each}
       </select>
-      <input placeholder="自定义文本（可选）" bind:value={previewText} />
+      <input placeholder={$_('settings.previewCustomText')} bind:value={previewText} />
       <button onclick={doPreview} disabled={!previewProviderId}>{$_('settings.preview')}</button>
     </div>
     {#if previewStatus}<p class="status">{previewStatus}</p>{/if}
@@ -293,18 +445,18 @@
       {#each PRESETS as p (p.id)}
         <button class:active={prefs.prefs.theme === p.id} onclick={() => applyThemePreset(p.id)}>{p.name}</button>
       {/each}
-      <label>强调色 <input type="color" bind:value={accent} onchange={applyAccent} /></label>
+      <label>{$_('settings.accent')} <input type="color" bind:value={accent} onchange={applyAccent} /></label>
       <button onclick={resetTheme}>{$_('settings.resetTheme')}</button>
     </div>
     <label class="css-label">
       {$_('settings.customCss')}
-      <textarea bind:value={customCss} onblur={applyCustomCss} rows="3" placeholder={'示例：.msg.assistant { border-radius: 16px; }\n:root { --gw-radius: 12px; }'}></textarea>
+      <textarea bind:value={customCss} onblur={applyCustomCss} rows="3" placeholder={$_('settings.cssExample')}></textarea>
     </label>
   </div>
 
-  <!-- 偏好开关 -->
+  <!-- 偏好开关（Q4/Q12：自动播放/断开行为/密度/字号） -->
   <div class="panel">
-    <h2>偏好</h2>
+    <h2>{$_('settings.prefs')}</h2>
     <label class="toggle">
       <input
         type="checkbox"
@@ -321,14 +473,34 @@
       />
       {$_('settings.onDisconnect')}
     </label>
+    <div class="row">
+      <label>{$_('settings.density')}
+        <select
+          value={prefs.prefs.density ?? 'comfortable'}
+          onchange={(e) => prefs.update({ density: e.currentTarget.value })}
+        >
+          <option value="comfortable">{$_('settings.comfortable')}</option>
+          <option value="compact">{$_('settings.compact')}</option>
+        </select>
+      </label>
+      <label>{$_('settings.fontSize')}
+        <input
+          type="number"
+          min="12"
+          max="24"
+          value={prefs.prefs.font_size ?? 16}
+          onchange={(e) => prefs.update({ font_size: Number(e.currentTarget.value) || null })}
+        />
+      </label>
+    </div>
   </div>
 
   <!-- 账户自助 -->
   <div class="panel">
-    <h2>账户</h2>
+    <h2>{$_('auth.account')}</h2>
     <div class="row">
       <label>{$_('auth.displayName')} <input bind:value={displayName} /></label>
-      <button onclick={saveDisplayName}>保存</button>
+      <button onclick={saveDisplayName}>{$_('common.save')}</button>
     </div>
     <form onsubmit={doChangePassword} class="row">
       <input type="password" placeholder={$_('auth.oldPassword')} bind:value={oldPassword} autocomplete="current-password" required />
@@ -343,7 +515,7 @@
     <h2>{$_('settings.providers')}</h2>
     <form onsubmit={addProvider} class="provider-form">
       <select bind:value={presetId} onchange={applyPreset}>
-        <option value="">预设模板…</option>
+        <option value="">{$_('settings.preset')}</option>
         {#each cfg?.provider_presets ?? [] as p (p.id)}
           <option value={p.id}>{p.label}</option>
         {/each}
@@ -352,13 +524,13 @@
         <option value="llm-openai">llm-openai</option>
         <option value="tts-qwen-audio">tts-qwen-audio</option>
       </select>
-      <input placeholder="标签" bind:value={label} required />
+      <input placeholder={$_('settings.label')} bind:value={label} required />
       <input placeholder={$_('settings.baseUrl')} bind:value={baseUrl} required />
       <input type="password" placeholder={$_('settings.apiKey')} bind:value={key} required />
-      <button type="submit">添加</button>
+      <button type="submit">{$_('common.add')}</button>
     </form>
     <p class="hint">{$_('settings.apiKeyHint')}</p>
-    <p class="hint">端点：LLM 填 v1 根（…/compatible-mode/v1）；TTS 填 host 根（仅域名，适配器自动补全路径）。预设模板已含正确端点。</p>
+    <p class="hint">{$_('settings.endpointHint')}</p>
     <table>
       <tbody>
         {#each providers as p (p.id)}
@@ -367,24 +539,45 @@
             <td>{p.adapter_id}</td>
             <td class="actions">
               <button onclick={() => testConnection(p)}>{$_('settings.testConnection')}</button>
-              <button onclick={() => removeProvider(p.id)}>删除</button>
+              <button onclick={() => startEdit(p)}>{$_('common.edit')}</button>
+              <button onclick={() => removeProvider(p.id)}>{$_('common.delete')}</button>
             </td>
           </tr>
+          {#if editId === p.id}
+            <tr>
+              <td colspan="3">
+                <form onsubmit={saveEdit} class="provider-form">
+                  <input placeholder={$_('settings.label')} bind:value={editLabel} required />
+                  <input placeholder={$_('settings.baseUrl')} bind:value={editBaseUrl} required />
+                  <input type="password" placeholder={$_('settings.keyOptional')} bind:value={editKey} />
+                  <button type="submit">{$_('common.save')}</button>
+                  <button type="button" class="ghost" onclick={() => (editId = '')}>{$_('common.cancel')}</button>
+                </form>
+              </td>
+            </tr>
+          {/if}
         {/each}
       </tbody>
     </table>
     {#if testStatus}<p class="status">{testStatus}</p>{/if}
   </div>
 
-  <!-- 高级绑定矩阵 -->
+  <!-- 高级绑定矩阵（完整 CRUD） -->
   <div class="panel">
     <button class="advanced-toggle" onclick={() => (advanced = !advanced)}>
-      {$_('settings.advanced')} {advanced ? '▲' : '▼'}
+      {$_('settings.advanced')} · {$_('settings.bindingMatrix')} {advanced ? '▲' : '▼'}
     </button>
     {#if advanced}
       <table>
         <thead>
-          <tr><th>module</th><th>cap</th><th>role</th><th>model</th><th></th></tr>
+          <tr>
+            <th>{$_('settings.module')}</th>
+            <th>{$_('settings.capability')}</th>
+            <th>{$_('settings.role')}</th>
+            <th>{$_('settings.providers')}</th>
+            <th>{$_('settings.model')}</th>
+            <th></th>
+          </tr>
         </thead>
         <tbody>
           {#each bindings as b (b.id)}
@@ -392,12 +585,45 @@
               <td>{b.module_id}</td>
               <td>{b.capability}</td>
               <td>{b.role}</td>
-              <td>{b.model}</td>
-              <td><button onclick={() => deleteBinding(b.id).then(refresh)}>删除</button></td>
+              <td>
+                <select bind:value={rowProviders[b.id]}>
+                  {#each providers as p (p.id)}
+                    <option value={p.id}>{p.label}</option>
+                  {/each}
+                </select>
+              </td>
+              <td><input bind:value={rowModels[b.id]} /></td>
+              <td class="actions">
+                <button onclick={() => saveRow(b)}>{$_('common.save')}</button>
+                <button onclick={() => removeRow(b)}>{$_('common.delete')}</button>
+              </td>
             </tr>
           {/each}
         </tbody>
       </table>
+      <form onsubmit={createAdvanced} class="provider-form">
+        <input placeholder={$_('settings.module')} bind:value={advModule} size={6} />
+        <select bind:value={advCap}>
+          <option value="llm">llm</option>
+          <option value="tts">tts</option>
+          <option value="stt">stt</option>
+        </select>
+        <select bind:value={advRole}>
+          <option value="default">default</option>
+          <option value="summarizer">summarizer</option>
+          <option value="extractor">extractor</option>
+          <option value="assessor">assessor</option>
+        </select>
+        <select bind:value={advProvider}>
+          <option value="">{$_('settings.selectProvider')}</option>
+          {#each providers as p (p.id)}
+            <option value={p.id}>{p.label}</option>
+          {/each}
+        </select>
+        <input placeholder={$_('settings.model')} bind:value={advModel} required />
+        <input placeholder={$_('settings.paramsVoice')} bind:value={advVoice} />
+        <button type="submit">{$_('settings.createBinding')}</button>
+      </form>
     {/if}
   </div>
 </section>
@@ -426,6 +652,12 @@
   .panel h2 {
     margin: 0 0 0.5rem;
     font-size: 1rem;
+  }
+  .card select,
+  .card input {
+    display: block;
+    width: 100%;
+    margin: 0.3rem 0;
   }
   .bound {
     color: var(--gw-accent);
@@ -460,8 +692,16 @@
     cursor: pointer;
     font-size: 0.85rem;
   }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
   button.active {
     outline: 2px solid var(--gw-fg);
+  }
+  button.ghost {
+    background: transparent;
+    color: var(--gw-fg);
   }
   .provider-form {
     display: flex;
@@ -491,6 +731,11 @@
     padding: 0.4rem 0.6rem;
     border-bottom: 1px solid var(--gw-border);
     font-size: 0.85rem;
+  }
+  td input,
+  td select {
+    width: 100%;
+    min-width: 6rem;
   }
   .actions {
     display: flex;

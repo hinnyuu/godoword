@@ -36,9 +36,9 @@ pub use folders::{
     FolderError,
 };
 pub use journal::{
-    dispatch_once, emit_progress, end_session, evict_session, lookup_summary_span, mark_processed,
-    pending_events, record_call, store_summary_span, summary_span_hash, CallRecord, OutboxEvent,
-    OutboxHandler,
+    call_log_count, call_log_rows, dispatch_once, emit_progress, end_session, evict_session,
+    lookup_summary_span, mark_processed, pending_events, record_call, store_summary_span,
+    summary_span_hash, CallRecord, OutboxEvent, OutboxHandler,
 };
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
@@ -56,4 +56,4 @@ pub use seam::{
 };
 pub use session::DbSessions;
 pub use session_meta::{get_session_path, list_sessions_meta, SessionListItem};
-pub use storage::{checkpoint, open_pg, open_sqlite, ping};
+pub use storage::{checkpoint, open_memory_sqlite, open_pg, open_sqlite, ping};

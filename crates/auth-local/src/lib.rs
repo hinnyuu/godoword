@@ -71,6 +71,27 @@ pub fn validate_password(password: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
+/// 用户名策略（审计 F4）：trim 后非空、≤64 字符、无控制字符。
+pub fn validate_username(username: &str) -> Result<(), AuthError> {
+    let t = username.trim();
+    if t.is_empty() || t.chars().count() > 64 || t.chars().any(|c| c.is_control()) {
+        return Err(AuthError::RegistrationRestricted(
+            "用户名须 1–64 字符（无控制字符）".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 显示名策略（审计 F4）：≤64 字符、无控制字符（可空串=清除显示名）。
+pub fn validate_display_name(name: &str) -> Result<(), AuthError> {
+    if name.chars().count() > 64 || name.chars().any(|c| c.is_control()) {
+        return Err(AuthError::RegistrationRestricted(
+            "显示名须 ≤64 字符（无控制字符）".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// 生成 opaque 随机会话令牌（两个 uuid 拼接，足够熵）。
 fn generate_token() -> String {
     format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())
@@ -93,10 +114,9 @@ pub async fn register(
     invite_code: Option<&str>,
     require_invite: bool,
 ) -> Result<UserId, AuthError> {
-    if username.is_empty() {
-        return Err(AuthError::RegistrationRestricted(
-            "用户名不可为空".to_string(),
-        ));
+    validate_username(username)?;
+    if let Some(d) = display_name {
+        validate_display_name(d)?;
     }
     validate_password(password)?;
     let hash = hash_password(password)?;
@@ -424,6 +444,7 @@ pub async fn update_display_name(
     user: UserId,
     display_name: &str,
 ) -> Result<Option<UserInfo>, AuthError> {
+    validate_display_name(display_name)?;
     let n = execute_both!(
         store,
         "UPDATE users SET display_name = $1, updated_at = $2 WHERE id = $3",
