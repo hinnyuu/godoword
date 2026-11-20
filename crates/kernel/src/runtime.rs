@@ -921,11 +921,13 @@ impl Runtime {
                                             let mut err = String::new();
                                             let mut tts_usage: Option<TtsUsage> = None;
                                             let mut tts_err: Option<String> = None;
+                                            let mut tts_cancelled = false;
                                             while let Some(item) = astream.next().await {
                                                 // TTS 流期间响应 cancel（审计 C6）。
                                                 if cancel_flag.load(Ordering::Relaxed) {
                                                     ok = false;
                                                     err = "cancelled".to_string();
+                                                    tts_cancelled = true;
                                                     break;
                                                 }
                                                 let ev = match item {
@@ -991,7 +993,14 @@ impl Runtime {
                                                     }
                                                 }
                                             }
-                                            let tts_status = if tts_err.is_some() { "error" } else { "ok" };
+                                            // 审计 O3：cancel 中断记 cancelled（非 ok），看板语义准确。
+                                            let tts_status = if tts_err.is_some() {
+                                                "error"
+                                            } else if tts_cancelled {
+                                                "cancelled"
+                                            } else {
+                                                "ok"
+                                            };
                                             let _ = record_call(
                                                 &store,
                                                 tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, tts_usage, tts_status, tts_err),

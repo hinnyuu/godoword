@@ -18,13 +18,15 @@
   TTS 流响应 cancel；`shutdown` 退出屏障（**tasks 锁内置标志+取快照，与 run_turn 锁内复检+spawn+注册互斥，H1** + cancel
   + 有界等待 + **超时 abort+join**，审计 R3）+ `checkpoint`（SQLite WAL，真写入屏障）；硬超时满 mpsc 终态 try_send 不可投递则记日志、流关闭（硬边界优先，N6）。
 - speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
-  （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定）；音频流迭代内联于循环，
+  （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定；**rate 钳位 [0.5,2.0] + 文本≤2000 字符，审计 O9**）；
+  音频流迭代内联于循环，
   live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
   **缓存写失败关闭（审计 R2）**：put 失败不发正常 AudioEnd/成功 ToolResult，改发 storage Error + ToolResult ok=false。
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退；
   **仅实际收到 Finish(Stop) 才算成功——流 Err / 非 Stop Finish（Error/Length/ContentFilter/Cancelled/ToolCalls）/ 无 Finish 静默 EOF
   均不固化部分摘要，审计 N3/H2/第五次**）；
-  call_log 计量所有上游调用（adapter_id 取 trait id()）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
+  call_log 计量所有上游调用（adapter_id 取 trait id()；**写失败 warn 留痕不阻塞回合，审计 O2**；
+  **TTS 流中途 cancel 记 cancelled 状态，审计 O3**）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
   **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
   **`end_session`（审计 R6/N2）**：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插 session-ended outbox
   （并发删除恰一个 true 一个事件，不吞错伪造结束，事件提交后才可见 dispatcher 不提前消费）；
@@ -38,7 +40,8 @@
 - `BindingResolver`：解析 (user,module,cap,role) → `ResolvedBinding{conn,model,params}`。M1a env impl 在
   godoword（dev-bypass feature）；M1b/c DB 5 级 fallback + 解密。
 - `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete，
-  **全路径携带 user_id 对象级授权**（审计 C1）+ append 失败关闭（审计 C4）。`DbSessions` 生产默认（双兼容 SQL，seq 单活跃锁内分配，级联删）；
+  **全路径携带 user_id 对象级授权**（审计 C1）+ append 失败关闭（审计 C4）。**delete 为仓储层原语不发事件，
+  生产 REST 删除走 journal::end_session 原子认领（审计 O7 标注）**。`DbSessions` 生产默认（双兼容 SQL，seq 单活跃锁内分配，级联删）；
   `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**，水位/摘要经
   `evict_session` 原子更新，R4）、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
 - `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
@@ -62,8 +65,9 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 - `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema）+ get/put（UPSERT last-write-wins，跨设备随账户）。
 - `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+祖先链同事务登记+UNIQUE 冲突→Conflict /
   rename 子树批量改写防环+**冲突预检（子树外既有路径）+改写后上限重校验**+目标祖先链登记 /
-  delete 子树上移一层绝不删会话+父链登记 / move_session 目标链同事务登记+自取命名空间）；
-  读经薄分发宏、写收口驱动专属事务原子（审计修复 A/B/D：孤儿路径/冲突 500/深度越界）。
+  delete 子树上移一层绝不删会话+父链登记+**上移冲突预检（审计 F1，与 rename 对称→Conflict 400）+目标先删释放路径（/a/a→/a）** /
+  move_session 目标链同事务登记+自取命名空间+**rows 校验防并发删除假成功（审计 O8）**）；
+  读经薄分发宏、写收口驱动专属事务原子（审计修复 A/B/D/F1：孤儿路径/冲突 500/深度越界/删除冲突）。
 - `src/session_meta.rs`：`SessionListItem`（title 首条用户消息截断 / created_at / last_active=MAX(messages.created_at) /
   message_count / path / module_id）+ `list_sessions_meta`（SQL GROUP BY 聚合 + Rust 侧首条消息/前缀/模块过滤）+ `get_session_path`。
 - 双后端测试 `tests/m1d.rs`（偏好 UPSERT / 文件夹归一化/UNIQUE/子树改写/删非空上移/移动注册/防环/越权 / 会话元数据+过滤；

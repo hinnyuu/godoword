@@ -65,7 +65,7 @@ auth_sessions(token_hash)、auth_sessions(user_id)、summary_spans(session_id)�
 + 校验（禁 `/`/控制字符/空段/`.`/`..`/段首尾空白）；**上限固定常量**（深度≤8/段≤64 字符/全路径≤1024，**不进 config**，
 校验仅写入时已存数据永不回溯失效）。前缀匹配/子树改写在 Rust 侧（`is_within`/`rewrite_prefix`/`parent`，不用 SQL LIKE 免转义）。
 文件夹改名/移动=子树（文件夹+会话）前缀批量改写单事务原子（防环：目标不可在源子树内；**冲突预检：改写后路径不得与子树外既有文件夹冲突→Conflict；改写后深度/全路径上限重校验→Invalid**，审计 B/D）；删非空文件夹=子树上移一层
-（`parent`，根级→NULL，**绝不级联删会话**）；移动会话自动注册目标路径链（`chain` 前缀集 ON CONFLICT DO NOTHING）。
+（`parent`，根级→NULL，**绝不级联删会话**；**上移冲突预检→Conflict 400，与改名对称；目标先删释放路径，子文件夹可上移复用目标路径**，审计 F1）；移动会话自动注册目标路径链（`chain` 前缀集 ON CONFLICT DO NOTHING；**UPDATE rows 校验防并发删除假成功**，审计 O8）。
 **祖先链登记与改写同事务**（create/rename/delete/move 皆然，审计 A：上移/改名目标祖先必在登记表，前端树=登记表∪会话路径前缀不隐没会话）。
 模块 chroot：module_id 隐式根命名空间（哨兵 `default`↔sessions.module_id NULL），创建时固定杜绝跨模块移动。
 

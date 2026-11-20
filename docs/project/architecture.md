@@ -136,7 +136,8 @@ Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，hi
 - **web/shell**（Svelte 5 视图层，runes 自动检测兼容 legacy lib）：**P4–P6 已落** svelte-spa-router hash 路由（静态伺服深链稳健）+
   svelte-i18n（core zh-CN catalog）+ runes store（auth 用户态 / prefs 偏好+主题应用）+ 认证门 + 401 钩子 + AGPL 页脚；
   页面 Login/Register/Reset/Admin/Onboarding/Settings（provider 三卡片+绑定矩阵+音色试听+主题面板+偏好）/
-  Home（ChatView 流式对话+音频卡片+词级高亮+usage+错误分流）/Sessions（SessionSidebar 文件夹目录树+会话元数据列表+移动/删除）。
+  Home（ChatView 流式对话+音频卡片+词级高亮+usage+错误分流；**播放中按钮切换停止、近底自动滚动、错误横幅主题变量，审计 O10**）/
+  Sessions（SessionSidebar 文件夹目录树+会话元数据列表+移动/删除；**删隐式文件夹先确认再登记，审计 O10**）。
   core 服务层（api/services.ts）封装域函数，组件不裸调 api。
   主题引擎地基：语义 CSS 变量（:root + data-theme 明暗），用户自定义变量经 prefs 注入（跨设备）。
 - **web/modules/<id>**：教学模块前端（M2+）。

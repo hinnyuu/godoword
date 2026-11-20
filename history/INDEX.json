@@ -1626,5 +1626,32 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "21"
+  },
+  {
+    "file": "2026-11-20-1802-m2-audit-code-fixes.md",
+    "title": "M2 审计代码修复轮（F1 + O 系列，设计定案后独立 PR）",
+    "date": "2026-11-20T18:02+08:00",
+    "keywords": [
+      "audit",
+      "code-fixes",
+      "folders",
+      "conflict",
+      "metering",
+      "cancelled",
+      "speak",
+      "validation",
+      "frontend",
+      "ux"
+    ],
+    "scope": [
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

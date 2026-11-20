@@ -2,7 +2,8 @@
 //! 改名/移动=前缀批量改写（Rust 侧匹配 + 单事务原子）；删非空文件夹→子树上移一层（绝不级联删会话）。
 //! 读经薄分发宏（pool），写收口驱动专属事务（原子）；私有部署单用户自组织，写事务保完整性。
 //! 并发写 TOCTOU（读改写间隙）fail-closed：UNIQUE/条件冲突 → 事务回滚（无损坏，500 语义），不丢数据。
-//! 审计修复：祖先链登记与改写同事务（A 孤儿路径）；改名冲突预检（B）；改写后上限重校验（D）。
+//! 审计修复：祖先链登记与改写同事务（A 孤儿路径）；改名冲突预检（B）；改写后上限重校验（D）；
+//! 删除上移冲突预检 + 目标先删释放路径（F1，与改名对称）。
 
 use chrono::{DateTime, Utc};
 use kernel_api::{fetch_all_both, fetch_optional_both, KernelError, Store};
@@ -142,6 +143,14 @@ async fn write_tx(
                     return Err(storage_err(e));
                 }
             }
+            // 删除先于改写（审计 F1）：目标路径先释放，子文件夹上移可复用目标路径（/a/a → /a）。
+            if let Some(id) = delete_folder {
+                sqlx::query(concat!("DELETE FROM session_folders WHERE id = ", $ph, "1"))
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(storage_err)?;
+            }
             for (id, new_path) in folder_updates {
                 sqlx::query(concat!(
                     "UPDATE session_folders SET path = ", $ph, "1, updated_at = ", $ph, "2 WHERE id = ", $ph, "3"
@@ -163,13 +172,6 @@ async fn write_tx(
                 .execute(&mut *tx)
                 .await
                 .map_err(storage_err)?;
-            }
-            if let Some(id) = delete_folder {
-                sqlx::query(concat!("DELETE FROM session_folders WHERE id = ", $ph, "1"))
-                    .bind(id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(storage_err)?;
             }
             tx.commit().await.map_err(storage_err)?;
         }};
@@ -319,6 +321,8 @@ pub async fn rename_folder(
 
 /// 删文件夹：子树（文件夹 + 会话）上移一层（移除本段），绝不级联删会话；
 /// 父链同事务登记（审计 A：上移目标祖先必在登记表，前端树可见）；单事务原子。
+/// **冲突预检（审计 F1，与 rename 对称）**：上移后路径不得与子树外既有文件夹冲突 → Conflict(400)；
+/// 目标自身路径除外（同事务先删目标，子文件夹可上移复用其路径，如 /a/a → /a）。
 pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, FolderError> {
     let Some(target) = get_folder(store, user, id).await.map_err(storage_err)? else {
         return Ok(false);
@@ -334,6 +338,18 @@ pub async fn delete_folder(store: &Store, user: Uuid, id: Uuid) -> Result<bool, 
         .filter(|f| f.id != id && path::is_within(&target.path, &f.path))
         .map(|f| (f.id, path::rewrite_prefix(&f.path, &target.path, &new_base)))
         .collect();
+    // 子树外既有路径集（冲突预检基准；目标自身即将删除，其路径视为释放）。
+    let outside: std::collections::HashSet<&str> = folders
+        .iter()
+        .filter(|f| f.id != id && !path::is_within(&target.path, &f.path))
+        .map(|f| f.path.as_str())
+        .collect();
+    if let Some((_, p)) = folder_updates
+        .iter()
+        .find(|(_, p)| outside.contains(p.as_str()))
+    {
+        return Err(FolderError::Conflict(p.clone()));
+    }
     let sessions = session_paths(store, user, module).await?;
     let session_updates: Vec<(Uuid, Option<String>)> = sessions
         .iter()
@@ -411,7 +427,7 @@ pub async fn move_session(
                 .await
                 .map_err(storage_err)?;
             }
-            sqlx::query(concat!(
+            let n = sqlx::query(concat!(
                 "UPDATE sessions SET path = ", $ph, "1, updated_at = ", $ph, "2 ",
                 "WHERE id = ", $ph, "3 AND user_id = ", $ph, "4"
             ))
@@ -421,8 +437,13 @@ pub async fn move_session(
             .bind(user)
             .execute(&mut *tx)
             .await
-            .map_err(storage_err)?;
+            .map_err(storage_err)?
+            .rows_affected();
             tx.commit().await.map_err(storage_err)?;
+            // 审计 O8：预检后并发删除 → rows=0，不假成功。
+            if n == 0 {
+                return Ok(false);
+            }
         }};
     }
     match store {

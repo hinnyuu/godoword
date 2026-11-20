@@ -60,7 +60,11 @@ fn storage_err(e: impl std::fmt::Display) -> KernelError {
     KernelError::Storage(e.to_string())
 }
 
-/// 确保用户行存在（缺失则建，is_admin=true）。M1b 供 dev 种入与前瞻；M1c 认证接管正式用户创建。
+/// 确保用户行存在（缺失则建，is_admin=true）。
+///
+/// **测试夹具专用（审计 O6）**：会创建管理员用户，生产用户创建一律走 auth-local register
+/// （首用户事务锁/邀请码/密码策略）；新代码不得在请求路径调用。
+#[doc(hidden)]
 pub async fn ensure_user(store: &Store, id: Uuid) -> Result<(), KernelError> {
     let exists: Option<(Uuid,)> =
         fetch_optional_both!(store, "SELECT id FROM users WHERE id = $1", (Uuid,), id)

@@ -461,7 +461,11 @@ pub async fn update_display_name(
     get_user(store, user).await
 }
 
-/// 设用户状态（active/disabled，管理员用）。禁用时撤销全部会话（审计 C3）。
+/// 设用户状态（active/disabled）。禁用时撤销全部会话（审计 C3）。
+///
+/// **遗留无守卫面（审计 O6）**：生产 REST 一律走 [`set_user_status_guarded`]（防自禁/防禁最后管理员/串行化）；
+/// 本函数无守卫，仅测试夹具用，新代码不得用于请求路径。
+#[doc(hidden)]
 pub async fn set_user_status(store: &Store, user: UserId, status: &str) -> Result<bool, AuthError> {
     let n = execute_both!(
         store,
@@ -642,7 +646,11 @@ pub async fn set_user_status_guarded(
     }
 }
 
-/// 管理员重置用户密码（设新密码哈希 + 撤销旧会话，**同事务原子**，审计 R1；管理员权限由组合根校验）。
+/// 管理员重置用户密码（设新密码哈希 + 撤销旧会话，**同事务原子**，审计 R1）。
+///
+/// **遗留面（审计 O6）**：生产 REST 走 token 化流程（[`create_reset_token`] + [`reset_with_token`]，
+/// 管理员不知晓新密码）；本函数仅测试夹具用，新代码不得用于请求路径。
+#[doc(hidden)]
 pub async fn admin_reset_password(
     store: &Store,
     target: UserId,

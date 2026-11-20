@@ -25,10 +25,12 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   禁用账户旧 cookie 失效，审计 C3）/`delete_session`（登出）/`revoke_user_sessions`（禁用/重置撤销）。
   `auth_sessions` 表（kernel 0002）与单次 `tokens` 分离（可撤销）。
 - 邀请码：`create_invite`（明文码返回，存 hash + max_uses + 可选 expires）。
-- 管理：`list_users`/`set_user_status`（**禁用撤销会话**）/`is_admin`（**须 active**）/`active_admin_count`（防禁最后管理员）/
+- 管理：`list_users`/`set_user_status`（**禁用撤销会话**；**遗留无守卫面，#[doc(hidden)] 仅测试用，
+  生产 REST 一律走 set_user_status_guarded，审计 O6**）/`is_admin`（**须 active**）/`active_admin_count`（防禁最后管理员）/
   `set_user_status_guarded`（**串行化守卫 + 事务原子，审计 R7**：防自禁/防禁最后活跃管理员/禁用撤销会话；
   PG `pg_advisory_xact_lock` / SQLite 条件 UPDATE 子查询写锁内求值，防并发互禁→零管理员）/
-  `admin_reset_password`（设密码 + 撤销会话，**同事务原子 + validate_password**，审计 R1）。
+  `admin_reset_password`（设密码 + 撤销会话，**同事务原子 + validate_password**，审计 R1；
+  **遗留面 #[doc(hidden)] 仅测试用，生产走 token 化流程 create_reset_token + reset_with_token，审计 O6**）。
   **重置 token 化（审计 C8）+ 事务原子单次性（审计 R1）+ 防放大/假成功（审计 N4）**：`create_reset_token`（tokens 表 purpose=password_reset，单次 1h；
   **无本地凭据账户拒绝签发**）+ `reset_with_token`（**廉价预查询令牌有效性后再 Argon2**，无效令牌不算哈希防公开端点放大；
   先 validate_password（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**（used_at IS NULL 查 rows_affected，仅一个并发请求成功）
