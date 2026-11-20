@@ -1,6 +1,6 @@
 //! OpenAPI 文档聚合（utoipa）。M1c 落 REST 标注，M1d 由此生成 TS 客户端。
 //! SSE 精确表述（审计 D4）：`/messages` **path 入** OpenAPI，`SessionEvent` **事件 schema 不入**（单独协议文档维护）。
-//! models/voices 响应暂以通用 object 标注（ModelInfo/VoiceInfo 为 kernel-api 契约类型，精确 schema 待契约演进补）。
+//! models/voices 响应 typed（M1d 决策 B：kernel-api ModelInfo/VoiceInfo ToSchema）。
 //! **完整性（审计 R5/N1）**：CreateSessionReq 注册；`build_openapi` 注入 cookieAuth securityScheme + **操作级 security 矩阵**
 //! （公开 operation security:[]、受保护 cookieAuth，不用根级全局以免误伤公开端点）+ 所有 /api/v1 变更操作 CSRF
 //! `X-Requested-With` header + 403；单元测试锚定所有本地 `$ref` 可解析 + 独立公开操作矩阵。
@@ -15,7 +15,7 @@ use utoipa::OpenApi;
     info(
         title = "godoword API",
         version = "0.0.0",
-        description = "私有部署外语学习服务 REST API（M1c）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；\
+        description = "私有部署外语学习服务 REST API（M1d）。用户级端点经 cookie 会话认证（auth-local，未认证 401）；\
         变更请求须带 CSRF 自定义头 X-Requested-With（缺则 403）。SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 单独维护。"
     ),
     paths(
@@ -28,6 +28,8 @@ use utoipa::OpenApi;
         crate::auth::logout,
         crate::auth::reset_password,
         crate::auth::me,
+        crate::auth::change_password,
+        crate::auth::update_me,
         crate::auth::admin_reset,
         crate::auth::admin_invite,
         crate::auth::admin_users,
@@ -38,7 +40,15 @@ use utoipa::OpenApi;
         crate::rest::delete_session,
         crate::rest::messages,
         crate::rest::cancel,
+        crate::rest::move_session_path,
         crate::rest::get_audio,
+        crate::rest::audio_meta,
+        crate::prefs::get_preferences,
+        crate::prefs::put_preferences,
+        crate::folders::list_folders,
+        crate::folders::create_folder,
+        crate::folders::rename_folder,
+        crate::folders::delete_folder,
         crate::settings::create_provider,
         crate::settings::list_providers,
         crate::settings::get_provider,
@@ -46,6 +56,7 @@ use utoipa::OpenApi;
         crate::settings::delete_provider,
         crate::settings::provider_models,
         crate::settings::provider_voices,
+        crate::settings::provider_preview,
         crate::settings::create_binding,
         crate::settings::list_bindings,
         crate::settings::get_binding,
@@ -58,25 +69,47 @@ use utoipa::OpenApi;
         kernel::ConfigView,
         kernel::ProviderPreset,
         kernel::RegistrationMode,
+        kernel::Preferences,
+        kernel::Folder,
+        kernel::SessionListItem,
+        kernel_api::ModelInfo,
+        kernel_api::VoiceInfo,
+        kernel_api::ChatMessage,
+        kernel_api::WordTimestamp,
+        kernel_api::AudioFormat,
+        auth_local::UserInfo,
         crate::settings::CreateProviderReq,
         crate::settings::UpdateProviderReq,
         crate::settings::CreateBindingReq,
         crate::settings::UpdateBindingReq,
+        crate::settings::PreviewReq,
+        crate::settings::PreviewResp,
         crate::auth::RegisterReq,
         crate::auth::LoginReq,
         crate::auth::ResetReq,
         crate::auth::ResetPasswordReq,
         crate::auth::InviteReq,
         crate::auth::StatusReq,
+        crate::auth::ChangePasswordReq,
+        crate::auth::UpdateMeReq,
         crate::rest::MessageReq,
         crate::rest::CreateSessionReq,
+        crate::rest::SessionListResp,
+        crate::rest::SessionDetailResp,
+        crate::rest::AudioMetaResp,
+        crate::rest::MoveSessionReq,
+        crate::folders::CreateFolderReq,
+        crate::folders::RenameFolderReq,
+        crate::folders::FolderListResp,
     )),
     tags(
         (name = "system", description = "存活/就绪/元信息/配置"),
-        (name = "auth", description = "注册/登录/登出/当前用户"),
+        (name = "auth", description = "注册/登录/登出/当前用户/自助改密"),
         (name = "admin", description = "管理员重置/邀请码/用户管理"),
-        (name = "sessions", description = "会话与回合（SSE）"),
-        (name = "providers", description = "BYOK provider 管理 + 测试连接"),
+        (name = "sessions", description = "会话与回合（SSE）+ 虚拟路径移动"),
+        (name = "folders", description = "会话文件夹（虚拟路径目录树）"),
+        (name = "preferences", description = "用户偏好（跨设备随账户）"),
+        (name = "providers", description = "BYOK provider 管理 + 测试连接 + 音色试听"),
         (name = "bindings", description = "模块→provider 绑定"),
     )
 )]

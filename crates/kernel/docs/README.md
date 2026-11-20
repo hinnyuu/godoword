@@ -2,7 +2,7 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1c + M1c-hardening 加固）
+## 当前事实（M1c + M1c-hardening 加固 + M1d 用户级扩展）
 
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
@@ -52,8 +52,21 @@
 `src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接 + `checkpoint` 退出 WAL 屏障）+ `src/migrate.rs`（自定义双后端迁移 runner：
 版本表 + checksum 防漂移 + 迁移前备份 + **每条迁移同事务原子，审计 A2**）+ `migrations/0001_init.sql`（11 表）
 + `0002_auth.sql`（users.username + auth_sessions）+ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）
-+ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）。
++ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）+ `0005_preferences_folders.sql`（M1d user_preferences/session_folders/sessions.path）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
+
+## M1d 用户级扩展（偏好/文件夹/会话元数据）
+
+- `src/path.rs`：会话虚拟路径域逻辑（NFC 归一化 + 固定上限校验 + 前缀匹配/子树改写 helpers，服务端权威）。详见 [storage.md](storage.md)。
+- `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema）+ get/put（UPSERT last-write-wins，跨设备随账户）。
+- `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+祖先链同事务登记+UNIQUE 冲突→Conflict /
+  rename 子树批量改写防环+**冲突预检（子树外既有路径）+改写后上限重校验**+目标祖先链登记 /
+  delete 子树上移一层绝不删会话+父链登记 / move_session 目标链同事务登记+自取命名空间）；
+  读经薄分发宏、写收口驱动专属事务原子（审计修复 A/B/D：孤儿路径/冲突 500/深度越界）。
+- `src/session_meta.rs`：`SessionListItem`（title 首条用户消息截断 / created_at / last_active=MAX(messages.created_at) /
+  message_count / path / module_id）+ `list_sessions_meta`（SQL GROUP BY 聚合 + Rust 侧首条消息/前缀/模块过滤）+ `get_session_path`。
+- 双后端测试 `tests/m1d.rs`（偏好 UPSERT / 文件夹归一化/UNIQUE/子树改写/删非空上移/移动注册/防环/越权 / 会话元数据+过滤；
+  **审计负例**：改名冲突 Conflict / 派生路径冲突 / 越权 rename / 孤儿路径祖先登记 / create 祖先链 / 改写深度越界拒绝）。
 
 ## 加密（M1b）
 
@@ -86,7 +99,7 @@ capability/role 为 lowercase 字符串。双后端测试 `tests/binding.rs`（5
 `src/config.rs` `Config`（来源轴：env > 配置文件 > 内置默认，history 0530）。配置文件 `/data/config.toml`
 （`GODOWORD_CONFIG` 可改路径），TOML + serde。字段：listen（默认 `[::]:8080`）、data_dir（默认 `/data`）、
 database_url（设则 PG，否则 SQLite `data_dir/db/godoword.sqlite`）、registration_mode（invite/open/disabled，默认 invite）、
-provider_presets（预设：端点+适配器+建议模型，**不含 key**）、**trusted_proxies（可信代理 IP/CIDR 列表，审计 R9.4，默认空）**。
+provider_presets（预设：端点+适配器+建议模型，**不含 key**；**内置默认 qwen-llm/qwen-tts**，P8 验收修复首跑一键模板，config.toml 可覆盖/追加）、**trusted_proxies（可信代理 IP/CIDR 列表，审计 R9.4，默认空）**。
 env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODOWORD_REGISTRATION_MODE`/
 `GODOWORD_COOKIE_SECURE`/`GODOWORD_TRUSTED_PROXIES`（逗号分隔）。`EnvSource` trait 抽象 env 访问（无全局竞态单元测试）。
 `view()` 脱敏只读视图（GET /config）：仅暴露 database_backend 类型，**不暴露连接串凭据**；trusted_proxies 暴露（部署可见）。

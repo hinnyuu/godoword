@@ -28,12 +28,15 @@
 8. **gitleaks**：密钥扫描；**下载二进制经 sha256 校验和验证后执行**；豁免收窄为占位符与
    CI 测试凭据 regex，保留 docs/wiki/history 目录扫描。
 9. **依赖许可证**：cargo-deny 白名单（MIT/Apache-2.0/BSD/ISC 等），其余个案审。
-10. **Rust**：fmt / clippy / check / test。**前端**：lint / build（M1 起）。
+10. **Rust**：fmt / clippy / check / test。**前端**（M1d 起 frontend job，**main 分支保护 required check + image job 依赖 frontend**，审计 G1）：
+    OpenAPI 生成类型 freshness（gen + git diff --exit-code schema.d.ts）+
+    core tsc 类型检查 + vitest 域逻辑单测 + shell svelte-check + vite build。
 11. **构建推送**：镜像推送 `ghcr.io/hinnyuu/godoword:pr-N` 与 `sha-xxxx`。
 12. **容器冒烟测试**：`scripts/acceptance/smoke.sh`，CI 在镜像构建后以 podman 自动执行
-    （healthz/readyz/meta/config/openapi/静态、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
+    （healthz/readyz/meta/config/openapi/SPA 伺服（title+assets）、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
     注册首用户成管理员/cookie/me/会话/providers + CSRF 守卫 403、/data 初始化断言 db/master.key 0600/backups、
-    完整 uid/卷矩阵 rootless named/bind 非 1000 uid + rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用），
+    完整 uid/卷矩阵 rootless named/bind 非 1000 uid + rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用、
+    **M1d REST 面：偏好 round-trip/文件夹祖先链登记+删除/改密错旧密 403/试听文本上限 400/audio-meta 缺失 404**），
     资源隔离 + 自动清理。容器以 GODOWORD_COOKIE_SECURE=false 运行（CI HTTP cookie 可回传）。
 13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 跑 **workspace 级**
     `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；

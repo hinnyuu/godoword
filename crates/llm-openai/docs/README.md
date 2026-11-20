@@ -14,6 +14,8 @@
 - 错误归一化（`map_error`）：401/403→Auth、402→Quota、429→RateLimit(retry_after)、404→ModelUnavailable、
   400 context_length→ContextLength、5xx→Network(retryable)、其余→Internal。
 - `base_url` 为 v1 根（如 `https://host/compatible-mode/v1`），适配器追加 `/models`、`/chat/completions`。
+- **超时（审计 F1）**：reqwest connect 10s + read 30s（块间隔，流式安全；上游停滞→Network(retryable)，
+  kernel 重试/硬超时兜底；测试端点不无限挂起）。
 
 测试：`src/sse.rs` 单元测试用 fixture 黄金锚定归一化（单块 + 7 字节切片跨块缓冲，83 块精确断言）；
 `tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
@@ -43,3 +45,4 @@
 
 - token 估算当前字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
 - anthropic 兼容另立 llm-anthropic 适配器（roadmap 远期）。
+- kernel-api M1d 新增 utoipa 有意耦合：本适配器返回的 `ModelInfo` 派生 ToSchema（OpenAPI schema 补全→前端类型生成），适配器实现不变。

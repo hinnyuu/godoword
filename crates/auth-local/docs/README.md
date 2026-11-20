@@ -14,6 +14,9 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
 - `validate_password`（**统一密码策略，审计 R1**，register/reset 共用）：8–128 字符 + 必含字母与数字
   （`is_alphabetic`/`is_numeric`）；区分大小写（绝不折叠）；建议加特殊字符（不强制，提示文案 surface UI）。
   失败复用 `AuthError::RegistrationRestricted`（→400），不改 kernel-api。
+- `validate_username`/`validate_display_name`（**审计 F4 + 二审 R2-3**）：用户名 trim 后 1–64 字符无控制字符、
+  **首尾无空白**（存储不 trim，防视觉同形异码登录陷阱）；显示名 ≤64 字符无控制字符（可空串）。
+  register/update_display_name 入口校验。
 - `register(store, username, password, display_name, invite_code, require_invite)`：
   **首用户事务锁成管理员**（SQLite 单写者串行 / PG `pg_advisory_xact_lock`，防竞态，history 0600）；
   username 唯一；require_invite 且非首用户 → 校验邀请码（max_uses/expires）并 used_count+1。
@@ -30,6 +33,10 @@ cookie/CSRF/登录限流属 HTTP 层（组合根 godoword）。数据挂稳定 u
   **无本地凭据账户拒绝签发**）+ `reset_with_token`（**廉价预查询令牌有效性后再 Argon2**，无效令牌不算哈希防公开端点放大；
   先 validate_password（弱密码不消费令牌）→ 驱动专属事务内**条件 UPDATE 认领**（used_at IS NULL 查 rows_affected，仅一个并发请求成功）
   → 改密（**rows_affected==1 否则回滚令牌认领返回失败**，无凭据不假成功）→ 撤销会话 → 提交。PG 行锁 / SQLite 单写者保并发安全；管理员不知晓新密码）。
+- **自助改密（M1d）**：`change_password(store,user,old,new,current_token)`——验旧密（联查 status，禁用→Disabled）→
+  `validate_password` 统一策略→事务改密（rows==1）→撤销**其他**会话（`token_hash != current`，保留当前；None 则全撤）。
+  HTTP 层错旧密映射 **403**（审计 M7：401 专属用户会话失效，防前端误登出）+ 用户级限流（F5）。
+  `update_display_name`（账户自助编辑显示名，F4 校验）。`UserInfo` 派生 `utoipa::ToSchema`（OpenAPI schema 补全→前端类型生成）。
 
 ## schema（kernel 0002 迁移）
 

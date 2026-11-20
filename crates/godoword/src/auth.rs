@@ -261,7 +261,7 @@ async fn user_info(store: &Store, user: UserId) -> Result<Value, StatusCode> {
 
 /// 注册（首用户成管理员；注册模式由配置；成功发会话 cookie）。
 #[utoipa::path(post, path = "/api/v1/auth/register", request_body = RegisterReq, tag = "auth",
-    responses((status = 200, body = Value), (status = 400), (status = 403), (status = 429)))]
+    responses((status = 200, body = auth_local::UserInfo), (status = 400), (status = 403), (status = 429)))]
 pub async fn register(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
@@ -306,7 +306,7 @@ pub async fn register(
 
 /// 登录（验身成功发会话 cookie）。
 #[utoipa::path(post, path = "/api/v1/auth/login", request_body = LoginReq, tag = "auth",
-    responses((status = 200, body = Value), (status = 401), (status = 403), (status = 429)))]
+    responses((status = 200, body = auth_local::UserInfo), (status = 401), (status = 403), (status = 429)))]
 pub async fn login(
     State(st): State<Arc<AppState>>,
     ConnectInfo(addr): ConnectInfo<std::net::SocketAddr>,
@@ -354,12 +354,81 @@ pub async fn logout(
 }
 
 /// 当前用户信息。
-#[utoipa::path(get, path = "/api/v1/auth/me", tag = "auth", responses((status = 200, body = Value), (status = 401)))]
+#[utoipa::path(get, path = "/api/v1/auth/me", tag = "auth", responses((status = 200, body = auth_local::UserInfo), (status = 401)))]
 pub async fn me(
     State(st): State<Arc<AppState>>,
     AuthUser(user): AuthUser,
+) -> Result<Json<auth_local::UserInfo>, StatusCode> {
+    auth_local::get_user(&st.store, user)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+/// 自助改密请求。
+#[derive(Clone, Deserialize, utoipa::ToSchema)]
+pub struct ChangePasswordReq {
+    pub old_password: String,
+    pub new_password: String,
+}
+
+/// 自助改密错误映射（审计 M7）：**401 专属用户会话失效（AuthUser）**；
+/// 旧密码错误是凭据校验失败而非会话失效 → 403（防前端 401 钩子误登出，同 upstream_status 502 语义）。
+fn change_password_err_status(e: kernel_api::AuthError) -> StatusCode {
+    match e {
+        kernel_api::AuthError::InvalidCredentials => StatusCode::FORBIDDEN,
+        other => auth_err_status(other),
+    }
+}
+
+/// 自助改密（验旧密→统一策略→撤销其他会话保留当前；IP/用户限流防旧密在线 brute-force，审计 F5）。
+#[utoipa::path(post, path = "/api/v1/auth/change-password", request_body = ChangePasswordReq, tag = "auth",
+    responses((status = 200, body = Value), (status = 400), (status = 401), (status = 403), (status = 404), (status = 429)))]
+pub async fn change_password(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    headers: HeaderMap,
+    Json(req): Json<ChangePasswordReq>,
 ) -> Result<Json<Value>, StatusCode> {
-    Ok(Json(user_info(&st.store, user).await?))
+    if !st.rate_limiter.check(&format!("chg:{}", user.0)) {
+        return Err(StatusCode::TOO_MANY_REQUESTS);
+    }
+    let token = parse_cookie(&headers, SESSION_COOKIE);
+    match auth_local::change_password(
+        &st.store,
+        user,
+        &req.old_password,
+        &req.new_password,
+        token.as_deref(),
+    )
+    .await
+    {
+        Ok(true) => Ok(Json(json!({ "ok": true }))),
+        Ok(false) => Err(StatusCode::NOT_FOUND),
+        Err(e) => Err(change_password_err_status(e)),
+    }
+}
+
+/// 编辑显示名请求。
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct UpdateMeReq {
+    pub display_name: String,
+}
+
+/// 编辑当前用户显示名。
+#[utoipa::path(put, path = "/api/v1/auth/me", request_body = UpdateMeReq, tag = "auth",
+    responses((status = 200, body = auth_local::UserInfo), (status = 400), (status = 401), (status = 404)))]
+pub async fn update_me(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Json(req): Json<UpdateMeReq>,
+) -> Result<Json<auth_local::UserInfo>, StatusCode> {
+    auth_local::update_display_name(&st.store, user, &req.display_name)
+        .await
+        .map_err(auth_err_status)?
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 /// 管理员重置用户密码。
@@ -410,12 +479,15 @@ pub async fn reset_password(
 
 /// 管理员创建邀请码。
 #[utoipa::path(post, path = "/api/v1/admin/invites", request_body = InviteReq, tag = "admin",
-    responses((status = 200, body = Value), (status = 401), (status = 403)))]
+    responses((status = 200, body = Value), (status = 400), (status = 401), (status = 403)))]
 pub async fn admin_invite(
     State(st): State<Arc<AppState>>,
     AdminUser(admin): AdminUser,
     Json(req): Json<InviteReq>,
 ) -> Result<Json<Value>, StatusCode> {
+    if req.max_uses < 1 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let code = auth_local::create_invite(&st.store, admin, req.max_uses, None)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -424,15 +496,15 @@ pub async fn admin_invite(
 
 /// 管理员列出用户。
 #[utoipa::path(get, path = "/api/v1/admin/users", tag = "admin",
-    responses((status = 200, body = Value), (status = 401), (status = 403)))]
+    responses((status = 200, body = Vec<auth_local::UserInfo>), (status = 401), (status = 403)))]
 pub async fn admin_users(
     State(st): State<Arc<AppState>>,
     AdminUser(_admin): AdminUser,
-) -> Result<Json<Value>, StatusCode> {
+) -> Result<Json<Vec<auth_local::UserInfo>>, StatusCode> {
     let users = auth_local::list_users(&st.store)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    Ok(Json(serde_json::to_value(users).unwrap_or(json!([]))))
+    Ok(Json(users))
 }
 
 /// 设用户状态请求。
@@ -467,6 +539,108 @@ pub async fn admin_set_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn change_password_handler_403_then_429() {
+        use crate::testutil::{state, user_with_token, TtsMode};
+        let st = state(TtsMode::Ok).await;
+        let (user, token) = user_with_token(&st, "cp1").await;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            format!("{SESSION_COOKIE}={token}").parse().unwrap(),
+        );
+        let req = ChangePasswordReq {
+            old_password: "wrong-old".to_string(),
+            new_password: "new-pass-123".to_string(),
+        };
+        // M7：错旧密 → 403（非 401）；F5：10 次后限流 429。
+        for i in 0..10 {
+            let r = change_password(
+                State(st.clone()),
+                AuthUser(user),
+                headers.clone(),
+                Json(req.clone()),
+            )
+            .await;
+            assert_eq!(r.unwrap_err(), StatusCode::FORBIDDEN, "第 {i} 次错旧密 403");
+        }
+        let r = change_password(
+            State(st.clone()),
+            AuthUser(user),
+            headers.clone(),
+            Json(req.clone()),
+        )
+        .await;
+        assert_eq!(
+            r.unwrap_err(),
+            StatusCode::TOO_MANY_REQUESTS,
+            "第 11 次限流 429"
+        );
+    }
+
+    #[tokio::test]
+    async fn change_password_handler_keeps_current_revokes_others() {
+        use crate::testutil::{state, user_with_token, TtsMode};
+        let st = state(TtsMode::Ok).await;
+        let (user, token) = user_with_token(&st, "cp2").await;
+        let other = auth_local::create_session(&st.store, user, chrono::Duration::hours(1))
+            .await
+            .unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::COOKIE,
+            format!("{SESSION_COOKIE}={token}").parse().unwrap(),
+        );
+        let _ = change_password(
+            State(st.clone()),
+            AuthUser(user),
+            headers,
+            Json(ChangePasswordReq {
+                old_password: "test-pass-123".to_string(),
+                new_password: "new-pass-123".to_string(),
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            auth_local::validate_session(&st.store, &token)
+                .await
+                .unwrap(),
+            Some(user),
+            "当前会话保留"
+        );
+        assert!(
+            auth_local::validate_session(&st.store, &other)
+                .await
+                .unwrap()
+                .is_none(),
+            "其他会话撤销"
+        );
+    }
+
+    #[test]
+    fn change_password_wrong_old_is_403_not_401() {
+        // M7：401 专属用户会话失效；旧密错 → 403（防前端 401 钩子误登出）。
+        assert_eq!(
+            change_password_err_status(kernel_api::AuthError::InvalidCredentials),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            change_password_err_status(kernel_api::AuthError::Disabled),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            change_password_err_status(kernel_api::AuthError::RegistrationRestricted(
+                "弱密码".to_string()
+            )),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            change_password_err_status(kernel_api::AuthError::Internal("x".to_string())),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
 
     #[test]
     fn rate_limit_blocks_after_10() {

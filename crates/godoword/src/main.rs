@@ -3,14 +3,18 @@
 //! 用户级端点经 cookie 会话认证（auth-local）；dev-bypass 已删除（DEV-DEBT T1 回归）。
 
 mod auth;
+mod folders;
 mod init;
 mod openapi;
+mod prefs;
 mod rest;
 mod settings;
+#[cfg(test)]
+mod testutil;
 
 use axum::{
     middleware,
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use kernel::{
@@ -136,7 +140,8 @@ async fn main() {
         .route("/api/v1/auth/login", post(auth::login))
         .route("/api/v1/auth/logout", post(auth::logout))
         .route("/api/v1/auth/reset-password", post(auth::reset_password))
-        .route("/api/v1/auth/me", get(auth::me))
+        .route("/api/v1/auth/change-password", post(auth::change_password))
+        .route("/api/v1/auth/me", get(auth::me).put(auth::update_me))
         .route("/api/v1/admin/reset", post(auth::admin_reset))
         .route("/api/v1/admin/invites", post(auth::admin_invite))
         .route("/api/v1/admin/users", get(auth::admin_users))
@@ -154,7 +159,21 @@ async fn main() {
         )
         .route("/api/v1/sessions/{id}/messages", post(rest::messages))
         .route("/api/v1/sessions/{id}/cancel", post(rest::cancel))
+        .route("/api/v1/sessions/{id}/path", put(rest::move_session_path))
         .route("/api/v1/audio/{id}", get(rest::get_audio))
+        .route("/api/v1/audio/{id}/meta", get(rest::audio_meta))
+        .route(
+            "/api/v1/preferences",
+            get(prefs::get_preferences).put(prefs::put_preferences),
+        )
+        .route(
+            "/api/v1/folders",
+            get(folders::list_folders).post(folders::create_folder),
+        )
+        .route(
+            "/api/v1/folders/{id}",
+            put(folders::rename_folder).delete(folders::delete_folder),
+        )
         .route(
             "/api/v1/providers",
             post(settings::create_provider).get(settings::list_providers),
@@ -172,6 +191,10 @@ async fn main() {
         .route(
             "/api/v1/providers/{id}/voices",
             get(settings::provider_voices),
+        )
+        .route(
+            "/api/v1/providers/{id}/preview",
+            post(settings::provider_preview),
         )
         .route(
             "/api/v1/bindings",
@@ -203,7 +226,7 @@ async fn main() {
         Err(e) => panic!("绑定端口失败：{e}"),
     };
     let local = listener.local_addr().expect("读取本地地址");
-    tracing::info!("godoword M1c 监听 {local}");
+    tracing::info!("godoword 监听 {local}");
 
     axum::serve(
         listener,

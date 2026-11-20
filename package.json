@@ -1,0 +1,19 @@
+{
+  "name": "godoword-web",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "web/core",
+    "web/shell"
+  ],
+  "scripts": {
+    "build": "npm run build -w @godoword/shell",
+    "dev": "npm run dev -w @godoword/shell",
+    "test": "npm run test -w @godoword/core",
+    "check": "npm run check -w @godoword/shell",
+    "lint": "npm run lint -w @godoword/shell && npm run lint -w @godoword/core"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

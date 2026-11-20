@@ -7,3 +7,6 @@
 规格改动会触发全量文档审查，防止各模块各自假设而漂移。
 
 开发者向的精确 trait 定义见 [docs/contract.md](../docs/contract.md)。
+
+M1d 起契约还承担前端类型生成的单一事实源：REST 用到的共享类型（模型/音色/聊天消息/词级时间戳/音频编码）
+派生 OpenAPI schema（utoipa 有意耦合，与 axum/sqlx 并列），前端由此生成 TypeScript 类型，防前后端契约漂移。

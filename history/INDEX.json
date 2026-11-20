@@ -1195,5 +1195,323 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-19-2130-m1d-p1-frontend-audio.md",
+    "title": "M1d P1 实现：前端工作区骨架 + 音频引擎（风险前置 spike）",
+    "date": "2026-11-19T21:30+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "svelte",
+      "vite",
+      "audio",
+      "audioworklet",
+      "vitest",
+      "workspace",
+      "ci",
+      "spike"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-19-2230-m1d-p2-backend.md",
+    "title": "M1d P2 实现：后端扩展 + OpenAPI schema 补全 + 契约级全量审查",
+    "date": "2026-11-19T22:30+08:00",
+    "keywords": [
+      "m1d",
+      "backend",
+      "migration",
+      "virtual-path",
+      "preferences",
+      "folders",
+      "openapi",
+      "utoipa",
+      "contract",
+      "full-audit",
+      "change-password"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-19-2310-m1d-p3-web-core.md",
+    "title": "M1d P3 实现：web/core 领域核心接线（api/sse/session/theme/i18n/prefs）",
+    "date": "2026-11-19T23:10+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "web-core",
+      "openapi-fetch",
+      "openapi-typescript",
+      "sse",
+      "theme",
+      "i18n",
+      "prefs",
+      "freshness"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-19-2345-m1d-p4-shell-auth.md",
+    "title": "M1d P4 实现：shell 基础 + 认证/管理/引导 UI + core 服务层",
+    "date": "2026-11-19T23:45+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "shell",
+      "svelte",
+      "auth",
+      "admin",
+      "onboarding",
+      "router",
+      "i18n",
+      "services",
+      "intoparams"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0010-m1d-p5-settings.md",
+    "title": "M1d P5 实现：设置 UI（provider/绑定/音色试听/主题/偏好）",
+    "date": "2026-11-20T00:10+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "settings",
+      "provider",
+      "binding",
+      "voice-preview",
+      "theme",
+      "preferences"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0040-m1d-p6-p7-ui-build.md",
+    "title": "M1d P6+P7 实现：会话 UI（对话/文件夹树/音频高亮）+ Dockerfile node 构建/SPA 伺服",
+    "date": "2026-11-20T00:40+08:00",
+    "keywords": [
+      "m1d",
+      "frontend",
+      "chat",
+      "sse",
+      "audio",
+      "highlight",
+      "folder-tree",
+      "dockerfile",
+      "node",
+      "spa",
+      "smoke"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0130-m1d-p8-acceptance-fixes.md",
+    "title": "M1d P8 验收修复（首轮人工验收发现 4 缺陷）",
+    "date": "2026-11-20T01:30+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "presets",
+      "upstream-401",
+      "logout",
+      "session-proliferation",
+      "test-connection"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0210-m1d-p8-chat-fix.md",
+    "title": "M1d P8 验收修复第二轮（对话空气泡 + 测试反馈位置）",
+    "date": "2026-11-20T02:10+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "svelte-runes",
+      "reactivity",
+      "chat",
+      "streaming"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0240-m1d-p8-prefs-fix.md",
+    "title": "M1d P8 验收修复第三轮（主题偏好登录后丢失 + CSS 样例 + Markdown 延期）",
+    "date": "2026-11-20T02:40+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "bugfix",
+      "preferences",
+      "theme",
+      "login",
+      "markdown",
+      "roadmap"
+    ],
+    "scope": [
+      "project",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-0330-m1d-accepted.md",
+    "title": "M1d 完成合并验收（Svelte 图形界面里程碑闭环）",
+    "date": "2026-11-20T03:30+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "merge",
+      "frontend",
+      "svelte",
+      "complete",
+      "milestone"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1240-m1d-audit-fixes.md",
+    "title": "M1d 合并前全量审计 + 侧重审计修复轮（缺陷≠重议）",
+    "date": "2026-11-20T12:40+08:00",
+    "keywords": [
+      "m1d",
+      "audit",
+      "folders",
+      "virtual-path",
+      "change-password",
+      "preview",
+      "timeout",
+      "reactivity",
+      "i18n",
+      "ci",
+      "required-check"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local",
+      "llm-openai",
+      "tts-qwen-audio"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1320-m1d-second-audit.md",
+    "title": "M1d 审计修复轮二审（修复代码自身审计 + 一审盲点补漏）",
+    "date": "2026-11-20T13:20+08:00",
+    "keywords": [
+      "m1d",
+      "second-audit",
+      "prefs",
+      "reactivity",
+      "provider",
+      "validation",
+      "username",
+      "audio",
+      "dispose",
+      "ssrf"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
   }
 ]

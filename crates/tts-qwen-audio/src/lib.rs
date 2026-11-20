@@ -24,9 +24,14 @@ pub struct QwenTtsProvider {
 
 impl QwenTtsProvider {
     /// 新建适配器（共享 reqwest 连接池）。
+    /// 超时（审计 F1）：connect 10s + read 30s（块间隔，流式安全；URL 模式下载亦受 read 超时约束）。
     pub fn new() -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(10))
+                .read_timeout(Duration::from_secs(30))
+                .build()
+                .expect("reqwest client 构建"),
         }
     }
 }

@@ -105,6 +105,9 @@ kernel 拥有 users/sessions/messages/providers/bindings/call_log/progress_event
 
 - 主密钥：env `GODOWORD_MASTER_KEY` 覆盖，否则自动生成 `/data/keys/master.key`（0600）；
   用户 key 以 AES-256-GCM 静态加密（每记录独立 nonce）。威胁模型：防静态泄露，不防运行中服务器被攻破。
+- **BYOK 转发面（风险接受，二审 R2-7）**：provider base_url 用户自填，服务端按址转发（含试听/测试端点）——
+  私有部署信任边界内（邀请制用户），不做内网隔离/URL 白名单；输入边界校验（adapter 已注册 + http(s) + 非空）
+  防误配，适配器 connect/read 超时防停滞。公网多租户部署须另行评估 SSRF 面（M4 OIDC 公网场景再议）。
 - 认证：数据挂稳定内部 user_id；auth-local（argon2）先行，auth-oidc（authentik）M4；
   注册默认 invite（首用户例外成为管理员）；管理员不可读用户 key。
 - 会话 cookie HttpOnly/Secure/SameSite；变更请求 CSRF 防御；登录限流。
@@ -120,7 +123,30 @@ bind 目录文件永远归宿主用户。默认双栈监听 `[::]:8080`（兼容
 podman bind mount 源目录须自建（与 docker 不同，podman 不自动创建）。
 生产文档给 quadlet（podman≥4.4）+ 反代 TLS；快速上手给 podman run + docker-compose。
 
-## 当前状态与 roadmap 差异（M1c + M1c-hardening + 二审收尾加固）
+## 前端（M1d 起）
+
+Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，history 0330）。npm workspaces 两层：
+
+- **web/core**（框架无关 TS，换框架存活）：音频引擎（PCM 解码/词级高亮/PcmQueue 纯逻辑 + AudioWorklet 处理器 +
+  AudioEngine 浏览器侧，vitest 重测纯逻辑）；**P3 已落** api（openapi-fetch + openapi-typescript 生成 schema.d.ts 提交 +
+  CI freshness diff，CSRF middleware + 401 钩子）/sse（fetch ReadableStream + eventsource-parser + SessionEvent 判别联合）/
+  session（路径 trie/NFC 镜像/校验）/theme（CSS 变量引擎 + 预设）/i18n（zh-CN catalog）/prefs（load/save 域函数）。
+  领域逻辑不进组件——shell 调 core 域函数（封装 api 细节，CSRF header param 等），不裸调 api。
+- **web/shell**（Svelte 5 视图层，runes 自动检测兼容 legacy lib）：**P4–P6 已落** svelte-spa-router hash 路由（静态伺服深链稳健）+
+  svelte-i18n（core zh-CN catalog）+ runes store（auth 用户态 / prefs 偏好+主题应用）+ 认证门 + 401 钩子 + AGPL 页脚；
+  页面 Login/Register/Reset/Admin/Onboarding/Settings（provider 三卡片+绑定矩阵+音色试听+主题面板+偏好）/
+  Home（ChatView 流式对话+音频卡片+词级高亮+usage+错误分流）/Sessions（SessionSidebar 文件夹目录树+会话元数据列表+移动/删除）。
+  core 服务层（api/services.ts）封装域函数，组件不裸调 api。
+  主题引擎地基：语义 CSS 变量（:root + data-theme 明暗），用户自定义变量经 prefs 注入（跨设备）。
+- **web/modules/<id>**：教学模块前端（M2+）。
+
+音频管线：AudioContext({sampleRate:24000}) 免重采样 + AudioWorklet 环形缓冲排队（欠载补静音）+
+高亮播放时钟（AudioContext.currentTime vs 词时间戳）；live 逐 chunk push，回放一次性 push PCM + meta words。
+worklet 经 Vite ?worker&url 打包独立脚本，引擎注入 URL（core 不依赖 bundler 语法）。
+构建：**P7 已落** Dockerfile 三阶段（rust builder + node:22-slim webbuilder npm ci→vite build + debian-slim 运行时，
+dist 拷入 web/shell/public）；前端 CI job（类型 freshness + core tsc + vitest + svelte-check + build）；冒烟断言 SPA 伺服（title + assets 引用）。
+
+## 当前状态与 roadmap 差异（M1 完成 M1a–M1d + 多轮审计加固）
 
 - 已落地：文档体系、关系图谱门禁、CI 流水线、kernel-api 契约 trait（含 speak 工具契约）、
   kernel 回合循环（内部接缝 + 默认教师 persona + 守护）、llm-openai/tts-qwen-audio 适配器、组合根会话 REST + SSE。
@@ -140,6 +166,11 @@ podman bind mount 源目录须自建（与 docker 不同，podman 不自动创�
   OpenAPI **操作级 security 矩阵**（公开端点不误伤，N1）+ cookieAuth/CSRF/$ref 全解析、test_gate 接 CI、
   旧/损坏/PCM-only sidecar 兼容 404 可再生（N7）+ 限流器容量满 fail-closed 保密禁（N5）+ 可信代理 XFF 最右不可信跳。
   各配失败/并发负例测试（**auth/journal/storage 并发与迁移回滚双后端；runtime 回合行为测试 SQLite**）。
-- 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、Svelte 前端（M1d）、教学模块（M2+）。
-- 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；web 静态占位（M1d 起 Svelte）；
+- 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、教学模块（M2+）。
+  **M1d 完成**：前端 Svelte 5 SPA（web/core 框架无关 + web/shell，认证/管理/引导/设置/对话/会话文件夹 + 音频词级高亮 live/回放 +
+  主题自定义 + 偏好跨设备）；后端扩展（0005 虚拟路径文件夹/偏好/会话元数据/音色试听/回放时间戳出口/自助改密）+
+  **OpenAPI schema 补全（kernel-api 5 类型 + UserInfo + 新 DTO ToSchema，utoipa 有意耦合→契约级审查）**；Dockerfile 三阶段 node 构建。
+  Markdown/HTML 渲染 + 移动布局优化延期远期。**合并前审计修复**（history 1240）：文件夹祖先链原子登记 + 改名冲突预检 + 上限重校验、
+  改密错旧密 403、试听上限/超时/计量、适配器 connect/read 超时、错误分流/usage 数字/三卡片/布局偏好/改名 UI、frontend required check。
+- 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；
   outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。

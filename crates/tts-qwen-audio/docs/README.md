@@ -18,6 +18,7 @@
 - 错误归一化（`map_error`）：401/403→Auth、429→RateLimit、404→ModelUnavailable、
   InvalidApiKey/AccessDenied→Auth、Throttling/quota→Quota、5xx→Network(retryable)、其余→Internal。
 - `base_url` 为 host 根（如 `https://host`），适配器追加 DashScope 路径。
+- **超时（审计 F1）**：reqwest connect 10s + read 30s（块间隔，流式安全；URL 模式下载亦受约束）。
 
 测试：`src/sse.rs` 单元测试用 fixture 黄金锚定（流式单块 + 13 字节切片，7 事件精确断言含 complete=52800 字节；
 URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
@@ -49,3 +50,4 @@ URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]
 
 - 3.1 系列日语专用音色本网关不存在（roadmap 未来网关扩展）。
 - 音色目录当前静态（本网关无音色 API）；未来网关若提供 API 可改动态拉取。
+- kernel-api M1d 新增 utoipa 有意耦合：本适配器返回的 `VoiceInfo`/`ModelInfo` 派生 ToSchema（OpenAPI schema 补全），适配器实现不变。

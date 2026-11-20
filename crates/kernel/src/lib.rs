@@ -8,14 +8,18 @@ mod binding;
 mod config;
 mod context;
 mod crypto;
+mod folders;
 mod journal;
 mod memory;
 mod migrate;
+mod path;
 mod persona;
+mod preferences;
 pub mod repo;
 mod runtime;
 mod seam;
 mod session;
+mod session_meta;
 mod speak;
 mod storage;
 
@@ -27,14 +31,23 @@ pub use context::{
     AssembledContext,
 };
 pub use crypto::MasterKey;
+pub use folders::{
+    create_folder, delete_folder, get_folder, list_folders, move_session, rename_folder, Folder,
+    FolderError,
+};
 pub use journal::{
-    dispatch_once, emit_progress, end_session, evict_session, lookup_summary_span, mark_processed,
-    pending_events, record_call, store_summary_span, summary_span_hash, CallRecord, OutboxEvent,
-    OutboxHandler,
+    call_log_count, call_log_rows, dispatch_once, emit_progress, end_session, evict_session,
+    lookup_summary_span, mark_processed, pending_events, record_call, store_summary_span,
+    summary_span_hash, CallRecord, OutboxEvent, OutboxHandler,
 };
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
+pub use path::{
+    depth, is_within, normalize_path, parent, rewrite_prefix, PathError, DEFAULT_NAMESPACE,
+    MAX_DEPTH, MAX_PATH_CHARS, MAX_SEGMENT_CHARS,
+};
 pub use persona::DEFAULT_TEACHER_PERSONA;
+pub use preferences::{get_preferences, put_preferences, Preferences};
 pub use repo::{Binding, Provider};
 pub use runtime::Runtime;
 pub use seam::{
@@ -42,4 +55,5 @@ pub use seam::{
     SessionRepo, StoredMessage,
 };
 pub use session::DbSessions;
-pub use storage::{checkpoint, open_pg, open_sqlite, ping};
+pub use session_meta::{get_session_path, list_sessions_meta, SessionListItem};
+pub use storage::{checkpoint, open_memory_sqlite, open_pg, open_sqlite, ping};

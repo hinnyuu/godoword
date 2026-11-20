@@ -44,6 +44,11 @@ pub const KERNEL_MIGRATIONS: &[Migration] = &[
         name: "summary_spans",
         sql: include_str!("../migrations/0004_summary_spans.sql"),
     },
+    Migration {
+        version: "0005",
+        name: "preferences_folders",
+        sql: include_str!("../migrations/0005_preferences_folders.sql"),
+    },
 ];
 
 const VERSION_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS _schema_migrations (

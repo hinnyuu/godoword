@@ -4,7 +4,7 @@
 LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-one，podman 优先、兼容 docker。
 
 - 许可证：AGPL-3.0（见 [LICENSE](LICENSE)）
-- 状态：M1c 完成（会话运行时 + 认证 + 管理 + 持久化 + 上下文淘汰 + 计量）并经多轮第三方审计加固，M1d 前端待启动（详见 [roadmap](docs/project/roadmap.md)）
+- 状态：M1d 完成（Svelte 图形界面：认证/管理/引导/设置/对话/会话文件夹 + 音频引擎词级高亮 + 主题自定义 + 偏好跨设备），后端经多轮审计加固（详见 [roadmap](docs/project/roadmap.md)）
 
 ## 产品愿景与核心需求
 
@@ -41,5 +41,6 @@ godoword 的核心是**让 LLM 担任语言教师、结合 TTS 完成听说教�
 
 ## 快速开始
 
-M1c 已能驱动 LLM 教师对话与语音合成，数据持久化到卷、key 静态加密、启动自动迁移备份与自适应降权，账户认证与对象级授权就绪。
-部署方式见 [wiki/deploy/quickstart](wiki/deploy/quickstart.md)。完整教学功能与配置界面随里程碑 M1d–M3 落地。
+M1d 提供完整图形界面：注册登录、BYOK 服务商配置（预设一键 + 音色试听）、与 LLM 教师对话（流式文本 + 语音 + 词级高亮跟读）、
+会话文件夹整理、主题自定义、偏好跨设备。数据持久化到卷、key 静态加密、启动自动迁移备份与自适应降权，账户认证与对象级授权就绪。
+部署方式见 [wiki/deploy/quickstart](wiki/deploy/quickstart.md)。自适应教学评估与对话模拟随里程碑 M2–M3 落地。

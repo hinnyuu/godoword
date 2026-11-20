@@ -1,8 +1,8 @@
 # 部署快速开始
 
-> 面向部署者。M1c 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
-> + provider/binding/config REST + 本地账户认证（auth-local）。用户级 REST 经 cookie 会话认证（未认证 401）；
-> 图形配置界面随 M1d 落地。架构见 [架构](../../docs/project/architecture.md)。
+> 面向部署者。M1d 镜像含完整初始化（自适应降权、卷初始化、主密钥、自动迁移备份）+ 会话 REST/SSE
+> + provider/binding/config REST + 本地账户认证（auth-local）+ **Svelte 图形界面**（浏览器访问即用）。
+> 用户级 REST 经 cookie 会话认证（未认证 401）。架构见 [架构](../../docs/project/architecture.md)。
 
 ## 前置
 
@@ -127,7 +127,7 @@ env 覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`/`GODO
 
 ## 说明
 
-- M1c 镜像含健康/就绪检查、会话 REST/SSE、provider/binding/config REST、本地账户认证（auth/admin REST）、OpenAPI（`/api/v1/openapi.json`）与静态占位页。
+- M1d 镜像含健康/就绪检查、会话 REST/SSE、provider/binding/config REST、本地账户认证（auth/admin REST）、用户偏好/会话文件夹/音色试听/自助改密、OpenAPI（`/api/v1/openapi.json`）与 **Svelte 图形界面**（Dockerfile node 阶段构建，浏览器访问即用；认证/设置/对话/管理）。
 - 回合对话与用户级 REST 经 cookie 会话认证（未认证返回 401）；注册首个用户自动成管理员，邀请码注册后续用户；配置界面 M1d。
   本地/HTTP 测试设 `GODOWORD_COOKIE_SECURE=false`（生产反代 TLS 下保持默认 true）。
 - 生产部署 quadlet systemd 单元 + 反向代理 TLS 见 [deploy/README](../../deploy/README.md)。
