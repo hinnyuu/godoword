@@ -144,7 +144,7 @@ Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，hi
 高亮播放时钟（AudioContext.currentTime vs 词时间戳）；live 逐 chunk push，回放一次性 push PCM + meta words。
 worklet 经 Vite ?worker&url 打包独立脚本，引擎注入 URL（core 不依赖 bundler 语法）。
 构建：**P7 已落** Dockerfile 三阶段（rust builder + node:22-slim webbuilder npm ci→vite build + debian-slim 运行时，
-dist 拷入 web/shell/public）；前端 CI job（类型 freshness + core tsc + vitest + svelte-check + build）；冒烟断言 SPA 伺服（title + assets 引用）。
+dist 拷入 web/shell/public，源内占位页仅开发态伺服）；前端 CI job（类型 freshness + core tsc + vitest + svelte-check + build）；冒烟断言 SPA 伺服（title + assets 引用）。
 
 ## 当前状态与 roadmap 差异（M1 完成 M1a–M1d + 多轮审计加固）
 

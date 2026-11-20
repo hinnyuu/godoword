@@ -24,7 +24,7 @@
 
 本地真 key 录制、去密钥/签名 URL 后的真实响应，作为归一化黄金测试锚点（CI 永不用真 key）：
 
-- `models.json`：`GET /models` 响应（模型目录，list_models 用）。
+- `models.json`：`GET /models` 响应脱敏样本（协议参考；list_models 由 live 测试覆盖，当前无单测引用此 fixture）。
 - `chat-stream-toolcall.sse`：`POST /chat/completions`（stream=true，定义 speak 工具）完整 SSE 流，
   覆盖 reasoning_content 增量 + text 增量 + tool_calls 增量组装 + finish_reason + usage + `[DONE]`。
 

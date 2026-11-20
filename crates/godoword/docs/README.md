@@ -2,7 +2,7 @@
 
 bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 axum 服务。
 
-## 当前状态（M1c + M1c-hardening 加固）
+## 当前状态（M1c + M1c-hardening 加固 + M1d）
 
 幂等 entrypoint + 存储基底 + DB 绑定解析 + 会话 REST/SSE + 认证/管理 REST + 配置只读：
 

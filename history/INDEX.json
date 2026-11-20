@@ -1539,5 +1539,30 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1455-m1d-drift-sweep.md",
+    "title": "M1d 落地后文档漂移清扫（陈旧表述修正 + TTS usage 疑似排除）",
+    "date": "2026-11-20T14:55+08:00",
+    "keywords": [
+      "drift",
+      "m1d",
+      "docs",
+      "wiki",
+      "placeholder",
+      "tts-usage"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "godoword",
+      "auth-local",
+      "llm-openai"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
