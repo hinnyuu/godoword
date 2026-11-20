@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T13:40+08:00
-- 当前里程碑: **M1d 已合并（PR #18 squash → main 6a64852，含一审/二审审计修复）→ R4 main 重测 → M2 待启动设计讨论**
+- verified: 2026-11-20T14:55+08:00
+- 当前里程碑: **M1d 已合并并正式闭环（PR #18 → main 6a64852，R4 main 重测通过，验收 PR #19 → 4ff77d4）→ M2 待启动设计讨论**
 - 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ **M1d 合并（6a64852）→ M2 待启动**
 
 ## done
@@ -24,10 +24,12 @@
   二审修复代码自身审计（R2-1 prefs 队列快照时机真缺陷 + R2-2–R2-7 加固/文档）；
   契约层未变更；kernel 双后端负例 + godoword handler 级测试 + core vitest 54 + 冒烟 M1d 断言。
   **PR #18 squash 合并 main（6a64852），CI 全 8 绿（含 frontend required）**。
+- **M1d 落地后文档漂移清扫**（history 1455）：wiki/占位页/模块 docs 陈旧 M1c 表述修正 + models.json fixture 事实对齐 +
+  architecture 占位页开发态定位；TTS 多句 usage 漏计疑似经真 key 探针排除（本网关每请求单 sentence，首帧即全量）。
 
 ## in-flight
 
-- 无开放实现 PR。R4 main 重测（release image+smoke）落定后 M1d 正式闭环；M2 启动设计讨论待主开发者发起。
+- 无开放实现 PR。M2 启动设计讨论待主开发者发起。
 
 ## blocked / 待拍板决策
 
@@ -39,7 +41,11 @@
 ## 下一动作
 
 - **M2 设计讨论**（待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
-  模块迁移按注册序追加 kernel 之后；ModuleContext/emit_progress/current_plan 接缝已立；outbox dispatcher 骨架待消费者。
+  契约 trait 已立但 kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师：resolve module=None/persona 常量/plan_version=None/tools 仅 speak）；
+  outbox dispatcher 按 module_id 同一路由，跨模块订阅（consumes_events 预留）+ 消费幂等（A5）待 M2；
+  SessionEnded 现仅删除会话时发（转录同事务级联删，detail 空），课程完成 vs 用户删除语义待 M2 设计；
+  ModuleContext 缺 kernel 中介 LLM 调用接缝（extractor/assessor）+ 白名单 cached-synthesis + 角色音色档案实体（M2 契约新增→全量审查）；
+  模块迁移版本键须与 kernel 全局版本表命名空间隔离；module.yaml kind=kernel 不在 ModuleKind enum（注册表落地时处理）。
 - M2 一致性检查留档（上述非阻断观察）+ 重试再生语义（history 1240 取舍）。
 
 **文档精炼原则**（history 2127）：加固/实现沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著（README 愿景权威清单）。
