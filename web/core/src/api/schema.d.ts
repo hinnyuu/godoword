@@ -316,6 +316,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出已注册教学模块（M2 P1）。 */
+        get: operations["list_modules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/openapi.json": {
         parameters: {
             query?: never;
@@ -494,6 +511,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sessions/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 完成会话（M2 P1，完成≠删除）：completed_at + session-ended 事件，转录保留。
+         *     幂等：已完成 → 409；不存在/越权 → 404。
+         */
+        post: operations["complete_session"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sessions/{id}/messages": {
         parameters: {
             query?: never;
@@ -643,8 +680,10 @@ export interface components {
             key: string;
             label: string;
         };
-        /** @description 创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配）。 */
+        /** @description 创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配；M2 P1：module_id 可选）。 */
         CreateSessionReq: {
+            /** @description 教学模块 id（缺省 teach-free；未注册 → 400）。 */
+            module_id?: string | null;
             /** @description 断开行为 cancel/continue（默认 cancel）。 */
             on_disconnect?: string | null;
             /** @description 运行时参数（预算/淘汰/工具上限，默认值见 SessionParams；JSON 对象）。 */
@@ -686,6 +725,17 @@ export interface components {
         ModelInfo: {
             display_name?: string | null;
             id: string;
+        };
+        /** @description 模块清单项（GET /modules）。 */
+        ModuleListItem: {
+            description: string;
+            id: string;
+            name: string;
+            version: string;
+        };
+        /** @description 模块清单响应。 */
+        ModuleListResp: {
+            modules: components["schemas"]["ModuleListItem"][];
         };
         /** @description 移动会话请求（path=null 回未分类）。 */
         MoveSessionReq: {
@@ -1815,6 +1865,31 @@ export interface operations {
             };
         };
     };
+    list_modules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModuleListResp"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     openapi_json: {
         parameters: {
             query?: never;
@@ -2444,6 +2519,56 @@ export interface operations {
                 content?: never;
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    complete_session: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description CSRF 自定义头（变更请求必带，缺则 403） */
+                "X-Requested-With": string;
+            };
+            path: {
+                /** @description 会话 id */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description CSRF 头缺失或非管理员 */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

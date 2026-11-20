@@ -91,6 +91,29 @@ async fn main() {
     let llm: Arc<dyn LlmProvider> = Arc::new(llm_openai::OpenAiProvider::new());
     let tts: Arc<dyn TtsProvider> = Arc::new(tts_qwen_audio::QwenTtsProvider::new());
     let resolver = Arc::new(DbBindingResolver::new(store.clone(), master.clone()));
+
+    // 模块注册表（M2 P1）：feature 注册教学模块 + ctx 工厂注入（module_id 构造期绑定）。
+    // 持久资产区 /data/assets（UX-A3 用户侧标准音频，豁免淘汰）。
+    let assets = Arc::new(kernel::AssetStore::new(cfg.assets_dir(), store.clone()));
+    let mut registry = kernel::ModuleRegistry::new();
+    #[cfg(feature = "teach-free")]
+    {
+        let factory = Arc::new(kernel::KernelCtxFactory::new(
+            kernel_api::ModuleId(teach_free::TEACH_FREE_ID.to_string()),
+            store.clone(),
+            resolver.clone(),
+            llm.clone(),
+            tts.clone(),
+            assets.clone(),
+            None, // PlanProvider：teach-assess P3 注册
+        ));
+        registry
+            .register_yaml(teach_free::module_yaml(), teach_free::module(), factory)
+            .expect("teach-free 注册失败");
+    }
+    let registry = Arc::new(registry);
+    tracing::info!("模块注册表就绪（{} 个教学模块）", registry.list().len());
+
     let runtime = Arc::new(
         Runtime::new(
             llm.clone(),
@@ -100,7 +123,8 @@ async fn main() {
             audio.clone(),
             store.clone(),
         )
-        .with_detach_cap(cfg.max_detached_turns as usize),
+        .with_detach_cap(cfg.max_detached_turns as usize)
+        .with_modules(registry.clone()),
     );
 
     let shutdown_rt = runtime.clone();
@@ -126,6 +150,7 @@ async fn main() {
         master,
         llm,
         tts,
+        registry,
         rate_limiter: Arc::new(auth::RateLimiter::new()),
         trusted_proxies,
     });
@@ -134,6 +159,7 @@ async fn main() {
         .route("/healthz", get(rest::healthz))
         .route("/readyz", get(rest::readyz))
         .route("/api/v1/meta", get(rest::meta))
+        .route("/api/v1/modules", get(rest::list_modules))
         .route("/api/v1/config", get(rest::config))
         .route("/api/v1/openapi.json", get(openapi::openapi_json))
         .route("/api/v1/auth/register", post(auth::register))
@@ -159,6 +185,10 @@ async fn main() {
         )
         .route("/api/v1/sessions/{id}/messages", post(rest::messages))
         .route("/api/v1/sessions/{id}/cancel", post(rest::cancel))
+        .route(
+            "/api/v1/sessions/{id}/complete",
+            post(rest::complete_session),
+        )
         .route("/api/v1/sessions/{id}/path", put(rest::move_session_path))
         .route("/api/v1/audio/{id}", get(rest::get_audio))
         .route("/api/v1/audio/{id}/meta", get(rest::audio_meta))
@@ -205,10 +235,18 @@ async fn main() {
             get(settings::get_binding)
                 .put(settings::update_binding)
                 .delete(settings::delete_binding),
-        )
+        );
+
+    // 模块路由挂载（M2 P1）：/api/v1/m/{id}/（TeachingModule.routes，签名不动；
+    // 模块路由自带 ctx 工厂注入，不依赖 AppState）。先 with_state 再 nest（Router<()> 同型），
+    // CSRF 层最后包裹（覆盖模块路由）。
+    let mut app = app
         .fallback_service(ServeDir::new("web/shell/public"))
-        .layer(middleware::from_fn(auth::csrf_guard))
-        .with_state(state);
+        .with_state(state.clone());
+    for r in state.registry.list() {
+        app = app.nest(&format!("/api/v1/m/{}", r.manifest.id), r.module.routes());
+    }
+    let app = app.layer(middleware::from_fn(auth::csrf_guard));
 
     // 默认双栈监听 [::]（兼容 IPv4），IPv6 不可用回退 0.0.0.0；配置 listen 可覆盖。
     let addr: std::net::SocketAddr = listen.parse().expect("listen 须为合法 socket 地址");

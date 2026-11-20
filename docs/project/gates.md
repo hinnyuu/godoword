@@ -36,7 +36,8 @@
     （healthz/readyz/meta/config/openapi/SPA 伺服（title+assets）、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
     注册首用户成管理员/cookie/me/会话/providers + CSRF 守卫 403、/data 初始化断言 db/master.key 0600/backups、
     完整 uid/卷矩阵 rootless named/bind 非 1000 uid + rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用、
-    **M1d REST 面：偏好 round-trip/文件夹祖先链登记+删除/改密错旧密 403/试听文本上限 400/audio-meta 缺失 404**），
+    **M1d REST 面：偏好 round-trip/文件夹祖先链登记+删除/改密错旧密 403/试听文本上限 400/audio-meta 缺失 404**、
+    **M2 P1 模块面：modules 清单/缺省会话模块 teach-free/未注册模块 400/完成 200+409 幂等/越权 404/assets 目录**），
     资源隔离 + 自动清理。容器以 GODOWORD_COOKIE_SECURE=false 运行（CI HTTP cookie 可回传）。
 13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 跑 **workspace 级**
     `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；

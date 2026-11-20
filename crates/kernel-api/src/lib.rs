@@ -24,10 +24,10 @@ pub use progress::{EventKind, Outcome, PersistedEvent, ProgressEvent, ProgressIn
 pub use session::SessionEvent;
 pub use speak::{speak_tool_spec, SpeakArgs, SPEAK_TOOL_NAME};
 pub use store::Store;
-pub use teaching::{ModuleContext, ModuleStore, TeachingModule};
+pub use teaching::{ModuleContext, ModuleContextFactory, ModuleStore, TeachingModule};
 pub use tts::{AudioEvent, AudioStream, TtsProvider};
 pub use types::{
-    AudioFormat, AudioId, Capability, ChatMessage, ChatRequest, EventId, Eviction,
+    AssetAudio, AudioFormat, AudioId, Capability, ChatMessage, ChatRequest, EventId, Eviction,
     FrontendManifest, ModelInfo, ModuleId, ModuleKind, ModuleManifest, ProviderConn, ProviderId,
     Provides, Requires, Role, RouteSpec, RunId, SessionId, SessionParams, ToolCall, ToolResult,
     ToolSpec, TtsRequest, TtsUsage, Usage, UserId, VoiceInfo, WordTimestamp,

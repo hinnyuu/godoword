@@ -1,0 +1,16 @@
+id: teach-free
+name: 自由对话
+version: 0.0.0
+kind: teaching
+description: 自由对话轻量教学模块（T4 决议 history 1614）：日语教师 persona 自由聊天，plan 可选（未 placement 也能对话，转录仍喂评估）。既有无模块会话/default 文件夹经 kernel 0006 迁入。
+requires:
+  capabilities: [llm, tts]
+impact:
+  - match: "src/**"
+    docs: [docs/, wiki/]
+    history: required
+  - match: "tests/**"
+    docs: [docs/]
+    history: required
+cross_module:
+  - kernel-api

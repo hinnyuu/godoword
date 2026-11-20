@@ -214,6 +214,11 @@ impl Config {
         self.data_dir.join("cache")
     }
 
+    /// 持久资产区（M2 P1，UX-A3 用户侧标准音频；豁免淘汰，与 cache 正交）。
+    pub fn assets_dir(&self) -> PathBuf {
+        self.data_dir.join("assets")
+    }
+
     /// 音频缓存 TTL。
     pub fn cache_ttl(&self) -> std::time::Duration {
         std::time::Duration::from_secs(self.cache_ttl_secs)

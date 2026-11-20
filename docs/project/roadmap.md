@@ -8,7 +8,7 @@
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
 | M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 完成（M1a/M1b/M1c/M1d 全部完成） |
-| M2 | teach-assess + teach-gojuon + teach-free（placement → plan → 自适应课程，黄金路径全通） | — | 设计审计修订（PR #21） |
+| M2 | teach-assess + teach-gojuon + teach-free（placement → plan → 自适应课程，黄金路径全通） | — | 实施中（P1 模块切片） |
 | M2+ | 用户级资产备份（导出/导入，设计定案见 roadmap 专节） | — | 设计定案（实施 M2 后） |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
@@ -77,7 +77,7 @@
 | T1 | env dev key 旁路 + 固定 dev user | M1a | M1c | dev-bypass feature 及 `GODOWORD_DEV_*` 从非测试代码删除 |
 | T2 | 内存 impl 作生产默认（会话/缓存不持久化） | M1a | M1b/M1c | 生产默认换 DB/文件系统；内存 impl 仅留测试 |
 | T3 | 容器 root 运行（无降权/无 /data 初始化） | M1a | M1b | 自适应降权 + 幂等 entrypoint 上线 |
-| T4 | 无模块默认教师模式 | M1a | M2 决议 | M2 定永久产品态或退役 |
+| T4 | 无模块默认教师模式 | M1a | M2 P1 | **已回归**（teach-free 模块落地，persona 移入，history 1614/0010） |
 
 机制：①dev 旁路装 cargo feature `dev-bypass`，release Dockerfile 永不启用（硬隔离）；
 ②代码标记 `// DEV-DEBT: T<n> 回归于 M<x>`（可 grep 枚举）；③status.md 登记，每里程碑验收核对，逾期阻塞合并；
@@ -223,19 +223,21 @@ cached-synthesis 音频服务 + ProgressEvent difficulty 形状新增）→**契
 
 ### 模块架构与契约变更
 
-- **kernel 模块注册表**：module.yaml 运行时反序列化（ModuleKind 补 Kernel；YAML crate 选维护中方案，serde_yaml 废弃，审计 B7）
-  + feature 注册 + 迁移编排（kernel→模块注册序，版本键 mod_<id>_NNNN）。
-- **ModuleContext 实现 + 契约新增**：store/emit_progress/current_plan 落地 + `llm(role,req)->ChatStream`（kernel 中介，全计量含 module_id，模块不触 key）
+- **kernel 模块注册表（P1 已落）**：module.yaml 运行时反序列化（ModuleKind::Kernel；**noyalib 0.0.63**，B7 定案 history 2130）
+  + feature 注册 + 注册校验；迁移编排（kernel→模块注册序，版本键 mod_<id>_NNNN）runner 归 P2。
+- **ModuleContext 实现 + 契约新增（P1 已落）**：store/emit_progress/current_plan + `llm(role,req)->ChatStream`（kernel 中介，全计量含 module_id，模块不触 key）
   + `complete_session()` + **cached-synthesis 音频服务**（get_or_synthesize，持久资产区）；**ModuleContextFactory**
-  （for_session/for_user，组合根构造期注入，routes() 签名不动）。**P1 契约审查必决项（审计 B3）**：
-  session_id() 非可选 vs for_user 无会话张力（Option/独立 UserContext/哨兵）；plan_version TEXT vs u32 类型对齐（B4）。
-- **ProgressEvent difficulty（审计 B1 诚实标注）**：契约形状**新增** difficulty（现仅 ProgressInput 有，原「形状已有」声称不成立）；
-  emit_progress 签名扩 outcome/item_ref/difficulty；0006 DB 补列。
-- **回合循环接线**：模块 persona + plan.teacher_prompt 钉住 + 模块工具分发（speak kernel 统一）+ on_session_start/end + 绑定解析带 module_id。
+  （for_session/for_user，组合根构造期注入，routes() 签名不动）。**B3 已定案（history 2130）**：
+  session_id()→Option<SessionId>（for_user=None，fail-closed）；plan_version→u32/INTEGER（0006 DROP+ADD，列从未写入零风险）。
+- **ProgressEvent difficulty（审计 B1 诚实标注，P1 已落）**：契约形状**新增** difficulty（serde default 旧信封兼容）；
+  trait emit_progress(ProgressInput) 签名不动（ProgressInput 早含三字段）；kernel journal 内部函数 + 0006 DB 列对齐。
+- **回合循环接线（P1 已落）**：模块 persona + plan.teacher_prompt 钉住（PlanProvider P3 注册前恒 None）+ 模块工具分发（speak kernel 统一）
+  + on_session_start/end + 绑定解析带 module_id；模块缺失/未注册 fail-closed。
 - **outbox 扇出 + 幂等（A5）+ 消费守护（审计 B5）**：consumes_events 订阅扇出 + kernel 级 event_consumptions per-subscriber 投递表；
   **有界并发/per-event spawn + 超时 + 重试上限/死信**（防慢提取阻塞全用户/毒丸饿死后续）。
-- **kernel 0006**：progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id 列**（审计 B4）
-  + OutboxEvent 取回 created_at；sessions 补 completed_at。
+- **kernel 0006（P1 已落）**：progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id 列**（审计 B4）
+  + OutboxEvent 取回 created_at + sessions.completed_at + plan_version INTEGER + teach-free 数据迁移 + audio_assets 登记表。
+  P2 其余基底顺延 0007。
 - **删除事件语义（审计 B2）**：DELETE 隐私删除不发事件；complete_session 发 session-ended（触发提取）。
 - **私有表**：mod_teach_assess_*（plans/reports/聚合）+ mod_teach_gojuon_*（item_progress/lessons）+ teach-free 迁移
   + kernel 资产登记表（user/module/稳定 key/provider 身份/voice）。
@@ -254,8 +256,8 @@ cached-synthesis 音频服务 + ProgressEvent difficulty 形状新增）→**契
 | Phase | 内容 |
 |---|---|
 | P0 | 设计落档 PR（roadmap 蓝图 + history + status + glossary + conventions + contract.md 预告）+ **审计修订轮**（本 PR） |
-| P1 | **风险前置切片**：注册表 + ModuleContext 实现 + 回合接线 + teach-free → 模块会话端到端（契约新增 + 全量审查 + 二审；B3 必决项此 phase 定） |
-| P2 | kernel 基底：0006（含 call_log.module_id）+ outbox 扇出 + event_consumptions 幂等 + 消费守护（B5）+ complete_session + 删除事件语义（B2）+ 模块迁移 runner |
+| P1 | **风险前置切片**：注册表 + ModuleContext 实现 + 回合接线 + teach-free → 模块会话端到端（契约新增 + 全量审查 + 二审；B3 已定案 history 2130：Option<SessionId> / plan_version INTEGER / noyalib；P1 自带 0006 + complete_session + cached-synthesis 机制 + teach-free kernel 迁移） |
+| P2 | kernel 基底：0007 其余基底（0006 已随 P1 落）+ outbox 扇出 + event_consumptions 幂等 + 消费守护（B5）+ 删除事件语义（B2，complete_session 已随 P1 落）+ 模块迁移 runner |
 | P3 | teach-assess 后端：mod 表 + placement + PlanProvider + 提取 + 重规划 + 阈值/锁（B6 约束） |
 | P4 | teach-gojuon 后端：课程数据 + 课时调度 + 操练判定 + 进度 + **用户侧音频机制**（白名单合成服务 + 持久资产区 + 懒生成/一键全量 + 降级）+ 模块 REST |
 | P5 | 前端：懒加载集成（B9 mount 单路径 spike）+ 仪表盘 + 模块路由 + assess UI + gojuon UI + teach-free 包装 + **移动适配（UX-A2）** |
@@ -309,8 +311,13 @@ outbox 重投幂等、**完成 vs 删除事件语义（B2）**、跨用户越权
 - 信封加密（per-user data key）、主密钥轮换工具
 - RP-initiated logout（OIDC 会话联动）
 
-## 当前差异（M1 全部完成 M1a–M1d，M2 设计审计修订 PR #21）
+## 当前差异（M1 全部完成 M1a–M1d，M2 P1 模块切片实施中）
 
+- **M2 P1 模块切片已落**（history 2130 B3/B7 定案 + P1 实施条目）：模块注册表（noyalib + feature 注册）+
+  ModuleContext 实现/ctx 工厂（llm 中介/complete_session/get_or_synthesize）+ 回合模块接线（persona/工具/绑定 module_id/方案钉住）+
+  teach-free（T4 回归，persona 移入 + 0006 数据迁移）+ 持久资产区 /data/assets + 0006（plan_version INTEGER/call_log.module_id/
+  progress_events 结构化列/completed_at/audio_assets）+ REST（modules/complete/sessions.module_id/binding 注册表校验）。
+  teach-assess/gojuon P3/P4；outbox 扇出/DELETE 翻转/模块迁移 runner P2。
 - **M2 设计定案 + 审计修订**（history 1614 六轮 R1–R6 + history 1721 第三方审计修订）：teach-assess + teach-gojuon + teach-free 黄金路径；
   混合式课程（操练卡 + 对话课双通道进度）；placement（问卷 + 迷你测 + 可选 LLM 短测）→ 全量再生重规划（version+1，阈值 + 手动）；
   全假名 ~104 数据驱动 + **用户侧标准音频**（白名单 cached-synthesis 回归 M2 + 持久资产区，静态入仓库因 AGPL 前提作废）；
@@ -337,7 +344,7 @@ outbox 重投幂等、**完成 vs 删除事件语义（B2）**、跨用户越权
 - 协议类型（SessionEvent/ModuleManifest）serde 黄金测试已立；speak 契约黄金测试 M1a 已立；
   kernel-api 有意耦合 axum/sqlx/utoipa 已声明（M1d 加 utoipa，5 REST-facing 类型 ToSchema）。
 - kernel 回合循环 + llm-openai + tts-qwen-audio M1a 已实现；M1b 绑定解析转 DB（加密）；
-  **M1c 会话/音频持久化（DbSessions/FsAudio）+ 认证落地**（dev-debt T1/T2 回归）；教学模块 M2+。
+  **M1c 会话/音频持久化（DbSessions/FsAudio）+ 认证落地**（dev-debt T1/T2 回归）；**teach-free M2 P1 已落**（assess/gojuon P3/P4）。
 - **前端 M1d 完成**：Svelte 5 SPA（web/core 框架无关 + web/shell），Dockerfile node 阶段构建镜像含界面；hash 路由静态伺服。
 - token 估算为字符启发式（roadmap 换 tokenizer）。
 - 部署 M1b 含完整 entrypoint（自适应降权/卷初始化/主密钥/迁移备份）+ provider/binding/config REST + OpenAPI；

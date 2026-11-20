@@ -23,6 +23,8 @@ pub struct CallRecord {
     pub user_id: Uuid,
     pub session_id: Option<Uuid>,
     pub run_id: Option<Uuid>,
+    /// 模块归因（审计 B4：用量看板按模块聚合 + ctx.llm 全计量；写入时填，会话删除后不丢归因）。
+    pub module_id: Option<String>,
     /// 能力（llm/tts）。
     pub capability: String,
     pub adapter_id: String,
@@ -45,13 +47,14 @@ pub async fn record_call(store: &Store, rec: CallRecord) -> Result<(), KernelErr
     let now = Utc::now();
     let r = execute_both!(
         store,
-        "INSERT INTO call_log (id, user_id, session_id, run_id, capability, adapter_id, model,
+        "INSERT INTO call_log (id, user_id, session_id, run_id, module_id, capability, adapter_id, model,
             prompt_tokens, completion_tokens, reasoning_tokens, total_tokens, characters, latency_ms, status, error_code, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)",
         Uuid::new_v4(),
         rec.user_id,
         rec.session_id,
         rec.run_id,
+        &rec.module_id,
         &rec.capability,
         &rec.adapter_id,
         &rec.model,
@@ -102,28 +105,44 @@ pub async fn call_log_count(store: &Store, user_id: Uuid) -> Result<i64, KernelE
 }
 
 /// 发进度事件入 outbox（processed_at NULL=未处理）。返回事件 id。
+/// 结构化字段 outcome/item_ref/difficulty 落独立列（0006，审计 B1）；kind 缺省 custom。
 pub async fn emit_progress(
     store: &Store,
     user_id: Uuid,
     session_id: Option<Uuid>,
     module_id: &str,
-    kind: &str,
-    skill_tags: Value,
-    detail: Value,
+    input: &kernel_api::ProgressInput,
 ) -> Result<Uuid, KernelError> {
     let id = Uuid::new_v4();
     let now = Utc::now();
+    let kind = input.kind.unwrap_or(kernel_api::EventKind::Custom);
+    let kind_str = serde_json::to_value(kind)
+        .ok()
+        .and_then(|v| v.as_str().map(|s| s.to_string()))
+        .unwrap_or_else(|| "custom".to_string());
+    let skill_tags = serde_json::to_value(&input.skill_tags).unwrap_or(json!([]));
+    let outcome_str = input
+        .outcome
+        .map(|o| {
+            serde_json::to_value(o)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+        })
+        .unwrap_or(None);
     execute_both!(
         store,
-        "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, outcome, item_ref, difficulty, detail, created_at, processed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
         id,
         user_id,
         session_id,
         module_id,
-        kind,
+        &kind_str,
         &skill_tags,
-        &detail,
+        &outcome_str,
+        &input.item_ref,
+        input.difficulty,
+        &input.detail,
         now,
         Option::<DateTime<Utc>>::None
     )
@@ -140,14 +159,18 @@ pub struct OutboxEvent {
     pub module_id: String,
     pub kind: String,
     pub skill_tags: Option<Value>,
+    pub outcome: Option<String>,
+    pub item_ref: Option<String>,
+    pub difficulty: Option<f32>,
     pub detail: Option<Value>,
+    pub created_at: DateTime<Utc>,
 }
 
 /// 读未处理事件（按创建序，limit 上限）。
 pub async fn pending_events(store: &Store, limit: i64) -> Result<Vec<OutboxEvent>, KernelError> {
     fetch_all_both!(
         store,
-        "SELECT id, user_id, session_id, module_id, kind, skill_tags, detail
+        "SELECT id, user_id, session_id, module_id, kind, skill_tags, outcome, item_ref, difficulty, detail, created_at
          FROM progress_events WHERE processed_at IS NULL ORDER BY created_at LIMIT $1",
         OutboxEvent,
         limit
@@ -245,6 +268,117 @@ pub async fn end_session(
             let row: Option<(Option<String>,)> = sqlx::query_as(
                 "DELETE FROM sessions WHERE id = $1 AND user_id = $2 RETURNING module_id",
             )
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+    }
+}
+
+/// 钉住会话方案版本（M2 P1：每回合取当前方案写入；限本用户）。
+pub async fn set_plan_version(
+    store: &Store,
+    user_id: Uuid,
+    session_id: Uuid,
+    version: u32,
+) -> Result<(), KernelError> {
+    let now = Utc::now();
+    let n = execute_both!(
+        store,
+        "UPDATE sessions SET plan_version = $1, updated_at = $2 WHERE id = $3 AND user_id = $4",
+        version as i32,
+        now,
+        session_id,
+        user_id
+    )
+    .map_err(storage_err)?;
+    if n == 0 {
+        return Err(KernelError::Storage(format!(
+            "会话不存在或非本用户：{session_id}"
+        )));
+    }
+    Ok(())
+}
+
+/// 会话完成原子落库（M2 P1，完成≠删除）：**条件 UPDATE completed_at IS NULL 唯一认领** →
+/// 取得一行才同事务插入 session-ended outbox → 提交。转录保留（触发提取，assess P3 消费）；
+/// 重复完成/不存在/非本用户 → Ok(false)（幂等）。并发完成仅一个事务取得行（恰一个事件）。
+/// **DELETE 隐私删除不发事件**语义翻转归 P2（审计 B2，现 end_session 行为暂不动）。
+pub async fn complete_session(
+    store: &Store,
+    user_id: Uuid,
+    session_id: Uuid,
+) -> Result<bool, KernelError> {
+    let now = Utc::now();
+    let skill_tags = json!([]);
+    let detail = json!({});
+    match store {
+        Store::Sqlite(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "UPDATE sessions SET completed_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND completed_at IS NULL RETURNING module_id",
+            )
+            .bind(now)
+            .bind(now)
+            .bind(session_id)
+            .bind(user_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            let Some((module_id,)) = row else {
+                return Ok(false);
+            };
+            let module = module_id.unwrap_or_else(|| "kernel".to_string());
+            sqlx::query(
+                "INSERT INTO progress_events (id, user_id, session_id, module_id, kind, skill_tags, detail, created_at, processed_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            )
+            .bind(Uuid::new_v4())
+            .bind(user_id)
+            .bind(session_id)
+            .bind(&module)
+            .bind("session-ended")
+            .bind(&skill_tags)
+            .bind(&detail)
+            .bind(now)
+            .bind(Option::<DateTime<Utc>>::None)
+            .execute(&mut *tx)
+            .await
+            .map_err(storage_err)?;
+            tx.commit().await.map_err(storage_err)?;
+            Ok(true)
+        }
+        Store::Pg(pool) => {
+            let mut tx = pool.begin().await.map_err(storage_err)?;
+            let row: Option<(Option<String>,)> = sqlx::query_as(
+                "UPDATE sessions SET completed_at = $1, updated_at = $2 WHERE id = $3 AND user_id = $4 AND completed_at IS NULL RETURNING module_id",
+            )
+            .bind(now)
+            .bind(now)
             .bind(session_id)
             .bind(user_id)
             .fetch_optional(&mut *tx)

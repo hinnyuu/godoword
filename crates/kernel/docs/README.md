@@ -2,14 +2,29 @@
 
 > 契约见 [kernel-api](../../kernel-api/docs/contract.md)；架构见 [architecture](../../../docs/project/architecture.md)。
 
-## 当前事实（M1c + M1c-hardening 加固 + M1d 用户级扩展）
+## 当前事实（M1c + M1c-hardening 加固 + M1d 用户级扩展 + M2 P1 模块切片）
 
 内核实现 crate。适配器/教学模块只依赖 kernel-api，本 crate 实现内核服务（依赖倒置）。
 
-- `Runtime`（`src/runtime.rs`）：回合循环。解析绑定 → 读会话 meta.params → 上下文装配（token 预算 + truncate/summarize 淘汰，
+- **模块注册表（M2 P1，`src/registry.rs`）**：module.yaml 运行时反序列化（**noyalib**，B7 定案 history 2130）
+  + 注册校验（kind=teaching / 清单 id 与 trait 对象一致 / 重复 id 拒绝）+ 注册序保持。
+  `RegisteredModule{manifest, module, factory}`——ctx 工厂构造期绑定 module_id。组合根 feature 注册。
+- **ModuleContext 实现 + ctx 工厂（M2 P1，`src/module_ctx.rs`）**：`KernelCtxFactory`（每模块一实例）
+  for_session/for_user → `KernelCtx`（user + 可选 session，B3 定案 Option）。服务：store / emit_progress（结构化列）/
+  current_plan（PlanProvider 路由，无注册恒 None）/ **llm 中介**（绑定解析带 module_id + model 由绑定填 +
+  流终止计量 call_log **module 归因**，模块永不触 key）/ **complete_session**（完成≠删除，幂等）/
+  **get_or_synthesize 白名单缓存合成**（持久资产命中直供 / miss 合成→持久化→计量；换音色/服务商懒再生旧版保留；
+  并发合成 upsert 胜者为准败者清孤儿；无 TTS 绑定 Unconfigured 降级）。
+- **持久资产区（M2 P1，`src/assets.rs`）**：`/data/assets`（豁免 TTL/容量淘汰，与 /data/cache 正交）+
+  audio_assets 登记表（0006，作用域 user+module+稳定 key+adapter_id+base_url+voice+model）；
+  原子写 tmp+rename；卷损毁文件缺失→懒再生。
+- `Runtime`（`src/runtime.rs`）：回合循环。**M2 P1 模块接线**：注册表取模块 persona + 模块工具 + ctx 工厂分发
+  （speak kernel 统一）；绑定解析带 module_id；方案钉住（PlanProvider 当前方案 teacher_prompt 入系统提示词 +
+  plan_version 写会话 + RunStart；读失败 persona-only 降级）；有注册表时会话无模块/模块未注册 fail-closed
+  （无注册表=测试路径 legacy 默认教师）。解析绑定 → 读会话 meta.params → 上下文装配（token 预算 + truncate/summarize 淘汰，
   **水位制**：仅处理 seq>evicted_up_to 新历史，滚动摘要前置；**淘汰 outbox+水位同事务原子，审计 R4**；
   **summarize 计费幂等**：span_hash 命中 summary_spans 复用 fragment 免重复 LLM 计费）→ 流式 LLM → 发 delta → 内联执行 speak
-  → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量 → run-end。
+  → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量（**module 归因**）→ run-end。
   **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
   （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。**对象级授权**：sessions 全路径携带 user_id（审计 C1）。
 - 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，
@@ -18,7 +33,7 @@
   每会话单活跃回合锁（`ActiveGuard` 归执行体）；detach semaphore 默认 4；**上游退避重试**（LLM/TTS 可重试错误 bounded 2，审计 C8）；
   TTS 流响应 cancel；`shutdown` 退出屏障（**tasks 锁内置标志+取快照，与 run_turn 锁内复检+spawn+注册互斥，H1** + cancel
   + 有界等待 + **超时 abort+join**，审计 R3）+ `checkpoint`（SQLite WAL，真写入屏障）；硬超时满 mpsc 终态 try_send 不可投递则记日志、流关闭（硬边界优先，N6）。
-- speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定 → 组装 `TtsRequest`
+- speak 执行（`src/speak.rs` `prepare_speak`）：反序列化 `SpeakArgs` → 解析 TTS 绑定（**带 module_id，M2 P1**）→ 组装 `TtsRequest`
   （model/format=pcm/sample_rate=24000/word_timestamps=true 由 kernel 定；**rate 钳位 [0.5,2.0] + 文本≤2000 字符，审计 O9**）；
   音频流迭代内联于循环，
   live 发 AudioStart/AudioChunk(b64 PCM)/WordTimestamps/Usage/AudioEnd，complete 入缓存（默认新鲜合成，**owner 归属**）。
@@ -26,11 +41,15 @@
 - 上下文/计量（`src/context.rs`/`src/journal.rs`）：字符启发式 token 估算 + truncate 装配；summarize 淘汰（Summarizer role + 失败回退；
   **仅实际收到 Finish(Stop) 才算成功——流 Err / 非 Stop Finish（Error/Length/ContentFilter/Cancelled/ToolCalls）/ 无 Finish 静默 EOF
   均不固化部分摘要，审计 N3/H2/第五次**）；
-  call_log 计量所有上游调用（adapter_id 取 trait id()；**写失败 warn 留痕不阻塞回合，审计 O2**；
-  **TTS 流中途 cancel 记 cancelled 状态，审计 O3**）；outbox（emit_progress/pending/dispatch_once + OutboxHandler，M1c 无消费者骨架）。
+  call_log 计量所有上游调用（adapter_id 取 trait id()；**module_id 归因，0006/B4**；**写失败 warn 留痕不阻塞回合，审计 O2**；
+  **TTS 流中途 cancel 记 cancelled 状态，审计 O3**）；outbox（emit_progress **结构化 outcome/item_ref/difficulty 落列，0006/B1** /
+  pending/dispatch_once + OutboxHandler，M1c 无消费者骨架；扇出订阅 + 幂等 + 消费守护归 P2）。
   **`evict_session`（审计 R4）**：session-evicted outbox + 水位/滚动摘要同事务原子（失败整体回滚不丢不重）；
   **`end_session`（审计 R6/N2）**：**DELETE...RETURNING module_id 唯一认领** → 取得一行才同事务插 session-ended outbox
   （并发删除恰一个 true 一个事件，不吞错伪造结束，事件提交后才可见 dispatcher 不提前消费）；
+  **DELETE 不发事件语义翻转归 P2（审计 B2）**；
+  **`complete_session`（M2 P1）**：条件 UPDATE completed_at IS NULL 唯一认领 + session-ended 同事务（完成≠删除，
+  转录保留触发提取；幂等重复 false；并发恰一个事件）；**`set_plan_version`**：方案版本钉住写会话。
   **`summary_spans` 计费幂等**（summary_span_hash/lookup/store_summary_span）：span 消息 ID 集哈希键，命中复用 fragment 免重复计费。
 - 错误归一化：`ProviderError` → `SessionEvent::Error`（auth/quota→action:settings、rate_limit/network 可重试等）。
 
@@ -43,7 +62,8 @@
 - `SessionRepo`：create(携带 SessionMeta)/meta/exists/history/history_with_ids/append/list/delete，
   **全路径携带 user_id 对象级授权**（审计 C1）+ append 失败关闭（审计 C4）。**delete 为仓储层原语不发事件，
   生产 REST 删除走 journal::end_session 原子认领（审计 O7 标注）**。`DbSessions` 生产默认（双兼容 SQL，seq 单活跃锁内分配，级联删）；
-  `MemSessions` 测试替身。`SessionMeta{module_id,on_disconnect,params,summary,evicted_up_to}`（**C7 淘汰水位**，水位/摘要经
+  `MemSessions` 测试替身。`SessionMeta{module_id,plan_version,on_disconnect,params,summary,evicted_up_to}`
+  （**plan_version 方案钉住，0006 INTEGER，B3b**；**C7 淘汰水位**，水位/摘要经
   `evict_session` 原子更新，R4）、`OnDisconnect{Cancel,Continue}`、`StoredMessage{id,seq,message}`。
 - `AudioCache`：put/get(id,**user**) `CachedAudio{pcm,words,format,sample_rate,owner}`（**get 校验归属**，审计 C1）。
   `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界；
@@ -57,7 +77,10 @@
 `src/storage.rs`（pool 初始化：SQLite WAL+外键 / PG 外接 + `checkpoint` 退出 WAL 屏障）+ `src/migrate.rs`（自定义双后端迁移 runner：
 版本表 + checksum 防漂移 + 迁移前备份 + **每条迁移同事务原子，审计 A2**）+ `migrations/0001_init.sql`（11 表）
 + `0002_auth.sql`（users.username + auth_sessions）+ `0003_eviction_watermark.sql`（sessions.summary + evicted_up_to，审计 C7）
-+ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）+ `0005_preferences_folders.sql`（M1d user_preferences/session_folders/sessions.path）。
++ `0004_summary_spans.sql`（summarize 计费幂等表，审计 R4）+ `0005_preferences_folders.sql`（M1d user_preferences/session_folders/sessions.path）
++ `0006_m2_module_slice.sql`（M2 P1：sessions.plan_version TEXT→INTEGER【从未写入零数据风险，B3b】+ completed_at +
+call_log.module_id【B4】+ progress_events outcome/item_ref/difficulty【B1】+ **teach-free 数据迁移**【NULL 会话/default 文件夹迁入，T4/B8】+
+audio_assets 持久资产登记表【UX-A3】）。
 schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双后端测试 `tests/storage.rs`。
 
 ## M1d 用户级扩展（偏好/文件夹/会话元数据）
@@ -113,20 +136,20 @@ env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`
 
 ## M1 简化与 roadmap 差异
 
-- 无教学模块：用 `DEFAULT_TEACHER_PERSONA`（`src/persona.rs`），无模块 persona/无 plan.teacher_prompt；
-  默认教师模式是否作永久产品态留 M2（dev-debt T4）。
+- **教学模块 M2 P1 已落地 teach-free**（T4 决议回归：自由对话轻量模块，persona 权威在 teach-free crate）；
+  kernel `DEFAULT_TEACHER_PERSONA` 降为**无注册表测试路径 legacy 兜底**（生产组合根必注册模块）。
+  teach-assess/teach-gojuon 归 P3/P4。
 - M1b 存储基底/加密/绑定 DB/配置/降权；**M1c 会话/音频持久化（DbSessions/FsAudio，T2 回归）+ 上下文预算/淘汰
   + outbox/call_log + continue detach 已落地**。认证在 auth-local crate + godoword（M1c）。
-- 音频默认新鲜合成；白名单复用 **M2 回归**（用户侧标准音频机制）；角色音色档案实体 M2+ 推迟（M1c 机制无关其形态、零返工）。
-- LLM 提取报告（extractor role）归 teach-assess M2；M1c outbox dispatcher 骨架无消费者。
+- 音频默认新鲜合成；**白名单缓存合成机制 M2 P1 已落**（get_or_synthesize + 持久资产区），gojuon 消费者归 P4；
+  角色音色档案实体 M2+ 推迟。
+- LLM 提取报告（extractor role）归 teach-assess P3；outbox 扇出订阅 + 幂等 + 消费守护归 P2（现 dispatcher 骨架无消费者）。
 - token 估算字符启发式（roadmap 远期换 tokenizer）。
 
-## M2 预告（设计审计修订，history 1614/1721）
+## M2 后续预告（P2+，设计审计修订 history 1614/1721/2130）
 
-kernel 为 M2 模块机制实现者：模块注册表（module.yaml 反序列化 + feature 注册 + 迁移编排 kernel→模块序，版本键 mod_<id>_NNNN）、
-ModuleContext 实现（store/emit_progress/current_plan + 契约新增 llm 中介/complete_session/cached-synthesis 音频服务 + ctx 工厂注入）、
-回合循环接线（模块 persona/plan 钉住/工具分发/绑定带 module_id）、outbox 扇出订阅（consumes_events）+ event_consumptions 幂等（A5）
-+ 消费守护（有界并发/毒丸重试上限，B5）、0006（progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id**（B4）
-+ sessions.completed_at）、**删除事件语义**（DELETE 不发事件，complete 发 session-ended，B2）、
-**持久资产区 /data/assets + 资产登记表**（白名单合成豁免 TTL/容量淘汰，UX-A3）。
-P1 契约必决项：session_id vs for_user 张力（B3）+ plan_version 类型对齐。详见 [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。
+P2：outbox 扇出订阅（consumes_events）+ event_consumptions 幂等（A5）+ 消费守护（有界并发/毒丸重试上限，B5）、
+**删除事件语义翻转**（DELETE 不发事件，B2；R6/N2 测试随 P2 更新）、模块迁移 runner（mod_<id>_NNNN，首个消费者 assess）、
+0007 其余基底。P3：teach-assess（placement/提取/重规划，B6 锁不跨 LLM 持写事务）。P4：teach-gojuon + 用户侧音频 UX
+（懒生成/一键全量/预取/降级）。P5：前端懒加载 + 移动适配（UX-A2）。P6：用量看板 + 再生 + 一致性检查（O1）。
+详见 [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。

@@ -54,6 +54,9 @@ pub struct ProgressEvent {
     pub skill_tags: Vec<String>,
     pub outcome: Option<Outcome>,
     pub item_ref: Option<String>,
+    /// 难度（契约形状新增，审计 B1 诚实标注；旧信封 serde default 兼容）。
+    #[serde(default)]
+    pub difficulty: Option<f32>,
     pub detail: Value,
 }
 

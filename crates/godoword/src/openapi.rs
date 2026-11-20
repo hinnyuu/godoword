@@ -40,9 +40,11 @@ use utoipa::OpenApi;
         crate::rest::delete_session,
         crate::rest::messages,
         crate::rest::cancel,
+        crate::rest::complete_session,
         crate::rest::move_session_path,
         crate::rest::get_audio,
         crate::rest::audio_meta,
+        crate::rest::list_modules,
         crate::prefs::get_preferences,
         crate::prefs::put_preferences,
         crate::folders::list_folders,
@@ -98,6 +100,8 @@ use utoipa::OpenApi;
         crate::rest::SessionDetailResp,
         crate::rest::AudioMetaResp,
         crate::rest::MoveSessionReq,
+        crate::rest::ModuleListItem,
+        crate::rest::ModuleListResp,
         crate::folders::CreateFolderReq,
         crate::folders::RenameFolderReq,
         crate::folders::FolderListResp,
@@ -111,6 +115,7 @@ use utoipa::OpenApi;
         (name = "preferences", description = "用户偏好（跨设备随账户）"),
         (name = "providers", description = "BYOK provider 管理 + 测试连接 + 音色试听"),
         (name = "bindings", description = "模块→provider 绑定"),
+        (name = "modules", description = "教学模块清单（M2 P1）"),
     )
 )]
 pub struct ApiDoc;

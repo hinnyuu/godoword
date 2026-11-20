@@ -1,5 +1,5 @@
 //! 会话文件夹 REST（M1d，虚拟路径）。AuthUser + 对象级归属；FolderError→400/500。
-//! 模块 chroot：module 查询参数默认 default（无模块命名空间）。
+//! 模块 chroot：module 查询参数默认 teach-free（T4 默认命名空间，0006 迁移后；M2 P1）。
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::auth::AuthUser;
 use crate::rest::{folder_err_status, AppState};
 
-/// 文件夹命名空间查询（默认 default）。
+/// 文件夹命名空间查询（默认 teach-free，T4 默认命名空间）。
 #[derive(Deserialize, utoipa::IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct FolderQuery {
@@ -21,7 +21,11 @@ pub struct FolderQuery {
 }
 
 fn default_module() -> String {
-    kernel::DEFAULT_NAMESPACE.to_string()
+    if crate::rest::DEFAULT_MODULE.is_empty() {
+        kernel::DEFAULT_NAMESPACE.to_string()
+    } else {
+        crate::rest::DEFAULT_MODULE.to_string()
+    }
 }
 
 /// 新建文件夹请求。

@@ -93,13 +93,13 @@ terms:
     definition: docs/project/status.md，live 工作状态（committed，随仓库走）
   - canonical: 白名单缓存
     banned: [指纹缓存]
-    definition: 模块显式声明稳定 key 的可缓存音频（M2 回归：用户侧 gojuon 标准音频消费者），同一性由模块权威声明而非指纹 hash 推断，持久资产区豁免淘汰
+    definition: 模块显式声明稳定 key 的可缓存音频（机制 M2 P1 已落 get_or_synthesize，用户侧 gojuon 标准音频消费者 P4），同一性由模块权威声明而非指纹 hash 推断，持久资产区豁免淘汰
   - canonical: 新鲜合成
     banned: []
     definition: 音频默认每次新合成不复用（无白名单标记），随机 AudioId 存供回放
   - canonical: 持久资产
     banned: [静态资产, 内置音频]
-    definition: 用户侧生成的 canonical 音频（如五十音标准发音），/data/assets 持久资产区豁免 TTL/容量淘汰，一次生成永久使用（卷损毁按需懒再生），稳定 key 直供（M2）；静态入仓库方案因 AGPL 再分发前提作废（history 1721）
+    definition: 用户侧生成的 canonical 音频（如五十音标准发音），/data/assets 持久资产区豁免 TTL/容量淘汰，一次生成永久使用（卷损毁按需懒再生），稳定 key 直供（M2 P1 机制已落，gojuon 消费者 P4）；静态入仓库方案因 AGPL 再分发前提作废（history 1721）
   - canonical: 角色扮演
     banned: [角色模拟]
     definition: 横切声音基础设施，地基 persona/binding/voice 原语 + 模块编排，内核角色音色档案实体（M2+ 推迟）
@@ -114,7 +114,7 @@ terms:
     definition: 虚拟路径表达的会话分组，登记表 session_folders 持久空文件夹，模块 chroot 命名空间，删非空文件夹子会话上移一层（M1d）
   - canonical: 命名空间
     banned: []
-    definition: 会话文件夹的模块隐式根（chroot），module_id 创建时固定杜绝跨模块移动；M1 无模块用哨兵 default（M1d）
+    definition: 会话文件夹的模块隐式根（chroot），module_id 创建时固定杜绝跨模块移动；M1 哨兵 default 存量经 0006 迁入 teach-free，新会话/文件夹查询缺省 teach-free（M2 P1/T4）
   - canonical: 主题引擎
     banned: []
     definition: CSS 自定义属性 + 预设 + 用户自定义变量/高级 CSS 的 WebUI 美化体系，偏好跨设备随账户（M1d）
@@ -138,13 +138,19 @@ terms:
     definition: 假名项掌握程度（进度事件对错聚合），gojuon 热力图可视化（M2）
   - canonical: 模块注册表
     banned: [模块列表]
-    definition: kernel 运行时反序列化 module.yaml + feature 注册教学模块 + 迁移编排（kernel→模块注册序）（M2）
+    definition: kernel 运行时反序列化 module.yaml（noyalib）+ feature 注册教学模块 + 注册校验（M2 P1 已落）；迁移编排（kernel→模块注册序）runner 归 P2
   - canonical: 自由对话
     banned: [自由聊天]
-    definition: teach-free 轻量教学模块（T4 决议），内核默认 persona 移入，plan 可选，既有无模块会话迁入（M2）
+    definition: teach-free 轻量教学模块（T4 决议），内核默认 persona 移入，plan 可选，既有无模块会话经 0006 迁入（M2 P1 已落）
   - canonical: 默认节奏
     banned: []
     definition: gojuon 在 current_plan=None 时的内置兜底节奏（固定顺序、不跳过已会），placement 随时可补不强制（M2，审计 UX-A1）
+  - canonical: ctx 工厂
+    banned: []
+    definition: ModuleContextFactory（for_session/for_user），每模块一实例 module_id 构造期绑定，组合根注入模块（M2 P1，B3 定案 session_id Option）
+  - canonical: 完成语义
+    banned: []
+    definition: complete_session 完成≠删除（completed_at + session-ended 事件，转录保留触发提取，幂等）；DELETE 隐私删除不发事件归 P2（M2 P1，审计 B2）
   - canonical: 用户级备份
     banned: [账户搬家]
     definition: 用户自助导出/导入用户级资料与音频（单 ZIP，不含 API key 导入重填，恢复向不做合并），设计定案实施 M2 后（history 1721）

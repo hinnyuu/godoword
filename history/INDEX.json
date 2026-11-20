@@ -1728,5 +1728,36 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-21-0010-m2-p1-module-slice.md",
+    "title": "M2 P1 风险前置切片实现（注册表 + ModuleContext + 回合接线 + teach-free 端到端）+ 契约级全量审查",
+    "date": "2026-11-21T00:10+08:00",
+    "keywords": [
+      "m2",
+      "p1",
+      "module-registry",
+      "module-context",
+      "ctx-factory",
+      "teach-free",
+      "turn-wiring",
+      "cached-synthesis",
+      "asset",
+      "contract",
+      "full-audit",
+      "noyalib"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "teach-free"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

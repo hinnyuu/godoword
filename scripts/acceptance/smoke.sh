@@ -3,7 +3,7 @@
 # 用法：bash scripts/acceptance/smoke.sh [镜像引用]
 # 规则见 docs/project/gates.md 与 conventions.md。只清自有资源（前缀隔离），绝不碰用户容器。
 # M1c 覆盖：healthz/readyz/meta/config/静态、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
-# （注册首用户成管理员/cookie/me/会话/providers）、CSRF 守卫、/data 初始化断言（db/master.key 0600/backups）、
+# （注册首用户成管理员/cookie/me/会话/providers）、CSRF 守卫、/data 初始化断言（db/master.key 0600/backups/assets）、
 # 完整 uid/卷矩阵（rootless named/bind 非 1000 uid、rootful bind/named 降权属主）、删容器重建数据存活。
 # 容器以 GODOWORD_COOKIE_SECURE=false 运行（CI 走 HTTP，cookie 须可回传）。
 set -uo pipefail
@@ -89,6 +89,7 @@ assert_contains "openapi cookieAuth 认证（R5）" "$OPENAPI" 'cookieAuth'
 assert_eq "master.key 32 字节 0600" "32 600" "$(as_user podman exec "${TAG}-named" stat -c '%s %a' /data/keys/master.key 2>/dev/null)"
 assert_eq "db 文件存在" "yes" "$(as_user podman exec "${TAG}-named" sh -c 'test -f /data/db/godoword.sqlite && echo yes' 2>/dev/null)"
 assert_eq "backups 目录存在" "yes" "$(as_user podman exec "${TAG}-named" sh -c 'test -d /data/backups && echo yes' 2>/dev/null)"
+assert_eq "assets 持久资产区目录存在（M2 P1）" "yes" "$(as_user podman exec "${TAG}-named" sh -c 'test -d /data/assets && echo yes' 2>/dev/null)"
 # 用户级 REST 未认证 → 401（M1c 认证把守，替换 M1b 503）
 assert_eq "sessions 未认证 401" "401" "$(http_code -X POST http://127.0.0.1:18080/api/v1/sessions -H 'X-Requested-With: godoword')"
 assert_eq "providers 未认证 401" "401" "$(http_code http://127.0.0.1:18080/api/v1/providers)"
@@ -122,6 +123,15 @@ PVD=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/provi
 LONGTEXT=$(python3 -c "print('あ'*501)")
 assert_eq "试听文本上限 400（审计 F2）" "400" "$(http_code -b "$JAR" -X POST "http://127.0.0.1:18080/api/v1/providers/$PVD/preview" -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d "{\"model\":\"m\",\"voice\":\"v\",\"text\":\"$LONGTEXT\"}")"
 assert_eq "audio-meta 缺失 404" "404" "$(http_code -b "$JAR" http://127.0.0.1:18080/api/v1/audio/00000000-0000-0000-0000-000000000000/meta)"
+# M2 P1 模块 REST 面：清单含 teach-free / 会话缺省模块 / 未注册模块 400 / 完成语义 200+409 / 越权 404。
+assert_contains "modules 清单含 teach-free" "$(curl -s --max-time 8 -b "$JAR" http://127.0.0.1:18080/api/v1/modules)" '"id":"teach-free"'
+assert_eq "未注册模块创建会话 400" "400" "$(http_code -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/sessions -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"module_id":"absent-module"}')"
+MSID=$(curl -s --max-time 8 -b "$JAR" -X POST http://127.0.0.1:18080/api/v1/sessions -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+assert_contains "缺省会话模块 teach-free（T4）" "$(curl -s --max-time 8 -b "$JAR" "http://127.0.0.1:18080/api/v1/sessions?module=teach-free")" "$MSID"
+assert_eq "完成会话 200（完成≠删除）" "200" "$(http_code -b "$JAR" -X POST "http://127.0.0.1:18080/api/v1/sessions/$MSID/complete" -H 'X-Requested-With: godoword')"
+assert_eq "完成后会话仍在" "200" "$(http_code -b "$JAR" "http://127.0.0.1:18080/api/v1/sessions/$MSID")"
+assert_eq "重复完成 409（幂等）" "409" "$(http_code -b "$JAR" -X POST "http://127.0.0.1:18080/api/v1/sessions/$MSID/complete" -H 'X-Requested-With: godoword')"
+assert_eq "user2 越权完成 404" "404" "$(http_code -b "$JAR2" -X POST "http://127.0.0.1:18080/api/v1/sessions/$MSID/complete" -H 'X-Requested-With: godoword')"
 # 登录限流（审计 C10：声明覆盖限流须有 429 断言）：11 次错密码 → 第 11 次 429。
 LAST=""
 for i in $(seq 1 11); do LAST=$(http_code -X POST http://127.0.0.1:18080/api/v1/auth/login -H 'X-Requested-With: godoword' -H 'Content-Type: application/json' -d '{"username":"smoke-admin","password":"wrong"}'); done

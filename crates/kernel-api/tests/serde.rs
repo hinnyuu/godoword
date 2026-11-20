@@ -131,8 +131,8 @@ fn usage_golden() {
     assert_eq!(v["data"]["usage"]["total_tokens"], 55);
 }
 
-// ModuleManifest 的 Deserialize 契约锚点（与格式无关；module.yaml 的 YAML 解析 crate
-// 选型留 M1 kernel 评估维护良好的方案，此处用 JSON 验证 serde 属性与默认值）。
+// ModuleManifest 的 Deserialize 契约锚点（与格式无关；module.yaml 的 YAML 解析为 noyalib，
+// B7 定案 history 2130，kernel 注册表测试锚定真实 YAML；此处用 JSON 验证 serde 属性与默认值）。
 const TEACHING_JSON: &str = r#"{
   "id": "teach-gojuon",
   "name": "五十音图",
@@ -182,4 +182,58 @@ fn manifest_kernel_api_kind_kebab() {
     }"#;
     let m: ModuleManifest = serde_json::from_str(json).unwrap();
     assert_eq!(m.kind, ModuleKind::KernelApi);
+}
+
+#[test]
+fn manifest_kernel_kind_kebab() {
+    let json = r#"{
+      "id": "kernel", "name": "内核", "version": "0.0.0",
+      "kind": "kernel", "description": "回合循环与内核服务"
+    }"#;
+    let m: ModuleManifest = serde_json::from_str(json).unwrap();
+    assert_eq!(m.kind, ModuleKind::Kernel);
+}
+
+// ProgressEvent 信封黄金（M2 P1：difficulty 契约形状新增，审计 B1；serde default 旧信封兼容）。
+#[test]
+fn progress_event_difficulty_golden() {
+    let ev = kernel_api::ProgressEvent {
+        id: kernel_api::EventId::new(),
+        user_id: kernel_api::UserId::new(),
+        module_id: kernel_api::ModuleId("teach-gojuon".to_string()),
+        session_id: None,
+        ts: chrono::Utc::now(),
+        kind: kernel_api::EventKind::ExerciseOutcome,
+        skill_tags: vec!["kana:あ".to_string()],
+        outcome: Some(kernel_api::Outcome::Correct),
+        item_ref: Some("あ".to_string()),
+        difficulty: Some(0.25),
+        detail: serde_json::json!({ "mode": "identify" }),
+    };
+    let v = serde_json::to_value(&ev).unwrap();
+    assert_eq!(v["kind"], "exercise-outcome", "kind kebab-case");
+    assert_eq!(v["outcome"], "correct", "outcome lowercase");
+    assert_eq!(v["difficulty"], 0.25, "difficulty 形状新增");
+    assert_eq!(
+        v["session_id"],
+        serde_json::Value::Null,
+        "for_user 事件无会话"
+    );
+    let back: kernel_api::ProgressEvent = serde_json::from_value(v).unwrap();
+    assert_eq!(back.difficulty, Some(0.25), "round-trip");
+    // 旧信封（无 difficulty 字段）serde default 兼容。
+    let old = r#"{
+        "id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000002",
+        "module_id": "kernel",
+        "session_id": null,
+        "ts": "2026-11-20T00:00:00Z",
+        "kind": "session-ended",
+        "skill_tags": [],
+        "outcome": null,
+        "item_ref": null,
+        "detail": {}
+    }"#;
+    let ev: kernel_api::ProgressEvent = serde_json::from_str(old).unwrap();
+    assert_eq!(ev.difficulty, None, "旧信封 default 兼容");
 }

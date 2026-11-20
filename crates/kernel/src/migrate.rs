@@ -49,6 +49,11 @@ pub const KERNEL_MIGRATIONS: &[Migration] = &[
         name: "preferences_folders",
         sql: include_str!("../migrations/0005_preferences_folders.sql"),
     },
+    Migration {
+        version: "0006",
+        name: "m2_module_slice",
+        sql: include_str!("../migrations/0006_m2_module_slice.sql"),
+    },
 ];
 
 const VERSION_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS _schema_migrations (

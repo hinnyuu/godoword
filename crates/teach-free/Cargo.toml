@@ -1,0 +1,13 @@
+[package]
+name = "teach-free"
+description = "自由对话教学模块（T4 决议：内核默认教师 persona 移入，plan 可选）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kernel-api.workspace = true
+async-trait.workspace = true
+noyalib.workspace = true
