@@ -8,7 +8,7 @@
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
 | M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 完成（M1a/M1b/M1c/M1d 全部完成） |
-| M2 | teach-assess + teach-gojuon（placement → plan → 自适应课程，黄金路径全通） | — | 未开始 |
+| M2 | teach-assess + teach-gojuon + teach-free（placement → plan → 自适应课程，黄金路径全通） | — | 设计定案（待第三方审计） |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
 
@@ -67,7 +67,7 @@
   TTS SSE sentence 事件 + base64 PCM + 词级时间戳），入 `crates/<adapter>/tests/fixtures/`，CI 永不用真 key。
 - **OpenAPI 时序**：REST 端点随 M1a/b/c 落 utoipa 标注，M1d 生成 TS；SSE /messages path 入 OpenAPI，SessionEvent 事件 schema 不入（单独协议文档）。
 - **M1 无教学模块**：回合循环用 kernel 默认教师 persona（无模块 persona/无 plan.teacher_prompt），
-  sessions.module_id 可空；默认教师模式是否作永久"自由聊天"产品态留 M2 拍板。
+  sessions.module_id 可空；默认教师模式产品态留 M2 拍板（M2 决议为 teach-free 自由对话模块，history 1614）。
 
 ### 开发态临时取舍回归机制
 
@@ -100,8 +100,8 @@ sessions（module_id/plan_version 可空/on_disconnect）、messages（tool_call
 call_log（tokens/characters 可空/latency_ms/status）、progress_events（skill_tags/detail JSONB 整取）、
 tokens（前瞻 purpose/token_hash/expires_at/单次）、invites（code_hash/max_uses/used_count）。
 音频缓存走文件系统 `/data/cache`（随机 AudioId + sidecar 时间戳 JSON，可再生可丢弃不入库，TTL+容量上限有界）。
-**默认新鲜合成**（每次新合成存供回放）；复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash 推断——
-不靠指纹推断同一性，由模块权威声明）+ 静态资产（M2 模块入仓库 canonical 音频，零 TTS）。见 history 音频白名单条目。
+**默认新鲜合成**（每次新合成存供回放）；复用由模块**显式白名单**声明稳定 key（M2+ 推迟，取代指纹 hash 推断——
+不靠指纹推断同一性，由模块权威声明；M2 无消费者，静态资产已覆盖 gojuon）+ 静态资产（M2 模块入仓库 canonical 音频，零 TTS）。见 history 音频白名单条目。
 双兼容 SQL 子集：uuid 主键应用生成、时间戳应用侧、JSON 整取回 Rust、占位符 `$1`、key_enc BYTEA 亲和。
 
 ### REST / SSE 面（按阶段）
@@ -175,6 +175,73 @@ docs-gate/test_gate + commitlint + secrets + cargo-deny（含 unicode-normalizat
 **完整人工感官验收**（视觉/TTS 音质/BYOK 流/登录重置流/词级高亮 live+回放/移动视口 AudioWorklet 真机/自动播放手势/主题自定义）；
 Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人工残留按清单纪律（逐项命令+具体 tag+标准+清理）。
 
+## M2 实施蓝图
+
+> 本节是 M2 的实施蓝图（计划，非当前代码事实）；决策依据见 [history M2 设计](../../history/2026-11-20-1614-m2-design.md)。
+> 需求驱动六轮讨论定案（R1–R6），主开发者初步认可交第三方审计，**审计反馈前不启动 P1**。具体实现事实随代码落入各模块 `docs/`。
+
+### 范围与姿态
+
+teach-assess（评估核心）+ teach-gojuon（自适应五十音）+ teach-free（自由对话模块，T4 决议）黄金路径全通。
+携带动项入 MVP：用量看板 + M1c 一致性检查 + 真正再生；**推迟白名单缓存 + 角色音色档案实体**（无 M2 消费者，治理克制）。
+**风险前置垂直切片**（承 M1a）：P1 先最薄模块集成切片跑通端到端，再铺 assess/gojuon。
+含**一次有界 kernel-api 契约新增**（ModuleContext LLM 接缝/complete_session/ctx 工厂/ModuleKind::Kernel）→**契约级全量语义审查 + 二审**。
+
+### 关键设计决策
+
+- **混合式课程**：结构化操练卡（确定性判定→结构化进度事件 ExerciseOutcome）+ LLM 对话课（persona + plan 钉住→提取报告）。双通道进度。
+- **teach-free（T4）**：自由对话成轻量教学模块，内核默认 persona 移入；既有无模块会话/default 文件夹迁入；plan 可选（persona-only 可用）。
+- **Placement**：自评问卷 + 确定性迷你测（标记已会）→ assessor 初始方案；可选 LLM 互动短测精炼。
+- **自适应**：固定教学顺序 + 跳过已会 + plan 驱动侧重/节奏/讲解；复习 = 操练加权 + 专项复习课。
+- **一课三段式**：引入对话→操练卡→收尾对话；完成发 session-ended（完成≠删除，转录保留触发提取）。
+- **操练题型**：识别 + 听音 + 认读（v1 无 STT，确定性判定）；课时粒度一行/组 ~5 项。
+- **评估机制**：提取报告 = 结构化观察条目 {skill_tag,evidence,outcome_hint,confidence}；重规划 = 全量再生自动应用 version+1
+  （并发锁 + 失败保留旧版）；阈值 ≥20 事件 或 ≥3 报告（可配）+ 手动。
+- **内容**：全假名 ~104（清音/濁音/半濁音/拗音），数据驱动；静态音频构建期 TTS 合成入仓库（裸 PCM + manifest，longanlingxin）。
+- **前端**：学习仪表盘首页 + /m/<id> 模块路由；**运行时懒加载 chunk**（web/modules/<id> 独立入口 + core 共享 chunk）；
+  方案面板 + 掌握度热力图（提取报告内部）；历史组件按命名空间复用。
+- **用量看板**：call_log 按模块/能力/模型聚合 + 近期调用（示数量不示金额）。**真正再生**：再生端点替换失败回合。
+
+### 模块架构与契约变更
+
+- **kernel 模块注册表**：module.yaml 运行时反序列化（ModuleKind 补 Kernel）+ feature 注册 + 迁移编排（kernel→模块注册序，版本键 mod_<id>_NNNN）。
+- **ModuleContext 实现 + 契约新增**：store/emit_progress/current_plan 落地 + `llm(role,req)->ChatStream`（kernel 中介，全计量，模块不触 key）
+  + `complete_session()`；**ModuleContextFactory**（for_session/for_user，组合根构造期注入，routes() 签名不动）。
+- **回合循环接线**：模块 persona + plan.teacher_prompt 钉住 + 模块工具分发（speak kernel 统一）+ on_session_start/end + 绑定解析带 module_id。
+- **outbox 扇出 + 幂等（A5）**：consumes_events 订阅扇出 + kernel 级 event_consumptions per-subscriber 投递表。
+- **kernel 0006**：progress_events 补 outcome/item_ref/difficulty 列 + OutboxEvent 取回 created_at；sessions 补 completed_at。
+- **私有表**：mod_teach_assess_*（plans/reports/聚合）+ mod_teach_gojuon_*（item_progress/lessons）+ teach-free 迁移。
+
+### REST 扩展面（M2，均 AuthUser + 对象级归属）
+
+- 模块注册/清单 `GET /api/v1/modules`；模块路由挂载 `/api/v1/m/{id}/`（TeachingModule.routes）
+- teach-assess：placement（问卷/迷你测/LLM 短测）+ `GET /plan`（当前方案）+ `POST /plan/reassess`（手动重规划）+ 版本历史
+- teach-gojuon：课程数据/课时（新授/复习）/操练判定/进度/掌握度 + 静态资产路由
+- 会话：`POST /sessions` 带 module_id；`POST /sessions/{id}/complete`（完成语义）；`POST /sessions/{id}/regenerate`（再生）
+- 用量：`GET /api/v1/usage`（聚合 + 近期调用）
+- 模块迁移 mod_<id>_* 表 + 注册序追加。schema 补全：新 DTO ToSchema（OpenAPI 单一事实源）。
+
+### Phase 拆分（commit 级，风险前置，上下文耗尽友好）
+
+| Phase | 内容 |
+|---|---|
+| P0 | 设计落档 PR（roadmap 蓝图 + history + status + glossary + conventions + contract.md 预告） |
+| P1 | **风险前置切片**：注册表 + ModuleContext 实现 + 回合接线 + teach-free → 模块会话端到端（契约新增 + 全量审查 + 二审） |
+| P2 | kernel 基底：0006 + outbox 扇出 + event_consumptions 幂等 + complete_session + 模块迁移 runner |
+| P3 | teach-assess 后端：mod 表 + placement + PlanProvider + 提取 + 重规划 + 阈值/锁 |
+| P4 | teach-gojuon 后端：课程数据 + 课时调度 + 操练判定 + 进度 + **静态资产生产**（DashScope 条款确认后）+ 模块 REST |
+| P5 | 前端：懒加载集成 + 仪表盘 + 模块路由 + assess UI + gojuon UI + teach-free 包装 |
+| P6 | 用量看板 + 再生 API + M1c 一致性检查 |
+| P7 | Dockerfile 资产 + CI 扩展 + 冒烟扩展 |
+| P8 | 验收（CI 全绿 + 真 key 黄金路径脚本 + 人工感官 + 部署矩阵 + R4 + 全状态面 reconcile） |
+
+### 验收策略
+
+CI 模块双后端测试（mod 表 CRUD/迁移）+ 前端 vitest/svelte-check/build（含懒加载 chunk）+ 冒烟扩展（模块 REST/placement 流）+
+契约 serde 黄金 + 全量审查矩阵。本地真 key 黄金路径脚本（register→placement→plan→gojuon 一课→提取→重规划→复习课）。
+**完整人工感官验收**（黄金路径 UX + canonical 音质 + 操练交互 + 移动端 + 方案演进可见）；Dockerfile 资产变更→部署矩阵重 sign-off。
+人工残留按清单纪律。可靠性负例锚定（重规划并发/失败保留旧版、提取失败留待、outbox 重投幂等、完成 vs 删除、跨用户越权、模块迁移回滚、再生原子）。
+
 ## 远期项（未排期）
 
 - tokenizer 计数替代字符启发式估算（适配器按模型族提供 count_tokens）
@@ -186,10 +253,12 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
 - chrono unmaintained（RUSTSEC-2026-0543）风险接受跟踪：监控社区 fork/复活或 sqlx 切换
   jiff/time，届时迁移并移除 cargo-deny 忽略（当前 sqlx 传递依赖 + 契约类型用 chrono，替换不可行）
 - 更多教学模块（卡片闯关、LLM 考官考试等）与失败模块退役
-- M2 一致性检查（多轮审计非阻断观察留档）：summarize 与主回合循环 Finish 处理对称化（usage 计量完整性，
+- M2 一致性检查（入 M2 P6，多轮审计非阻断观察）：summarize 与主回合循环 Finish 处理对称化（usage 计量完整性，
   Finish 后 usage chunk 不漏记）+ outbox 消费侧幂等（A5，模块消费者落地时）+ 淘汰断言助手增强
+- 白名单缓存 cached-synthesis（M2 推迟）：模块显式声明稳定 key 的 get_or_synthesize 服务，静态资产已覆盖 gojuon 故 M2 无消费者，
+  待有消费者里程碑（取代指纹 hash 推断，见 history 音频白名单条目）
 - 角色扮演横切声音基础设施（地基 persona/binding/voice 原语 + 模块编排 + 内核角色音色档案实体；
-  音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）——M2+ 方向，见 history 角色扮演条目
+  音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）——M2+ 方向（角色音色档案实体 M2 推迟，无黄金路径消费者），见 history 角色扮演条目
 - PWA / 移动端增强
 - 移动端布局优化（M1d 移动视口功能可用但侧栏固定宽挤压对话区；侧栏响应式折叠/抽屉化专项调整，主开发者认可早期测试后延）
 - 对话 Markdown/HTML 渲染（marked/markdown-it + DOMPurify sanitization 防 XSS，M1d 纯文本 pre-wrap，未来与 HTML 支持一起做）
@@ -199,7 +268,13 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
 - 信封加密（per-user data key）、主密钥轮换工具
 - RP-initiated logout（OIDC 会话联动）
 
-## 当前差异（M1 全部完成 M1a–M1d，M2 待启动）
+## 当前差异（M1 全部完成 M1a–M1d，M2 设计定案待第三方审计）
+
+- **M2 设计定案**（history 1614，需求驱动六轮 R1–R6）：teach-assess + teach-gojuon + teach-free 黄金路径；混合式课程（操练卡 + 对话课双通道进度）；
+  placement（问卷 + 迷你测 + 可选 LLM 短测）→ 全量再生重规划（version+1，阈值 + 手动）；全假名 ~104 数据驱动 + 构建期静态音频（裸 PCM）；
+  学习仪表盘 + 模块路由 + 运行时懒加载 chunk；用量看板 + 真正再生 + M1c 一致性检查入 MVP；白名单缓存 + 角色音色档案推迟。
+  **有界 kernel-api 契约新增**（ModuleContext LLM 接缝/complete_session/ctx 工厂/ModuleKind::Kernel）→契约级全量审查。
+  主开发者初步认可交第三方审计，**审计反馈前不启动 P1**；DashScope 输出权利条款待确认（静态资产 P4 前置）。
 
 - **M1d 完成**（history 2049 设计 + 2130/2230/2310/2345/0010/0040 实现 + 0130/0210/0240 验收修复）：
   Svelte 5 SPA 完整图形界面（认证/管理/引导/设置/对话/会话文件夹）+ web/core 框架无关 TS（音频引擎词级高亮 live/回放 +

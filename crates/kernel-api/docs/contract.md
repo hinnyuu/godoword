@@ -49,3 +49,15 @@ kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）、**s
 契约 M0 定义；M1a 新增 speak 工具契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）。
 kernel（回合循环）+ llm-openai + tts-qwen-audio 适配器 M1a 已实现；auth-local M1c、教学模块 M2+。
 token 估算当前为字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
+
+## M2 契约新增预告（待 P1 落地 + 契约级全量审查）
+
+> 设计定案见 [history M2](../../../history/2026-11-20-1614-m2-design.md) / [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。
+> 以下为**预告**（非当前契约事实），P1 落地时触发契约级全量语义审查 + 二审；trait 签名/协议 serde 形状尽量不动。
+
+- `ModuleContext` 新增 `llm(role, ChatRequest) -> ChatStream`：kernel 中介 LLM 调用（按 user+module+cap+role 解析绑定解密，
+  全计量 call_log，模块永不触 key/上游）+ `complete_session()`（完成语义，转录保留，发 session-ended；≠ end_session 删除级联）。
+- 新增 `ModuleContextFactory`（`for_session(user, session)` / `for_user(user)`）：组合根构造模块时注入，`TeachingModule::routes()` 签名不动。
+- `ModuleKind` 补 `Kernel` 变体（module.yaml kind=kernel 反序列化）。
+- `ProgressEvent` 字段（outcome/item_ref/difficulty）DB 对齐（kernel 0006 补列，契约形状已有，非契约变更）。
+- 白名单 cached-synthesis + 角色音色档案实体 **M2 推迟**（无黄金路径消费者），不入本次契约新增。

@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T14:55+08:00
-- 当前里程碑: **M1d 已合并并正式闭环（PR #18 → main 6a64852，R4 main 重测通过，验收 PR #19 → 4ff77d4）→ M2 待启动设计讨论**
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ **M1d 合并（6a64852）→ M2 待启动**
+- verified: 2026-11-20T16:14+08:00
+- 当前里程碑: **M2 设计定案（history 1614，六轮 R1–R6）→ 待主开发者转第三方审计 → 审计反馈后 P1 风险前置切片**
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ **M2 设计定案（待审计）**
 
 ## done
 
@@ -26,27 +26,29 @@
   **PR #18 squash 合并 main（6a64852），CI 全 8 绿（含 frontend required）**。
 - **M1d 落地后文档漂移清扫**（history 1455）：wiki/占位页/模块 docs 陈旧 M1c 表述修正 + models.json fixture 事实对齐 +
   architecture 占位页开发态定位；TTS 多句 usage 漏计疑似经真 key 探针排除（本网关每请求单 sentence，首帧即全量）。
+- **M2 设计定案**（history 1614，需求驱动六轮 R1–R6，主开发者初步认可交第三方审计）：teach-assess + teach-gojuon + teach-free 黄金路径；
+  混合式课程 + placement（问卷/迷你测/可选 LLM 短测）+ 全量再生重规划 + 全假名 ~104 + 构建期静态音频（裸 PCM）+ 学习仪表盘/模块路由/懒加载 chunk；
+  用量看板 + 真正再生 + M1c 一致性检查入 MVP，白名单缓存 + 角色音色档案推迟；有界 kernel-api 契约新增→契约级全量审查。蓝图见 roadmap。
 
 ## in-flight
 
-- 无开放实现 PR。M2 启动设计讨论待主开发者发起。
+- M2 设计已落档，待主开发者转第三方审计反馈；**审计反馈前不启动 P1 实施**。
 
 ## blocked / 待拍板决策
 
-- **无阻塞**。合并后 M2 启动待主开发者发起（teach-assess 评估模块 + teach-gojuon 五十音，placement→plan→自适应课程黄金路径；
-  评估实现细节另开专轮，history 0630）。
-- 远期留 M2：默认教师模式产品态（T4）；角色音色档案实体 + 白名单音频复用 + 静态资产；
-  M1c 六轮复核非阻断观察（summarize usage Finish 后或漏记 / 主循环与 summarize Finish 处理不对称 / 断言助手增强）+ outbox 消费幂等（A5）一致性检查。
+- **第三方审计反馈**（M2 设计，主开发者转交）：审计意见返回后修订设计/启动 P1。
+- **DashScope 输出权利条款**（静态资产 P4 前置）：~104 canonical 音频入 AGPL 仓库前须主开发者确认生成音频可再分发。
+- T4 已决议（teach-free 轻量模块，history 1614）；白名单缓存 + 角色音色档案实体推迟（无 M2 消费者，M2+ 方向）。
 
 ## 下一动作
 
-- **M2 设计讨论**（待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
-  契约 trait 已立但 kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师：resolve module=None/persona 常量/plan_version=None/tools 仅 speak）；
-  outbox dispatcher 按 module_id 同一路由，跨模块订阅（consumes_events 预留）+ 消费幂等（A5）待 M2；
-  SessionEnded 现仅删除会话时发（转录同事务级联删，detail 空），课程完成 vs 用户删除语义待 M2 设计；
-  ModuleContext 缺 kernel 中介 LLM 调用接缝（extractor/assessor）+ 白名单 cached-synthesis + 角色音色档案实体（M2 契约新增→全量审查）；
-  模块迁移版本键须与 kernel 全局版本表命名空间隔离；module.yaml kind=kernel 不在 ModuleKind enum（注册表落地时处理）。
-- M2 一致性检查留档（上述非阻断观察）+ 重试再生语义（history 1240 取舍）。
+- **待第三方审计反馈**（M2 设计 history 1614 / roadmap M2 蓝图）：审计意见返回后修订设计 → 启动 **P1 风险前置切片**
+  （模块注册表 + ModuleContext 实现 + 回合接线 + teach-free，模块会话端到端；契约新增此 phase 落 + 契约级全量审查 + 二审）。
+- M2 技术接缝（设计已定，P1/P2 落地）：kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师）；
+  outbox 跨模块订阅（consumes_events）+ event_consumptions 幂等（A5）；SessionEnded 完成≠删除语义（complete_session + sessions.completed_at）；
+  ModuleContext LLM 接缝（extractor/assessor）+ ctx 工厂注入 + ModuleKind::Kernel；progress_events 补 outcome/item_ref/difficulty 列（0006）；
+  模块迁移版本键 mod_<id>_NNNN 命名空间。详见 history 1614 / roadmap 蓝图。
+- 静态资产 P4 前置：DashScope 输出权利条款确认 + ~104 音频构建期合成脚本。
 
 **文档精炼原则**（history 2127）：加固/实现沉淀测试/code/history，live 文档只记当前事实；status 只留开放项；产品本质保持显著（README 愿景权威清单）。
 
@@ -57,7 +59,7 @@
 | T1 | env dev key 旁路 + 固定 dev user | M1a | M1c | **已回归** |
 | T2 | 内存 impl 作生产默认 | M1a | M1b/M1c | **已回归** |
 | T3 | 容器 root 运行 | M1a | M1b | **已回归** |
-| T4 | 无模块默认教师模式 | M1a | M2 决议 | 待 M2 |
+| T4 | 无模块默认教师模式 | M1a | M2 决议 | **已决议**（teach-free 轻量模块，history 1614） |
 
 ## 近期关键上下文（M2 交接用）
 
@@ -79,3 +81,7 @@
   改密错旧密 403（401 专属会话）；preview 500 字符/60s/Usage 计量；适配器 connect 10s/read 30s；
   前端树=登记表∪会话路径；auto_play 队列靠引擎 onEnded（pushedMs+markComplete）；prefs 串行队列+清残留变量；
   core session/ux.ts（routeError/parseUsage）；frontend 已入 main required checks + image needs。
+- **M2 设计关键事实**（history 1614）：三模块 teach-assess/teach-gojuon/teach-free；混合式课程双通道进度（操练 ExerciseOutcome + 对话提取报告）；
+  一课三段式（引入→操练→收尾，完成 session-ended≠删除）；全量再生重规划 version+1（阈值 ≥20 事件/≥3 报告 + 手动，并发锁，失败保留旧版）；
+  全假名 ~104 数据驱动 + 构建期静态音频（裸 PCM + manifest，longanlingxin，DashScope 条款待确认）；前端运行时懒加载 chunk（core 共享 chunk）；
+  契约新增 ModuleContext.llm/complete_session + ModuleContextFactory + ModuleKind::Kernel（→全量审查）；白名单缓存/角色音色档案推迟。

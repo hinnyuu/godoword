@@ -4,7 +4,7 @@
 LLM 担任核心语言教师，结合 TTS 完成听说教学。单容器 all-in-one，podman 优先、兼容 docker。
 
 - 许可证：AGPL-3.0（见 [LICENSE](LICENSE)）
-- 状态：M1d 完成（Svelte 图形界面：认证/管理/引导/设置/对话/会话文件夹 + 音频引擎词级高亮 + 主题自定义 + 偏好跨设备），后端经多轮审计加固（详见 [roadmap](docs/project/roadmap.md)）
+- 状态：M1d 完成（Svelte 图形界面：认证/管理/引导/设置/对话/会话文件夹 + 音频引擎词级高亮 + 主题自定义 + 偏好跨设备），后端经多轮审计加固；M2 设计定案待第三方审计（详见 [roadmap](docs/project/roadmap.md)）
 
 ## 产品愿景与核心需求
 

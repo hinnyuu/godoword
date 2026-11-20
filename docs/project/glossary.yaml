@@ -124,3 +124,21 @@ terms:
   - canonical: 音色试听
     banned: []
     definition: 设置页选音色时合成一句试听（POST /providers/{id}/preview，固定短文本+可选自定义，走用户 key 计量），BYOK 选音色闭环（M1d）
+  - canonical: 定级
+    banned: [分级测试]
+    definition: placement，新用户冷启动评估（自评问卷 + 确定性迷你测 + 可选 LLM 短测）→ 初始教学方案（M2）
+  - canonical: 操练
+    banned: [刷题]
+    definition: 结构化练习卡（识别/听音/认读，模块确定性判对错），发结构化进度事件 ExerciseOutcome（M2）
+  - canonical: 课时
+    banned: [课程单元]
+    definition: lesson，一课三段式（引入对话→操练→收尾对话），新授课/复习课两类，一行/组 ~5 项（M2）
+  - canonical: 掌握度
+    banned: [熟练度]
+    definition: 假名项掌握程度（进度事件对错聚合），gojuon 热力图可视化（M2）
+  - canonical: 模块注册表
+    banned: [模块列表]
+    definition: kernel 运行时反序列化 module.yaml + feature 注册教学模块 + 迁移编排（kernel→模块注册序）（M2）
+  - canonical: 自由对话
+    banned: [自由聊天]
+    definition: teach-free 轻量教学模块（T4 决议），内核默认 persona 移入，plan 可选，既有无模块会话迁入（M2）

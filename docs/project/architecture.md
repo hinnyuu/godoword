@@ -166,11 +166,12 @@ dist 拷入 web/shell/public，源内占位页仅开发态伺服）；前端 CI 
   OpenAPI **操作级 security 矩阵**（公开端点不误伤，N1）+ cookieAuth/CSRF/$ref 全解析、test_gate 接 CI、
   旧/损坏/PCM-only sidecar 兼容 404 可再生（N7）+ 限流器容量满 fail-closed 保密禁（N5）+ 可信代理 XFF 最右不可信跳。
   各配失败/并发负例测试（**auth/journal/storage 并发与迁移回滚双后端；runtime 回合行为测试 SQLite**）。
-- 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、教学模块（M2+）。
+- 未实现：教学模块（M2 设计定案待审计，history 1614：teach-assess/teach-gojuon/teach-free）、静态资产（M2）、
+  白名单音频复用 + 角色音色档案实体（M2+ 推迟，无黄金路径消费者）。
   **M1d 完成**：前端 Svelte 5 SPA（web/core 框架无关 + web/shell，认证/管理/引导/设置/对话/会话文件夹 + 音频词级高亮 live/回放 +
   主题自定义 + 偏好跨设备）；后端扩展（0005 虚拟路径文件夹/偏好/会话元数据/音色试听/回放时间戳出口/自助改密）+
   **OpenAPI schema 补全（kernel-api 5 类型 + UserInfo + 新 DTO ToSchema，utoipa 有意耦合→契约级审查）**；Dockerfile 三阶段 node 构建。
   Markdown/HTML 渲染 + 移动布局优化延期远期。**合并前审计修复**（history 1240）：文件夹祖先链原子登记 + 改名冲突预检 + 上限重校验、
   改密错旧密 403、试听上限/超时/计量、适配器 connect/read 超时、错误分流/usage 数字/三卡片/布局偏好/改名 UI、frontend required check。
 - 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；
-  outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。
+  outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2+ 推迟，静态资产 M2）。
