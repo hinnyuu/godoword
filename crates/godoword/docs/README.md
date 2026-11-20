@@ -24,7 +24,9 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 - 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params，C5**）、`GET/DELETE /sessions/{id}`（DELETE SessionEnded outbox + 删除同事务原子，R6）、
   `POST /sessions/{id}/messages`（→SSE）、`POST /sessions/{id}/cancel`、`GET /audio/{id}`（均经 AuthUser + **对象级归属校验，越权 404，C1**）。
 - provider/binding CRUD + models/voices 测试端点（`src/settings.rs`，经 AuthUser，**binding 强制 provider 同主 C2**，key 加密不回显，**测试端点计量 C9**；
-  **二审 R2-4：provider 输入边界校验**——adapter 须已注册、label/base_url 非空、base_url 须 http(s)、key 非空，更新留空 key 保留原 key）。
+  **二审 R2-4：provider 输入边界校验**——adapter 须已注册、label/base_url 非空、base_url 须 http(s)、key 非空，更新留空 key 保留原 key；
+  **审计 O4：models/voices 端点校验 provider.adapter_id 与能力匹配（不匹配 400，防拿用户 key 打错误上游路径）**；
+  **审计 O5：binding capability/role 枚举校验 + model 非空（400；module_id 注册表校验留 M2）**）。
 - 状态 `AppState`：DbSessions/FsAudio（trait 对象）+ Runtime + `Arc<Store>` + Config + MasterKey + 适配器 + RateLimiter；
   **用户经 per-request AuthUser**（无固定 user）。
 
@@ -36,7 +38,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 
 ## M1d REST 扩展（用户级，均 AuthUser + 对象级归属）
 
-- **偏好**（`src/prefs.rs`）：`GET/PUT /api/v1/preferences`（kernel::Preferences，跨设备随账户，UPSERT）。
+- **偏好**（`src/prefs.rs`）：`GET/PUT /api/v1/preferences`（kernel::Preferences，跨设备随账户，UPSERT；
+  **turn_timeout_secs 回合超时用户自配，默认 180s 钳位 [30,3600]，sign-off 轮**）。
 - **文件夹**（`src/folders.rs`）：`GET/POST /folders`、`PUT/DELETE /folders/{id}`（虚拟路径目录树；module 查询默认 default；
   FolderError→400/500；改名子树批量改写防环、删非空上移一层绝不删会话）。
 - **会话**（`src/rest.rs`）：`GET /sessions?folder=&module=`（元数据列表 SessionListItem：title/created_at/last_active/message_count/path）、

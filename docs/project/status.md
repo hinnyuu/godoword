@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T17:21+08:00
-- 当前里程碑: **M2 设计审计修订（PR #21，history 1721）→ 修订合并（设计审计通过）→ 代码修复 PR（F1/O 系列）→ P1 风险前置切片**
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ **M2 审计修订（PR #21）**
+- verified: 2026-11-20T19:13+08:00
+- 当前里程碑: **M2 设计审计通过（PR #21 合并 b1a19b8，R4 重测绿）→ 代码修复 PR（F1/O 系列，history 1802）→ P1 风险前置切片**
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ **代码修复 PR（history 1802）**
 
 ## done
 
@@ -36,20 +36,29 @@
   **实施 M2 后**）。审计设计修正 B1–B9（difficulty 契约形状新增诚实标注/DELETE 不发事件/call_log.module_id 入 0006/
   session_id vs for_user P1 必决/outbox 消费守护/重规划锁不跨 LLM 持写事务/YAML crate/迁移哨兵涟漪/mount 单路径）；
   漂移清扫 5 处；代码发现 F1（delete_folder 冲突 500，实验确证）+ O 系列→**另开代码修复 PR**。
+- **M2 设计审计通过合并**（PR #21 squash → main b1a19b8）：CI 全 8 绿 + R4 main 冒烟重测通过；主开发者复核「通过」。
+- **M2 审计代码修复轮**（history 1802，独立 PR）：F1 delete_folder 上移冲突预检（与 rename 对称 400 + 目标先删释放路径）+
+  O2 计量 warn / O3 TTS cancel 记 cancelled / O4 测试端点 adapter 匹配 / O5 binding 枚举校验 / O6 遗留无守卫面 doc(hidden) /
+  O7 delete 原语标注 / O8 move rows 校验 / O9 speak rate 钳位+文本上限 / O10 前端 UX 四项（⏹ 真停止/近底自动滚动/暗色横幅/删除先确认）；
+  负例同配（双后端 F1 + turn cancelled + handler 级匹配/枚举 + speak 单测）；O1/B2/O11/O12 归属 M2 P6/P2/仪表盘/M4 不动。
+- **PR #22 人工 sign-off 轮**（history 1913）：⏹ 真停止/删除先确认/暗色横幅 ✔（PC+移动双侧）；
+  滚动信号补全（思考/音频词/折叠展开，原遗漏）；**回合超时归用户级**（主开发者裁决：BYOK 成本/耐心权衡同
+  on_disconnect 轴；Preferences.turn_timeout_secs 默认 180s 钳位 [30,3600]，非契约变更；硬边界语义不变）；
+  OpenAPI 再生（本地服务 dump，实验垃圾已清）。新增残留：滚动复验 + 超时设置 UI 生效。
 
 ## in-flight
 
-- **PR #21 审计修订轮**（history 1721）：设计文档修订落档中；修订合并 = 设计审计通过。代码修复 PR（F1/O 系列）待设计定案后另开。
+- **代码修复 PR #22**（history 1802/1913，fix/m2-audit-code-fixes）：sign-off 轮修复已推送，待 CI + 复核 + 新增视觉残留 sign-off → 合并。
 
 ## blocked / 待拍板决策
 
-- **PR #21 修订复核 + 合并裁决**（主开发者）：修订轮全量审查 + 二审已执行（history 1721），待主开发者复核合并。
+- **代码修复 PR 复核 + 合并裁决 + 前端视觉残留 sign-off**（主开发者）：四项视觉验收（播放停止/自动滚动/暗色横幅/删除确认序）。
 - T4 已决议（teach-free 轻量模块，history 1614）；角色音色档案实体推迟（无 M2 消费者，M2+ 方向）；
   白名单缓存**回归 M2**（用户侧标准音频消费者，history 1721）；DashScope 条款阻塞**已关闭**（静态入仓库作废，用户侧生成规避）。
 
 ## 下一动作
 
-- **PR #21 修订合并后**：开代码修复 PR（F1 delete_folder 冲突预检 + O 系列可前置项；O1 EOF 对称化归 M2 P6，B2 删除语义归 M2 P2）→ 合并 → 启动 **P1 风险前置切片**
+- **代码修复 PR 合并后**：启动 **P1 风险前置切片**
   （模块注册表 + ModuleContext 实现 + 回合接线 + teach-free，模块会话端到端；契约新增此 phase 落 + 契约级全量审查 + 二审；
   **B3 必决项**：session_id vs for_user 张力 + plan_version 类型对齐）。
 - M2 技术接缝（设计已定，P1/P2 落地）：kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师）；

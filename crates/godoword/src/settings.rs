@@ -269,6 +269,14 @@ pub async fn provider_models(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<ModelInfo>>, StatusCode> {
     let llm = &st.llm;
+    // 审计 O4：adapter 与端点能力匹配校验（TTS provider 调 /models 会拿用户 key 打错误上游路径）。
+    let p = repo::get_provider(&st.store, user.0, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if p.adapter_id != llm.id() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -296,6 +304,14 @@ pub async fn provider_voices(
     Query(q): Query<VoicesQuery>,
 ) -> Result<Json<Vec<VoiceInfo>>, StatusCode> {
     let tts = &st.tts;
+    // 审计 O4：adapter 与端点能力匹配校验。
+    let p = repo::get_provider(&st.store, user.0, id)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    if p.adapter_id != tts.id() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     let conn = repo::provider_conn(&st.store, &st.master, user.0, id)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -360,6 +376,14 @@ fn upstream_status(e: &ProviderError) -> StatusCode {
     }
 }
 
+/// binding 输入边界校验（审计 O5）：capability/role 须属契约枚举，model 非空。
+/// module_id 注册表校验留 M2（注册表落地后）。
+fn binding_input_valid(capability: &str, role: &str, model: &str) -> bool {
+    let cap_ok = matches!(capability, "llm" | "tts" | "stt");
+    let role_ok = matches!(role, "default" | "summarizer" | "extractor" | "assessor");
+    cap_ok && role_ok && !model.trim().is_empty()
+}
+
 /// 新建 binding。
 #[utoipa::path(
     post, path = "/api/v1/bindings", request_body = CreateBindingReq, tag = "bindings",
@@ -370,6 +394,9 @@ pub async fn create_binding(
     AuthUser(user): AuthUser,
     Json(req): Json<CreateBindingReq>,
 ) -> Result<(StatusCode, Json<Binding>), StatusCode> {
+    if !binding_input_valid(&req.capability, &req.role, &req.model) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     if !provider_owned(&st, user, req.provider_id).await {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -436,6 +463,9 @@ pub async fn update_binding(
     Path(id): Path<Uuid>,
     Json(req): Json<UpdateBindingReq>,
 ) -> Result<Json<Binding>, StatusCode> {
+    if req.model.trim().is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     if !provider_owned(&st, user, req.provider_id).await {
         return Err(StatusCode::BAD_REQUEST);
     }
@@ -881,6 +911,112 @@ mod tests {
             cross.unwrap_err(),
             StatusCode::BAD_REQUEST,
             "跨用户绑定 400"
+        );
+    }
+
+    /// 审计 O4：测试端点 adapter 匹配校验（TTS provider 调 /models、LLM provider 调 /voices → 400）。
+    #[tokio::test]
+    async fn test_endpoints_adapter_mismatch_400() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "am-match").await;
+        let tts_pid = tts_provider(&st, user).await;
+        let llm_pid = kernel::repo::create_provider(
+            &st.store,
+            &st.master,
+            user.0,
+            "llm-openai",
+            "mock-llm",
+            "https://mock.example",
+            "mock-key",
+            serde_json::json!({}),
+        )
+        .await
+        .unwrap()
+        .id;
+        let r = provider_models(State(st.clone()), AuthUser(user), Path(tts_pid)).await;
+        assert_eq!(
+            r.unwrap_err(),
+            StatusCode::BAD_REQUEST,
+            "TTS provider 调 /models 400"
+        );
+        let r = provider_voices(
+            State(st.clone()),
+            AuthUser(user),
+            Path(llm_pid),
+            Query(VoicesQuery { model: None }),
+        )
+        .await;
+        assert_eq!(
+            r.unwrap_err(),
+            StatusCode::BAD_REQUEST,
+            "LLM provider 调 /voices 400"
+        );
+        // 匹配路径正常（mock 适配器，不触网）。
+        assert!(
+            provider_models(State(st.clone()), AuthUser(user), Path(llm_pid))
+                .await
+                .is_ok()
+        );
+        assert!(provider_voices(
+            State(st.clone()),
+            AuthUser(user),
+            Path(tts_pid),
+            Query(VoicesQuery { model: None })
+        )
+        .await
+        .is_ok());
+        // 越权仍 404（归属先于匹配）。
+        let (other, _) = user_with_token(&st, "am-match2").await;
+        let r = provider_models(State(st.clone()), AuthUser(other), Path(tts_pid)).await;
+        assert_eq!(r.unwrap_err(), StatusCode::NOT_FOUND, "越权 404");
+    }
+
+    /// 审计 O5：binding capability/role 枚举 + model 非空校验。
+    #[tokio::test]
+    async fn binding_input_validation_400() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "bv1").await;
+        let pid = tts_provider(&st, user).await;
+        let mk = |cap: &str, role: &str, model: &str| CreateBindingReq {
+            module_id: "*".to_string(),
+            capability: cap.to_string(),
+            role: role.to_string(),
+            provider_id: pid,
+            model: model.to_string(),
+            params: None,
+        };
+        for req in [
+            mk("bogus", "default", "m"),
+            mk("tts", "bogus", "m"),
+            mk("tts", "default", "  "),
+        ] {
+            let r = create_binding(State(st.clone()), AuthUser(user), Json(req)).await;
+            assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "O5 枚举/非空校验");
+        }
+        // 合法创建后 update 空 model → 400。
+        let b = create_binding(
+            State(st.clone()),
+            AuthUser(user),
+            Json(mk("tts", "default", "m")),
+        )
+        .await
+        .unwrap()
+        .1;
+        let r = update_binding(
+            State(st.clone()),
+            AuthUser(user),
+            Path(b.id),
+            Json(UpdateBindingReq {
+                provider_id: pid,
+                model: "".to_string(),
+                params: None,
+            }),
+        )
+        .await;
+        assert_eq!(
+            r.unwrap_err(),
+            StatusCode::BAD_REQUEST,
+            "O5 update 空 model 400"
         );
     }
 }

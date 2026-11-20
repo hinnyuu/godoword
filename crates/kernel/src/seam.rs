@@ -120,6 +120,9 @@ pub trait SessionRepo: Send + Sync {
     /// 列出用户会话。
     async fn list(&self, user: UserId) -> Result<Vec<SessionId>, KernelError>;
     /// 删除会话（限本用户，含转录）。
+    ///
+    /// **仓储层原语（审计 O7）**：生产 REST 删除走 `journal::end_session`（DELETE RETURNING 唯一认领
+    /// + outbox 同事务）；本方法不发事件，仅测试与仓储内部用，请求路径不得直接调用。
     async fn delete(&self, user: UserId, id: SessionId) -> Result<(), KernelError>;
 }
 

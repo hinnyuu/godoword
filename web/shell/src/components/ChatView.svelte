@@ -50,6 +50,19 @@
   let autoQueue: Segment[] = [];
   let playPending = false;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  let messagesEl: HTMLDivElement | undefined = $state();
+
+  // 审计 O10：新消息/流式增长自动滚动（仅在近底时，不与手动上滚阅读打架）。
+  // sign-off 轮补全：信号须覆盖气泡内全部流式内容——正文 + 思考 + 音频词 + 折叠展开（原仅跟踪正文）。
+  $effect(() => {
+    const last = messages[messages.length - 1];
+    const words = last?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
+    const sig = `${messages.length}:${(last?.text ?? '').length}:${(last?.reasoning ?? '').length}:${words}:${last?.showReasoning ? 1 : 0}`;
+    if (!messagesEl || sig === '0:0:0:0:0') return;
+    const nearBottom =
+      messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+    if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
+  });
 
   // 二审 R2-5：卸载清定时器 + 中止在途回合 + 释放音频资源（防 AudioContext 泄漏）。
   onDestroy(() => {
@@ -282,7 +295,7 @@
 </script>
 
 <div class="chat">
-  <div class="messages">
+  <div class="messages" bind:this={messagesEl}>
     {#each messages as m (m)}
       <div class="msg {m.role}">
         {#if m.role === 'assistant' && m.reasoning}
@@ -295,9 +308,9 @@
         {#each m.segments as seg (seg.audioId)}
           <div class="audio-card">
             <button
-              onclick={() => playSeg(seg)}
+              onclick={() => (activeAudio === seg.audioId ? stopAudio() : playSeg(seg))}
               disabled={!seg.done}
-              title={seg.done ? $_('session.play') : $_('session.synthesizing')}
+              title={seg.done ? (activeAudio === seg.audioId ? $_('session.stop') : $_('session.play')) : $_('session.synthesizing')}
             >{activeAudio === seg.audioId ? '⏹' : '▶'}</button>
             {#if activeAudio === seg.audioId}
               <button onclick={stopAudio}>{$_('session.stop')}</button>
@@ -425,7 +438,9 @@
     padding: 0 1rem;
   }
   .error-banner {
-    background: #fef2f2;
+    /* 审计 O10：语义变量底 + 红边框，暗色/自定义主题不刺眼（原硬编码浅底）。 */
+    background: var(--gw-surface);
+    border: 1px solid #dc2626;
     color: #dc2626;
     padding: 0.5rem 1rem;
     font-size: 0.85rem;

@@ -712,6 +712,12 @@ export interface components {
             theme?: string | null;
             /** @description 用户自定义主题变量（CSS 变量名→值）。 */
             theme_vars?: unknown;
+            /**
+             * Format: int32
+             * @description 回合硬超时秒数（用户级 BYOK 成本/耐心权衡，同 on_disconnect 轴；缺省内核默认 180s，
+             *     使用时钳位 [30,3600]；sign-off 轮裁决：用户自配而非部署级）。
+             */
+            turn_timeout_secs?: number | null;
         };
         /** @description 音色试听请求。 */
         PreviewReq: {

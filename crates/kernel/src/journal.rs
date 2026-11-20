@@ -38,11 +38,12 @@ pub struct CallRecord {
     pub error_code: Option<String>,
 }
 
-/// 记一条上游调用计量。
+/// 记一条上游调用计量。写失败 warn 留痕（审计 O2：计量 fail-open 不阻塞回合，
+/// 但 M2 用量看板以 call_log 为事实源，静默丢弃不可接受）。
 #[allow(clippy::too_many_arguments)]
 pub async fn record_call(store: &Store, rec: CallRecord) -> Result<(), KernelError> {
     let now = Utc::now();
-    execute_both!(
+    let r = execute_both!(
         store,
         "INSERT INTO call_log (id, user_id, session_id, run_id, capability, adapter_id, model,
             prompt_tokens, completion_tokens, reasoning_tokens, total_tokens, characters, latency_ms, status, error_code, created_at)
@@ -63,9 +64,15 @@ pub async fn record_call(store: &Store, rec: CallRecord) -> Result<(), KernelErr
         &rec.status,
         rec.error_code,
         now
-    )
-    .map_err(storage_err)?;
-    Ok(())
+    );
+    match r {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let ke = storage_err(e);
+            tracing::warn!("call_log 计量写入失败（不阻塞回合，用量可能少计）：{ke}");
+            Err(ke)
+        }
+    }
 }
 
 /// 用户 call_log 行（status, characters, total_tokens；用量看板/测试断言用）。

@@ -114,7 +114,8 @@
   }
 
   async function removeFolder(path: string) {
-    // 隐式祖先节点（旧数据可能未登记）：先登记再删（二审：与改名一致，防 no-op）。
+    // 审计 O10：先确认再登记隐式祖先（原序取消确认会留下空文件夹副作用）。
+    if (!confirm($_('session.folderDeleteConfirm', { values: { path } }))) return;
     let f = folders.find((x) => x.path === path);
     if (!f) {
       try {
@@ -124,7 +125,6 @@
         return;
       }
     }
-    if (!confirm($_('session.folderDeleteConfirm', { values: { path } }))) return;
     error = '';
     try {
       await deleteFolder(f.id);

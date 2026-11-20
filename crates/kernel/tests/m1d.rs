@@ -37,12 +37,18 @@ async fn run_test(store: Arc<Store>) {
     let p1 = Preferences {
         theme: Some("dark".to_string()),
         auto_play: Some(true),
+        turn_timeout_secs: Some(300),
         ..Default::default()
     };
     kernel::put_preferences(&store, user, &p1).await.unwrap();
     let got = kernel::get_preferences(&store, user).await.unwrap();
     assert_eq!(got.theme.as_deref(), Some("dark"), "{b} 偏好 round-trip");
     assert_eq!(got.auto_play, Some(true), "{b} 偏好 auto_play");
+    assert_eq!(
+        got.turn_timeout_secs,
+        Some(300),
+        "{b} 回合超时偏好 round-trip"
+    );
     let p2 = Preferences {
         theme: Some("light".to_string()),
         ..Default::default()
@@ -417,6 +423,45 @@ async fn run_audit_negatives(store: Arc<Store>) {
             .as_deref(),
         Some(deep.as_str()),
         "{b} 拒绝后原路径不变（事务未应用）"
+    );
+
+    // ── F1：删除上移冲突预检（与 rename 对称，Conflict 非 Storage/500）。
+    let f1a = kernel::create_folder(&store, user, ns, "/f1a")
+        .await
+        .unwrap();
+    kernel::create_folder(&store, user, ns, "/f1a/b")
+        .await
+        .unwrap();
+    kernel::create_folder(&store, user, ns, "/f1b")
+        .await
+        .unwrap();
+    let r = kernel::delete_folder(&store, user, f1a.id).await;
+    assert!(
+        matches!(r, Err(kernel::FolderError::Conflict(_))),
+        "{b} 删文件夹上移冲突须 Conflict（非 Storage/500），实得 {r:?}"
+    );
+    let folders = kernel::list_folders(&store, user, ns).await.unwrap();
+    for p in ["/f1a", "/f1a/b", "/f1b"] {
+        assert!(
+            folders.iter().any(|f| f.path == p),
+            "{b} 冲突拒绝后数据完整 {p}"
+        );
+    }
+    // 目标自身路径释放：/g1/g1 上移复用 /g1（同事务先删目标）。
+    let g1 = kernel::create_folder(&store, user, ns, "/g1")
+        .await
+        .unwrap();
+    kernel::create_folder(&store, user, ns, "/g1/g1")
+        .await
+        .unwrap();
+    assert!(
+        kernel::delete_folder(&store, user, g1.id).await.unwrap(),
+        "{b} 删 /g1（子 /g1/g1 上移复用目标路径）成功"
+    );
+    let folders = kernel::list_folders(&store, user, ns).await.unwrap();
+    assert!(
+        folders.iter().any(|f| f.path == "/g1") && !folders.iter().any(|f| f.path == "/g1/g1"),
+        "{b} /g1/g1 上移为 /g1"
     );
 
     // 清理。

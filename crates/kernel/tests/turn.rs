@@ -1352,3 +1352,100 @@ async fn summarize_eof_no_finish_no_partial_persist() {
     });
     assert_summarize_no_persist(llm, calls).await;
 }
+
+/// 慢速 TTS（审计 O3 负例）：逐块 10ms 间隔，cancel 可在流中途介入。
+struct SlowTts;
+
+#[async_trait]
+impl TtsProvider for SlowTts {
+    fn id(&self) -> &'static str {
+        "slow-tts"
+    }
+    fn models(&self) -> Vec<ModelInfo> {
+        vec![]
+    }
+    async fn list_voices(
+        &self,
+        _: &ProviderConn,
+        _: &str,
+    ) -> Result<Vec<VoiceInfo>, ProviderError> {
+        Ok(vec![])
+    }
+    async fn synthesize_stream(
+        &self,
+        _: &ProviderConn,
+        _: TtsRequest,
+    ) -> Result<AudioStream, ProviderError> {
+        Ok(Box::pin(async_stream::stream! {
+            yield Ok(AudioEvent::Start { format: AudioFormat::Pcm, sample_rate: 24000 });
+            for seq in 0..60u32 {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+                yield Ok(AudioEvent::Chunk { seq, pcm: Bytes::from(vec![0u8; 480]) });
+            }
+            yield Ok(AudioEvent::Usage(TtsUsage { characters: Some(5), input_tokens: Some(2), output_tokens: Some(11) }));
+            yield Ok(AudioEvent::End { complete: Some(Bytes::from(vec![0u8; 28800])) });
+        }))
+    }
+}
+
+/// 审计 O3：TTS 流中途 cancel → call_log 记 cancelled（非 ok），回合 Cancelled 收尾。
+#[tokio::test(flavor = "current_thread")]
+async fn tts_cancel_meters_cancelled() {
+    let sessions = Arc::new(MemSessions::new());
+    let audio = Arc::new(MemAudio::new());
+    let store = Arc::new(Store::Sqlite(
+        sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap(),
+    ));
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let rt = Runtime::new(
+        Arc::new(MockLlm {
+            calls: AtomicU32::new(0),
+            always_tool: false,
+        }),
+        Arc::new(SlowTts),
+        Arc::new(MockBindings),
+        sessions.clone(),
+        audio.clone(),
+        store.clone(),
+    );
+    let user = UserId::new();
+    // call_log.user_id 外键须 users 行（计量落库前提）。
+    kernel::repo::ensure_user(&store, user.0).await.unwrap();
+    let session = SessionId::new();
+    sessions
+        .create(user, session, SessionMeta::default())
+        .await
+        .unwrap();
+    let mut stream = Box::pin(rt.run_turn(user, session, "hi".to_string()));
+    let mut cancelled = false;
+    let mut finish = None;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+    while let Some(ev) = stream.next().await {
+        assert!(tokio::time::Instant::now() < deadline, "回合未在 5s 内收尾");
+        match ev {
+            SessionEvent::AudioChunk { .. } if !cancelled => {
+                rt.cancel(session);
+                cancelled = true;
+            }
+            SessionEvent::RunEnd { finish_reason, .. } => finish = Some(finish_reason),
+            _ => {}
+        }
+    }
+    assert!(cancelled, "须收到 audio-chunk（TTS 流已启动）");
+    assert_eq!(
+        finish,
+        Some(FinishReason::Cancelled),
+        "cancel 后回合 Cancelled 收尾"
+    );
+    let rows = kernel::call_log_rows(&store, user.0).await.unwrap();
+    assert!(
+        rows.iter().any(|(status, _, _)| status == "cancelled"),
+        "TTS 中途 cancel 计量须 cancelled（非 ok），实得 {rows:?}"
+    );
+}

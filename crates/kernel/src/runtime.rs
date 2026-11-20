@@ -167,6 +167,27 @@ fn tts_call_record(
     }
 }
 
+/// 回合硬超时生效值（sign-off 轮裁决）：用户偏好 `turn_timeout_secs` 覆盖默认——
+/// BYOK 成本/耐心权衡归用户（同 on_disconnect 轴），部署级资源保护已由 detach 上限/
+/// 上游 read 超时/工具上限覆盖，不另设部署旋钮。钳位 [30,3600] 防误配（0=即时超时/巨值=守护失效）。
+fn effective_timeout(secs: Option<u32>, default: Duration) -> Duration {
+    match secs {
+        Some(s) => Duration::from_secs(s.clamp(30, 3600) as u64),
+        None => default,
+    }
+}
+
+/// 读用户偏好解析超时；读失败 fail-open 到默认守护值（warn 留痕）。
+async fn resolve_turn_timeout(store: &Store, user: UserId, default: Duration) -> Duration {
+    match crate::preferences::get_preferences(store, user.0).await {
+        Ok(p) => effective_timeout(p.turn_timeout_secs, default),
+        Err(e) => {
+            tracing::warn!("读用户偏好失败，回合超时取默认 {default:?}：{e}");
+            default
+        }
+    }
+}
+
 /// summarize 淘汰：解析 Summarizer role 绑定 → LLM 压缩 evicted span → 摘要消息（记 call_log）。
 /// 失败（无绑定/上游错）返回 None → 调用方回退 truncate。
 async fn summarize_span(
@@ -292,6 +313,7 @@ fn system_message(content: &str) -> ChatMessage {
 }
 
 /// 内核运行时（回合循环 + 接缝注入）。
+#[derive(Clone)]
 pub struct Runtime {
     llm: Arc<dyn LlmProvider>,
     tts: Arc<dyn TtsProvider>,
@@ -309,7 +331,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// 新建运行时（默认守护：回合超时 120s；工具上限取每会话 meta.params）。store 供 call_log/outbox 计量。
+    /// 新建运行时（默认守护：回合超时 180s，用户偏好可覆盖；工具上限取每会话 meta.params）。store 供 call_log/outbox 计量。
     pub fn new(
         llm: Arc<dyn LlmProvider>,
         tts: Arc<dyn TtsProvider>,
@@ -325,7 +347,7 @@ impl Runtime {
             sessions,
             audio,
             store,
-            turn_timeout: Duration::from_secs(120),
+            turn_timeout: Duration::from_secs(180),
             active: Arc::new(Mutex::new(HashSet::new())),
             cancels: Arc::new(Mutex::new(HashMap::new())),
             detach: Arc::new(tokio::sync::Semaphore::new(4)),
@@ -342,7 +364,7 @@ impl Runtime {
         }
     }
 
-    /// 设置回合硬超时（默认 120s；测试可缩短验证背压硬边界）。
+    /// 设置回合硬超时默认值（默认 180s；用户偏好 turn_timeout_secs 可覆盖；测试可缩短验证背压硬边界）。
     pub fn with_turn_timeout(self, timeout: Duration) -> Self {
         Self {
             turn_timeout: timeout,
@@ -424,11 +446,11 @@ impl Runtime {
         let run_id = RunId::new();
         let shutting_down = self.shutting_down.clone();
         let tasks = self.tasks.clone();
-        let exec = self.run_turn_stream(user, session, user_text, run_id);
+        let rt = self.clone();
+        let store = self.store.clone();
         let sessions = self.sessions.clone();
         let cancels = self.cancels.clone();
         let detach = self.detach.clone();
-        let turn_timeout = self.turn_timeout;
         // 生命周期临界区（审计 H1）：复检退出标志 + spawn + 注册同一 tasks 锁内（锁内不 await），
         // 与 shutdown 置标志+取快照互斥——任务先注册必被快照取到，或先见退出标志拒绝。
         let accepted = {
@@ -437,7 +459,15 @@ impl Runtime {
                 false
             } else {
                 let handle = tokio::spawn(async move {
-                    let mut exec = Box::pin(exec);
+                    // 回合硬超时生效值（sign-off 轮）：用户偏好覆盖默认（BYOK 成本/耐心权衡）。
+                    let turn_timeout = resolve_turn_timeout(&store, user, rt.turn_timeout).await;
+                    let mut exec = Box::pin(rt.run_turn_stream(
+                        user,
+                        session,
+                        user_text,
+                        run_id,
+                        turn_timeout,
+                    ));
                     let mut decided = false;
                     let mut _detach_permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
                     let poll = async {
@@ -520,6 +550,7 @@ impl Runtime {
         session: SessionId,
         user_text: String,
         run_id: RunId,
+        turn_timeout: Duration,
     ) -> impl Stream<Item = SessionEvent> + Send + 'static {
         let llm = self.llm.clone();
         let tts = self.tts.clone();
@@ -527,7 +558,6 @@ impl Runtime {
         let sessions = self.sessions.clone();
         let audio = self.audio.clone();
         let store = self.store.clone();
-        let turn_timeout = self.turn_timeout;
         let active = self.active.clone();
         let cancels = self.cancels.clone();
 
@@ -921,11 +951,13 @@ impl Runtime {
                                             let mut err = String::new();
                                             let mut tts_usage: Option<TtsUsage> = None;
                                             let mut tts_err: Option<String> = None;
+                                            let mut tts_cancelled = false;
                                             while let Some(item) = astream.next().await {
                                                 // TTS 流期间响应 cancel（审计 C6）。
                                                 if cancel_flag.load(Ordering::Relaxed) {
                                                     ok = false;
                                                     err = "cancelled".to_string();
+                                                    tts_cancelled = true;
                                                     break;
                                                 }
                                                 let ev = match item {
@@ -991,7 +1023,14 @@ impl Runtime {
                                                     }
                                                 }
                                             }
-                                            let tts_status = if tts_err.is_some() { "error" } else { "ok" };
+                                            // 审计 O3：cancel 中断记 cancelled（非 ok），看板语义准确。
+                                            let tts_status = if tts_err.is_some() {
+                                                "error"
+                                            } else if tts_cancelled {
+                                                "cancelled"
+                                            } else {
+                                                "ok"
+                                            };
                                             let _ = record_call(
                                                 &store,
                                                 tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, tts_usage, tts_status, tts_err),
@@ -1043,5 +1082,32 @@ impl Runtime {
 
             yield SessionEvent::RunEnd { run_id, finish_reason: finish };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn effective_timeout_clamp_and_default() {
+        let d = Duration::from_secs(180);
+        assert_eq!(effective_timeout(None, d), d, "缺省取默认");
+        assert_eq!(effective_timeout(Some(180), d), d, "合法值直用");
+        assert_eq!(
+            effective_timeout(Some(1), d),
+            Duration::from_secs(30),
+            "低于下限钳位 30"
+        );
+        assert_eq!(
+            effective_timeout(Some(99999), d),
+            Duration::from_secs(3600),
+            "超上限钳位 3600"
+        );
+        assert_eq!(
+            effective_timeout(Some(0), d),
+            Duration::from_secs(30),
+            "0 钳位（防即时超时）"
+        );
     }
 }
