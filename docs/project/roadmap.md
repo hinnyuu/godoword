@@ -206,7 +206,7 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
   openapi-fetch 生成类型 CI freshness + SSE + 主题引擎 + i18n zh-CN + 偏好跨设备）+ 后端扩展（虚拟路径文件夹/偏好/会话元数据/
   音色试听/回放时间戳出口/自助改密）+ **kernel-api utoipa 耦合（5 类型 ToSchema，契约级全量审查）** + Dockerfile 三阶段 node 构建。
   布局拖拽永久放弃；Markdown/HTML 渲染 + 移动布局优化延期远期。
-  **合并前审计修复轮**（history 1240）：文件夹祖先链原子登记/改名冲突预检/上限重校验、改密 403 语义、
+  **合并前审计修复轮**（history 1240 一审 + 1320 二审 + 1345 合并验收）：文件夹祖先链原子登记/改名冲突预检/上限重校验、改密 403 语义、
   试听上限+超时+完整计量、适配器超时、错误分流/usage 数字/三卡片/布局偏好/改名 UI/i18n 清扫、frontend required check（G1）；
   负例测试同配（双后端 + handler 级 + vitest + 冒烟 M1d 面）。
 

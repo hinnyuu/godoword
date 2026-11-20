@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T13:25+08:00
-- 当前里程碑: **M1d 审计修复轮一审+二审完成（复验通过，history 1240/1320）→ PR #18 CI 绿 → squash merge → M2 待启动**
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施（PR #18）→ **M1d 审计修复（history 1240）→ 待合并**
+- verified: 2026-11-20T13:40+08:00
+- 当前里程碑: **M1d 已合并（PR #18 squash → main 6a64852，含一审/二审审计修复）→ R4 main 重测 → M2 待启动设计讨论**
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ **M1d 合并（6a64852）→ M2 待启动**
 
 ## done
 
@@ -19,14 +19,15 @@
   - Dockerfile 三阶段 node 构建镜像含界面；冒烟 SPA 伺服。
   - 验收：CI 全 8 绿 + 完整产品流 + TTS 音质 + 词级高亮 + 移动功能 + 部署矩阵 pr-18（SELinux/quadlet/docker）sign-off。
   - **延期远期**：Markdown/HTML 渲染、移动端布局优化；布局拖拽永久放弃。
-- **M1d 合并前审计修复轮**（history 1240，主开发者拍板全量修复+负例同配）：实验确证 A/B/D/M7/M1/G1 修复 +
-  F1–F7 加固 + M2–M6 前端正确性 + Q3/Q4/Q7/Q9/Q12/Q13 需求覆盖补齐 + i18n 清扫 + 文档漂移修复；
+- **M1d 合并前审计修复轮**（history 1240 一审 + 1320 二审，主开发者拍板全量修复+负例同配+复验通过）：
+  一审实验确证 A/B/D/M7/M1/G1 修复 + F1–F7 加固 + M2–M6 前端正确性 + Q3/Q4/Q7/Q9/Q12/Q13 需求覆盖补齐 + i18n 清扫 + 文档漂移修复；
+  二审修复代码自身审计（R2-1 prefs 队列快照时机真缺陷 + R2-2–R2-7 加固/文档）；
   契约层未变更；kernel 双后端负例 + godoword handler 级测试 + core vitest 54 + 冒烟 M1d 断言。
+  **PR #18 squash 合并 main（6a64852），CI 全 8 绿（含 frontend required）**。
 
 ## in-flight
 
-- **PR #18 审计修复轮收尾**：一审（history 1240）+ 二审（history 1320，修复代码自身审计：R2-1 prefs 队列快照时机真缺陷 +
-  R2-2–R2-7 加固/文档）全修，主开发者新增 UI 面复验通过。待 CI 全绿 → squash merge → R4 main 重测。
+- 无开放实现 PR。R4 main 重测（release image+smoke）落定后 M1d 正式闭环；M2 启动设计讨论待主开发者发起。
 
 ## blocked / 待拍板决策
 
@@ -37,8 +38,7 @@
 
 ## 下一动作
 
-- **PR #18 合并**：CI 全绿（含 frontend required + 冒烟 M1d 断言）→ squash merge → R4 main 重测 → M1d 正式闭环。
-- **M2 设计讨论**（合并后待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
+- **M2 设计讨论**（待主开发者发起）：teach-assess（PlanProvider + 进度提取报告 + 重规划）+ teach-gojuon（自适应五十音）；
   模块迁移按注册序追加 kernel 之后；ModuleContext/emit_progress/current_plan 接缝已立；outbox dispatcher 骨架待消费者。
 - M2 一致性检查留档（上述非阻断观察）+ 重试再生语义（history 1240 取舍）。
 
