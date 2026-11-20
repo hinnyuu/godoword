@@ -26,11 +26,12 @@ M2 设计第三方审计（history 1721）驱动两 PR：设计修订 PR #21（�
   R4 main 冒烟重测通过；代码审计修复验收通过。
 - **M2 审计正式闭环**：设计定案（1614）+ 审计修订（1721）+ 代码修复（1802）+ sign-off 轮（1913）
   全部合并验收。审计发现处置完毕：F1 + O2–O10 已修；O1/B2/O11/O12 归属 M2 P6/P2/仪表盘/M4（设计已定）。
-- **P1 待启动**：启动方式（本会话续做 vs 新 agent 交接）交主开发者裁决（旋转 agent 上下文预算考量）。
+- **P1 启动方式已裁决：新 agent 交接**（旋转 agent 上下文预算考量；本会话承载审计全程 + 三 PR）。
+  开工指引入 status 下一动作（阅读序 + 首任务建议 + 契约审查触发 + 测试锚定 + 环境约束）。
 
 ## 后果
 
-status 交接更新（审计闭环 + P1 待启动 + 启动方式待拍板）。P1 范围提醒（roadmap M2 蓝图）：
+status 交接更新（审计闭环 + P1 待启动 + 新 agent 交接裁决 + 开工指引）。P1 范围提醒（roadmap M2 蓝图）：
 模块注册表 + ModuleContext 实现 + 回合接线 + teach-free 端到端；**有界契约新增**（llm 中介/complete_session/
 ctx 工厂/ModuleKind::Kernel/cached-synthesis + ProgressEvent difficulty 形状新增）→**契约级全量审查 + 二审**；
 **B3 必决项**（session_id vs for_user 张力 + plan_version 类型对齐）此 phase 定。
