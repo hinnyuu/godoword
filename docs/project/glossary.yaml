@@ -93,16 +93,16 @@ terms:
     definition: docs/project/status.md，live 工作状态（committed，随仓库走）
   - canonical: 白名单缓存
     banned: [指纹缓存]
-    definition: 模块显式声明稳定 key 的可缓存音频（M2），同一性由模块权威声明而非指纹 hash 推断
+    definition: 模块显式声明稳定 key 的可缓存音频（M2 回归：用户侧 gojuon 标准音频消费者），同一性由模块权威声明而非指纹 hash 推断，持久资产区豁免淘汰
   - canonical: 新鲜合成
     banned: []
     definition: 音频默认每次新合成不复用（无白名单标记），随机 AudioId 存供回放
-  - canonical: 静态资产
-    banned: [内置音频]
-    definition: 模块入仓库的 canonical 音频（如五十音标准发音），稳定资产 id 直供，零 TTS（M2）
+  - canonical: 持久资产
+    banned: [静态资产, 内置音频]
+    definition: 用户侧生成的 canonical 音频（如五十音标准发音），/data/assets 持久资产区豁免 TTL/容量淘汰，一次生成永久使用（卷损毁按需懒再生），稳定 key 直供（M2）；静态入仓库方案因 AGPL 再分发前提作废（history 1721）
   - canonical: 角色扮演
     banned: [角色模拟]
-    definition: 横切声音基础设施，地基 persona/binding/voice 原语 + 模块编排，内核角色音色档案实体（M2）
+    definition: 横切声音基础设施，地基 persona/binding/voice 原语 + 模块编排，内核角色音色档案实体（M2+ 推迟）
   - canonical: 回放
     banned: []
     definition: 某次合成的音频再放一遍（per-synthesis AudioId，GET /audio/{id}），与复用（跨请求省合成）区分
@@ -142,3 +142,9 @@ terms:
   - canonical: 自由对话
     banned: [自由聊天]
     definition: teach-free 轻量教学模块（T4 决议），内核默认 persona 移入，plan 可选，既有无模块会话迁入（M2）
+  - canonical: 默认节奏
+    banned: []
+    definition: gojuon 在 current_plan=None 时的内置兜底节奏（固定顺序、不跳过已会），placement 随时可补不强制（M2，审计 UX-A1）
+  - canonical: 用户级备份
+    banned: [账户搬家]
+    definition: 用户自助导出/导入用户级资料与音频（单 ZIP，不含 API key 导入重填，恢复向不做合并），设计定案实施 M2 后（history 1721）

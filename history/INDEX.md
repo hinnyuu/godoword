@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 65 条。
+共 66 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -69,3 +69,4 @@
 - [M1d 合并验收闭环（审计修复轮一审/二审 + R4 main 重测通过）](2026-11-20-1345-m1d-merged-accepted.md) — 2026-11-20T13:45+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, auth-local · keywords: m1d, acceptance, merge, audit, second-audit, r4, m2-handoff
 - [M1d 落地后文档漂移清扫（陈旧表述修正 + TTS usage 疑似排除）](2026-11-20-1455-m1d-drift-sweep.md) — 2026-11-20T14:55+08:00 · change · accepted · scope: project, kernel, godoword, auth-local, llm-openai · keywords: drift, m1d, docs, wiki, placeholder, tts-usage
 - [M2 设计决策（需求驱动六轮讨论定案 + 实施蓝图）](2026-11-20-1614-m2-design.md) — 2026-11-20T16:14+08:00 · decision · accepted · scope: project, kernel, kernel-api, godoword · keywords: m2, teach-assess, teach-gojuon, teach-free, placement, plan, extraction, replan, module-registry, lazy-chunk, static-asset, gojuon, contract
+- [M2 设计第三方审计 + 修订定案（静态音频→用户侧生成 + 白名单回归 + 用户级备份设计）](2026-11-20-1721-m2-audit-revision.md) — 2026-11-20T17:21+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, tts-qwen-audio · keywords: m2, audit, static-asset, user-side-synthesis, whitelist, persistent-asset, backup, export-import, placement, mobile, drift, contract
