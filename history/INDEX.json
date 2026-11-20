@@ -1427,5 +1427,31 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-0330-m1d-accepted.md",
+    "title": "M1d 完成合并验收（Svelte 图形界面里程碑闭环）",
+    "date": "2026-11-20T03:30+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "merge",
+      "frontend",
+      "svelte",
+      "complete",
+      "milestone"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
   }
 ]

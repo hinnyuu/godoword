@@ -7,7 +7,7 @@
 | 里程碑 | 内容 | 版本 | 状态 |
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
-| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 进行中（M1a/M1b/M1c 完成，M1d 设计已定案待实施） |
+| M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 完成（M1a/M1b/M1c/M1d 全部完成） |
 | M2 | teach-assess + teach-gojuon（placement → plan → 自适应课程，黄金路径全通） | — | 未开始 |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
@@ -45,7 +45,7 @@
 | M1a | 适配器 + 回合循环 + SSE 出声（垂直切片，无持久化/无认证/无 UI）：新 crate `llm-openai`（LlmProvider 全实现）、`tts-qwen-audio`（TtsProvider 全实现，DashScope 原生协议）、`kernel` 最小回合循环（内部接缝 + speak 规格执行 + 基础守护 + SSE）；godoword feature 注册 + 会话 REST + dev 旁路 | CI fixture 黄金 + 回合循环 mock + 守护；本地真 key 出声脚本；冒烟结构性；**无人工视觉** | 完成 |
 | M1b | kernel 存储基底 + 部署初始化（无 UI）：Store pool 初始化 + 迁移编排（自动备份）+ 完整 kernel schema + 加密（主密钥 AES-256-GCM）+ 绑定解析 DB impl + 配置加载（env>file>默认 + 预设）+ **自适应降权 + 幂等 entrypoint** + provider/binding REST + schema 前瞻 | CI 双后端迁移/CRUD/加密/绑定/配置；冒烟完整 uid/卷矩阵；人工残留 SELinux(Fedora)；**无人工视觉** | 完成 |
 | M1c | 会话运行时 + 认证 + 管理（无 UI）：DB SessionRepo/AudioCache 替换内存（音频默认新鲜合成 + 文件系统回放 + 缓存有界）+ 上下文装配/淘汰（水位制）/淘汰前 span 入 outbox（LLM 提取 M2）+ call_log 计量 + on_disconnect cancel/continue；新 crate `auth-local`（argon2id + invite/首用户管理员 + cookie/CSRF/限流）+ 管理员重置 token 化；godoword 认证中间件 + auth/admin REST。**M1c-hardening 加固**：对象级授权 + 持久化失败关闭 + 硬超时/退出屏障 + 上游重试（第三方审计 C1-C9） | CI auth 流 + 会话持久化双后端 + 淘汰/outbox + 两用户越权负例；本地真 key 完整对话脚本；冒烟 auth 流；**无人工视觉** | 完成（含加固） |
-| M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + **高自定义/可美化 UI**（用户可定制界面，核心需求见 [README 产品愿景](../../README.md#产品愿景与核心需求)）+ 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 设计已定案（实施待启动） |
+| M1d | Svelte 骨架 + 设置/会话/认证 UI（有 UI）：web/core 框架无关 TS（OpenAPI→TS + SSE 客户端 + AudioWorklet 音频引擎 + 词级高亮）+ web/shell Svelte 5 SPA + i18n zh-CN 首发 + **高自定义/可美化 UI**（用户可定制界面，核心需求见 [README 产品愿景](../../README.md#产品愿景与核心需求)）+ 设置 UI（BYOK + 测试按钮）+ 会话 UI + 认证/管理 UI + Dockerfile node 构建阶段 + 前端 CI job | CI 前端 lint/build/vitest + 冒烟 SPA 伺服；**完整人工验收**（视觉/TTS 音质/BYOK 流/登录流/词级高亮） | 完成 |
 
 依赖链 M1a → M1b → M1c → M1d（线性，每段把前段接入）。
 
@@ -199,11 +199,13 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
 - 信封加密（per-user data key）、主密钥轮换工具
 - RP-initiated logout（OIDC 会话联动）
 
-## 当前差异（M1a/M1b/M1c 完成，M1d 设计已定案待实施）
+## 当前差异（M1 全部完成 M1a–M1d，M2 待启动）
 
-- **M1d 设计闭环**（history 2049，蓝图见上）：需求驱动多轮讨论定案 Q1–Q17；虚拟路径会话文件夹（嵌套 M1d 即做）+
-  偏好跨设备 + 主题引擎（布局拖拽永久放弃）+ 音色试听 + 回放时间戳出口 + 自助改密；
-  **含一次有界 kernel-api utoipa 耦合变更（5 类型 ToSchema）→契约级全量审查**。实施待启动（P0 落档→P1 音频 spike→…）。
+- **M1d 完成**（history 2049 设计 + 2130/2230/2310/2345/0010/0040 实现 + 0130/0210/0240 验收修复）：
+  Svelte 5 SPA 完整图形界面（认证/管理/引导/设置/对话/会话文件夹）+ web/core 框架无关 TS（音频引擎词级高亮 live/回放 +
+  openapi-fetch 生成类型 CI freshness + SSE + 主题引擎 + i18n zh-CN + 偏好跨设备）+ 后端扩展（虚拟路径文件夹/偏好/会话元数据/
+  音色试听/回放时间戳出口/自助改密）+ **kernel-api utoipa 耦合（5 类型 ToSchema，契约级全量审查）** + Dockerfile 三阶段 node 构建。
+  布局拖拽永久放弃；Markdown/HTML 渲染 + 移动布局优化延期远期。
 
 - M1 拆分为 M1a–M1d 四子里程碑（见上蓝图），垂直切片先行；speak 规格落 kernel-api 契约（决策 A）；
   开发态临时取舍登记回归机制。**M1a 完成**：适配器 + 回合循环 + SSE 出声。**M1b 完成**：存储基底 + 加密 + 绑定 DB + 配置 + 自适应降权。
@@ -211,11 +213,12 @@ Dockerfile 变更→部署矩阵（SELinux/quadlet/docker）重 sign-off。人�
 - 存储契约 **C 方案**（Store enum 双具体驱动 + 薄分发宏 + 双兼容 SQL 子集）已定，
   双后端 CI 测试（storage required check）已立；**kernel 存储编排 M1b 已实现**（自定义双后端迁移 runner + 备份）。sqlx Any 已证伪弃用。
 - 协议类型（SessionEvent/ModuleManifest）serde 黄金测试已立；speak 契约黄金测试 M1a 已立；
-  kernel-api 有意耦合 axum/sqlx 已声明（M1b/M1c 未改契约）。
+  kernel-api 有意耦合 axum/sqlx/utoipa 已声明（M1d 加 utoipa，5 REST-facing 类型 ToSchema）。
 - kernel 回合循环 + llm-openai + tts-qwen-audio M1a 已实现；M1b 绑定解析转 DB（加密）；
   **M1c 会话/音频持久化（DbSessions/FsAudio）+ 认证落地**（dev-debt T1/T2 回归）；教学模块 M2+。
-- 前端为静态占位，Svelte 骨架 M1d 起。
+- **前端 M1d 完成**：Svelte 5 SPA（web/core 框架无关 + web/shell），Dockerfile node 阶段构建镜像含界面；hash 路由静态伺服。
 - token 估算为字符启发式（roadmap 换 tokenizer）。
 - 部署 M1b 含完整 entrypoint（自适应降权/卷初始化/主密钥/迁移备份）+ provider/binding/config REST + OpenAPI；
   **M1c 用户级 REST release 开放（cookie 会话认证，未认证 401）**。
-- M0/M1b/M1c 人工残留验收均已通过：SELinux :Z 正例/负例 + quadlet（Fedora 44）、docker 含 compose（真实 Debian 13）。
+- M0/M1b/M1c/M1d 人工残留验收均已通过：SELinux :Z 正例/负例 + quadlet（Fedora 44）、docker 含 compose（真实 Debian 13）；
+  M1d 完整产品流 + TTS 音质 + 词级高亮 live/回放 + 移动功能（布局优化延期）+ 部署矩阵 pr-18 重 sign-off。
