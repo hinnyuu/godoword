@@ -58,6 +58,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 
 - M1c 已落地：会话/音频持久化（DB/文件系统）+ 认证/管理 + 上下文预算/淘汰 + outbox/call_log + continue detach。
   **dev-bypass 已删除（DEV-DEBT T1 回归）**，适配器非 optional，用户级 REST release 开放（未认证 401）。
-- 白名单音频复用 + 静态资产 + 角色音色档案实体 M2（音频默认新鲜合成，M1c 机制无关 M2 形态）。
+- 静态资产 M2；白名单音频复用 + 角色音色档案实体 M2+ 推迟（音频默认新鲜合成，M1c 机制无关 M2 形态）。
 - Svelte 前端 M1d；教学模块 M2+。models/voices 响应 typed（Vec<ModelInfo>/Vec<VoiceInfo>，M1d 决策 B）。
   **OpenAPI 完整性（R5/N1）**：CreateSessionReq 注册 + cookieAuth securityScheme + **操作级 security 矩阵**（公开端点 security:[]、受保护 cookieAuth，不用根级全局以免误伤 register/login/healthz，N1）+ 变更端点 CSRF header/403 + 404 标注 + openapi.json 自登记 + `$ref` 全解析与 security 矩阵单元测试，M1d 可生成 TS。
+- **M2 预告**（history 1614）：组合根注册教学模块（teach-assess/teach-gojuon/teach-free）+ 模块路由挂载 /api/v1/m/{id}/ +
+  REST 扩展（modules/placement/plan/complete/regenerate/usage）+ 静态资产伺服；契约新增见 kernel-api 预告。

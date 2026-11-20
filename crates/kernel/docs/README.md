@@ -114,3 +114,10 @@ env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`
 - 音频默认新鲜合成；白名单复用 + 静态资产 + 角色音色档案实体 M2（M1c 机制无关其形态、零返工）。
 - LLM 提取报告（extractor role）归 teach-assess M2；M1c outbox dispatcher 骨架无消费者。
 - token 估算字符启发式（roadmap 远期换 tokenizer）。
+
+## M2 预告（设计定案待审计，history 1614）
+
+kernel 为 M2 模块机制实现者：模块注册表（module.yaml 反序列化 + feature 注册 + 迁移编排 kernel→模块序，版本键 mod_<id>_NNNN）、
+ModuleContext 实现（store/emit_progress/current_plan + 契约新增 llm 中介/complete_session + ctx 工厂注入）、回合循环接线
+（模块 persona/plan 钉住/工具分发/绑定带 module_id）、outbox 扇出订阅（consumes_events）+ event_consumptions 幂等（A5）、
+0006（progress_events 补 outcome/item_ref/difficulty 列 + sessions.completed_at）。详见 [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。

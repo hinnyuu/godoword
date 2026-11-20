@@ -51,3 +51,4 @@ URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]
 - 3.1 系列日语专用音色本网关不存在（roadmap 未来网关扩展）。
 - 音色目录当前静态（本网关无音色 API）；未来网关若提供 API 可改动态拉取。
 - kernel-api M1d 新增 utoipa 有意耦合：本适配器返回的 `VoiceInfo`/`ModelInfo` 派生 ToSchema（OpenAPI schema 补全），适配器实现不变。
+- **M2 预告**（history 1614）：gojuon 静态 canonical 音频构建期经本适配器合成入仓库（裸 PCM）；领读经 speak 新鲜合成；适配器实现不变。
