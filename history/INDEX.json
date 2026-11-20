@@ -1676,5 +1676,27 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "22"
+  },
+  {
+    "file": "2026-11-20-2031-m2-audit-accepted.md",
+    "title": "M2 审计验收全闭环（PR #21/#22 合并 + sign-off 全过 + P1 待启动）",
+    "date": "2026-11-20T20:31+08:00",
+    "keywords": [
+      "m2",
+      "audit",
+      "acceptance",
+      "merge",
+      "sign-off",
+      "p1-handoff",
+      "closure"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]
