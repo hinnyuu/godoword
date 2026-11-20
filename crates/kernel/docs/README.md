@@ -45,7 +45,8 @@
   `FsAudio` 文件系统 `/data/cache/<id>.pcm` + sidecar（原子写，**sidecar 失败清理孤儿 PCM，审计 A3**，TTL+容量有界；
   **owner 可空 + 旧/损坏 sidecar + PCM-only 崩溃孤儿均视为缺失 → 404 可再生不 500，审计 R9.1/N7**）；
   `MemAudio` 测试替身。**默认新鲜合成**；
-  复用由模块**显式白名单**声明稳定 key（M2，取代指纹 hash）+ 静态资产（M2）。见 history 音频白名单条目。
+  复用由模块**显式白名单**声明稳定 key（取代指纹 hash；**M2 回归**承载用户侧 gojuon 标准音频，持久资产区豁免淘汰）。
+  见 history 音频白名单/M2 审计修订条目。
 
 ## 存储基底（M1b）
 
@@ -111,6 +112,16 @@ env 逐项覆盖：`GODOWORD_LISTEN`/`GODOWORD_DATA_DIR`/`GODOWORD_DATABASE_URL`
   默认教师模式是否作永久产品态留 M2（dev-debt T4）。
 - M1b 存储基底/加密/绑定 DB/配置/降权；**M1c 会话/音频持久化（DbSessions/FsAudio，T2 回归）+ 上下文预算/淘汰
   + outbox/call_log + continue detach 已落地**。认证在 auth-local crate + godoword（M1c）。
-- 音频默认新鲜合成；白名单复用 + 静态资产 + 角色音色档案实体 M2（M1c 机制无关其形态、零返工）。
+- 音频默认新鲜合成；白名单复用 **M2 回归**（用户侧标准音频机制）；角色音色档案实体 M2+ 推迟（M1c 机制无关其形态、零返工）。
 - LLM 提取报告（extractor role）归 teach-assess M2；M1c outbox dispatcher 骨架无消费者。
 - token 估算字符启发式（roadmap 远期换 tokenizer）。
+
+## M2 预告（设计审计修订，history 1614/1721）
+
+kernel 为 M2 模块机制实现者：模块注册表（module.yaml 反序列化 + feature 注册 + 迁移编排 kernel→模块序，版本键 mod_<id>_NNNN）、
+ModuleContext 实现（store/emit_progress/current_plan + 契约新增 llm 中介/complete_session/cached-synthesis 音频服务 + ctx 工厂注入）、
+回合循环接线（模块 persona/plan 钉住/工具分发/绑定带 module_id）、outbox 扇出订阅（consumes_events）+ event_consumptions 幂等（A5）
++ 消费守护（有界并发/毒丸重试上限，B5）、0006（progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id**（B4）
++ sessions.completed_at）、**删除事件语义**（DELETE 不发事件，complete 发 session-ended，B2）、
+**持久资产区 /data/assets + 资产登记表**（白名单合成豁免 TTL/容量淘汰，UX-A3）。
+P1 契约必决项：session_id vs for_user 张力（B3）+ plan_version 类型对齐。详见 [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。

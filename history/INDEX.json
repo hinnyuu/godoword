@@ -1564,5 +1564,67 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-1614-m2-design.md",
+    "title": "M2 设计决策（需求驱动六轮讨论定案 + 实施蓝图）",
+    "date": "2026-11-20T16:14+08:00",
+    "keywords": [
+      "m2",
+      "teach-assess",
+      "teach-gojuon",
+      "teach-free",
+      "placement",
+      "plan",
+      "extraction",
+      "replan",
+      "module-registry",
+      "lazy-chunk",
+      "static-asset",
+      "gojuon",
+      "contract"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword"
+    ],
+    "type": "decision",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
+  },
+  {
+    "file": "2026-11-20-1721-m2-audit-revision.md",
+    "title": "M2 设计第三方审计 + 修订定案（静态音频→用户侧生成 + 白名单回归 + 用户级备份设计）",
+    "date": "2026-11-20T17:21+08:00",
+    "keywords": [
+      "m2",
+      "audit",
+      "static-asset",
+      "user-side-synthesis",
+      "whitelist",
+      "persistent-asset",
+      "backup",
+      "export-import",
+      "placement",
+      "mobile",
+      "drift",
+      "contract"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "tts-qwen-audio"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "21"
   }
 ]

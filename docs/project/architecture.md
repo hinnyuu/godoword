@@ -77,9 +77,10 @@ bindings(user_id, module_id, capability, role, provider_id, model, params_json)
 在两后端皆正常约束，M1b 已落地）。role ∈ default/summarizer/extractor/assessor，
 支持教师用强模型、提取/评估用便宜模型。所有上游调用经 kernel 记入 call_log（用量看板、预算警告）。
 音频**默认新鲜合成**（每次新合成，随机 AudioId 存供回放，缓存 TTL+容量上限有界）；复用由模块**显式白名单**
-声明稳定 key（M2，取代指纹 hash 推断——同一性由模块权威声明而非指纹推断）+ 静态资产（M2 模块入仓库）。
-角色扮演为**横切声音基础设施**（地基 persona/binding/voice 原语 + 模块编排；M2 内核角色音色档案实体；
-音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）。见 history 音频白名单/角色扮演条目。
+声明稳定 key（取代指纹 hash 推断——同一性由模块权威声明而非指纹推断；**M2 回归**：用户侧 gojuon 标准音频即消费者，
+持久资产区 `/data/assets` 豁免淘汰，一次生成永久使用，见 roadmap M2 蓝图/审计修订）。
+角色扮演为**横切声音基础设施**（地基 persona/binding/voice 原语 + 模块编排；角色音色档案实体 **M2+ 推迟**；
+音色克隆归服务商，未来项目级克隆做成独立模块产 TTS API）。见 history 音频白名单/角色扮演/M2 审计修订条目。
 
 ## 数据与存储
 
@@ -166,11 +167,13 @@ dist 拷入 web/shell/public，源内占位页仅开发态伺服）；前端 CI 
   OpenAPI **操作级 security 矩阵**（公开端点不误伤，N1）+ cookieAuth/CSRF/$ref 全解析、test_gate 接 CI、
   旧/损坏/PCM-only sidecar 兼容 404 可再生（N7）+ 限流器容量满 fail-closed 保密禁（N5）+ 可信代理 XFF 最右不可信跳。
   各配失败/并发负例测试（**auth/journal/storage 并发与迁移回滚双后端；runtime 回合行为测试 SQLite**）。
-- 未实现：白名单音频复用 + 静态资产 + 角色音色档案实体（M2）、教学模块（M2+）。
+- 未实现：教学模块（M2 设计审计修订，history 1614/1721：teach-assess/teach-gojuon/teach-free）、
+  **用户侧标准音频机制**（M2：白名单 cached-synthesis 回归 + 持久资产区 /data/assets，静态入仓库因 AGPL 前提作废）、
+  角色音色档案实体（M2+ 推迟，无黄金路径消费者）、用户级资产备份（设计定案，实施 M2 后）。
   **M1d 完成**：前端 Svelte 5 SPA（web/core 框架无关 + web/shell，认证/管理/引导/设置/对话/会话文件夹 + 音频词级高亮 live/回放 +
   主题自定义 + 偏好跨设备）；后端扩展（0005 虚拟路径文件夹/偏好/会话元数据/音色试听/回放时间戳出口/自助改密）+
   **OpenAPI schema 补全（kernel-api 5 类型 + UserInfo + 新 DTO ToSchema，utoipa 有意耦合→契约级审查）**；Dockerfile 三阶段 node 构建。
   Markdown/HTML 渲染 + 移动布局优化延期远期。**合并前审计修复**（history 1240）：文件夹祖先链原子登记 + 改名冲突预检 + 上限重校验、
   改密错旧密 403、试听上限/超时/计量、适配器 connect/read 超时、错误分流/usage 数字/三卡片/布局偏好/改名 UI、frontend required check。
 - 已知简化：token 估算字符启发式（roadmap 换 tokenizer）；
-  outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2）。
+  outbox dispatcher 骨架无消费者（LLM 提取报告 M2）；音频默认新鲜合成（白名单 M2 回归承载用户侧标准音频，回放缓存有界淘汰）。

@@ -123,6 +123,9 @@ CI `storage` job 跑 **workspace 级** `cargo test --workspace`（设 `TEST_PG_U
   （M1d 强制）；E2E 自动化后置 roadmap。CI `frontend` job：OpenAPI 生成类型 freshness（gen + git diff --exit-code）+
   npm ci + core tsc + vitest + shell svelte-check + vite build；重构建走 CI（本机 npm 慢）。
 - **音频风险前置**：AudioWorklet 引擎先 spike 跑通出声 + 词级高亮 + 移动浏览器，再铺 UI（承 M1a 风险前置原则）。
+- **模块前端懒加载（M2 起）**：`web/modules/<id>` 独立入口（export mount(target, services)），运行时懒加载 chunk +
+  core 共享 chunk（@godoword/core 单例跨 chunk 共享 api/auth/prefs/audio/sse）；module.yaml frontend 清单声明 routes/nav；
+  模块 UI 字符串入 core zh-CN catalog（i18n 纪律）；模块可整重写（重编译）。见 [history M2 设计](../../history/2026-11-20-1614-m2-design.md)。
 
 ## 全量语义审查（制度化）
 

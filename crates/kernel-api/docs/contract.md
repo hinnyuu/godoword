@@ -49,3 +49,22 @@ kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）、**s
 契约 M0 定义；M1a 新增 speak 工具契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）。
 kernel（回合循环）+ llm-openai + tts-qwen-audio 适配器 M1a 已实现；auth-local M1c、教学模块 M2+。
 token 估算当前为字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
+
+## M2 契约新增预告（待 P1 落地 + 契约级全量审查）
+
+> 设计定案见 [history M2](../../../history/2026-11-20-1614-m2-design.md) / [history M2 审计修订](../../../history/2026-11-20-1721-m2-audit-revision.md)
+> / [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。
+> 以下为**预告**（非当前契约事实），P1 落地时触发契约级全量语义审查 + 二审。
+
+- `ModuleContext` 新增 `llm(role, ChatRequest) -> ChatStream`：kernel 中介 LLM 调用（按 user+module+cap+role 解析绑定解密，
+  全计量 call_log **含 module_id 归因**，模块永不触 key/上游）+ `complete_session()`（完成语义，转录保留，发 session-ended；
+  **DELETE 隐私删除不发事件**——现 end_session 删除发事件行为须改，审计 B2）+ **cached-synthesis 音频服务**
+  （`get_or_synthesize`，模块声明稳定 key，持久资产区 `/data/assets` 豁免淘汰，白名单回归 M2，审计 UX-A3）。
+- 新增 `ModuleContextFactory`（`for_session(user, session)` / `for_user(user)`）：组合根构造模块时注入，`TeachingModule::routes()` 签名不动。
+  **P1 必决项（审计 B3）**：现 `ModuleContext::session_id() -> SessionId` 非可选 vs for_user 无会话（placement/plan 路由/outbox 消费）张力
+  ——Option/独立 UserContext/哨兵三选一；`sessions.plan_version TEXT` vs `LearningPlan.version u32` vs `RunStart.plan_version Option<u32>` 类型对齐（B4）。
+- `ModuleKind` 补 `Kernel` 变体（module.yaml kind=kernel 反序列化；YAML crate 选维护中方案，serde_yaml 废弃，审计 B7）。
+- **`ProgressEvent` 补 `difficulty` 字段——契约形状新增（审计 B1 诚实标注）**：现 ProgressEvent 有 outcome/item_ref 但**无 difficulty**
+  （仅 ProgressInput 有），原「契约形状已有，非契约变更」声称不成立；kernel 0006 DB 补列 + `emit_progress` 签名扩 outcome/item_ref/difficulty。
+- 角色音色档案实体 **M2+ 推迟**（无黄金路径消费者），不入本次契约新增。
+- **用户级资产备份模块钩子**（模块贡献导出/导入）契约新增**归备份里程碑（实施 M2 后）**，不入 M2 P1。
