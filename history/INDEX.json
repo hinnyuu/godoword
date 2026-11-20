@@ -1513,5 +1513,31 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": "18"
+  },
+  {
+    "file": "2026-11-20-1345-m1d-merged-accepted.md",
+    "title": "M1d 合并验收闭环（审计修复轮一审/二审 + R4 main 重测通过）",
+    "date": "2026-11-20T13:45+08:00",
+    "keywords": [
+      "m1d",
+      "acceptance",
+      "merge",
+      "audit",
+      "second-audit",
+      "r4",
+      "m2-handoff"
+    ],
+    "scope": [
+      "project",
+      "kernel",
+      "kernel-api",
+      "godoword",
+      "auth-local"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "18"
   }
 ]
