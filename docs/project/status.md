@@ -3,7 +3,7 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T18:02+08:00
+- verified: 2026-11-20T19:13+08:00
 - 当前里程碑: **M2 设计审计通过（PR #21 合并 b1a19b8，R4 重测绿）→ 代码修复 PR（F1/O 系列，history 1802）→ P1 风险前置切片**
 - 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ **代码修复 PR（history 1802）**
 
@@ -41,10 +41,14 @@
   O2 计量 warn / O3 TTS cancel 记 cancelled / O4 测试端点 adapter 匹配 / O5 binding 枚举校验 / O6 遗留无守卫面 doc(hidden) /
   O7 delete 原语标注 / O8 move rows 校验 / O9 speak rate 钳位+文本上限 / O10 前端 UX 四项（⏹ 真停止/近底自动滚动/暗色横幅/删除先确认）；
   负例同配（双后端 F1 + turn cancelled + handler 级匹配/枚举 + speak 单测）；O1/B2/O11/O12 归属 M2 P6/P2/仪表盘/M4 不动。
+- **PR #22 人工 sign-off 轮**（history 1913）：⏹ 真停止/删除先确认/暗色横幅 ✔（PC+移动双侧）；
+  滚动信号补全（思考/音频词/折叠展开，原遗漏）；**回合超时归用户级**（主开发者裁决：BYOK 成本/耐心权衡同
+  on_disconnect 轴；Preferences.turn_timeout_secs 默认 180s 钳位 [30,3600]，非契约变更；硬边界语义不变）；
+  OpenAPI 再生（本地服务 dump，实验垃圾已清）。新增残留：滚动复验 + 超时设置 UI 生效。
 
 ## in-flight
 
-- **代码修复 PR**（history 1802，fix/m2-audit-code-fixes）：待 CI + 主开发者复核 + 前端视觉残留 sign-off → 合并。
+- **代码修复 PR #22**（history 1802/1913，fix/m2-audit-code-fixes）：sign-off 轮修复已推送，待 CI + 复核 + 新增视觉残留 sign-off → 合并。
 
 ## blocked / 待拍板决策
 

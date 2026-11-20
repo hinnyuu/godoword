@@ -12,7 +12,8 @@
   → 回喂 → 循环至 stop/守护上限 → 持久化消息（**失败关闭**）+ call_log 计量 → run-end。
   **执行/投递分离**：执行体 spawn tokio task 经有界 mpsc 投递 SessionEvent，SSE 订阅 receiver；断开读 on_disconnect
   （cancel 置标志 / continue 取 detach permit 排空跑完，permit 满降级 cancel）。**对象级授权**：sessions 全路径携带 user_id（审计 C1）。
-- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，默认 120s，审计 C6；
+- 守护：工具迭代上限（每会话 `SessionParams.tool_iteration_cap`，默认 8）、**硬超时**（timeout 包裹执行体，
+  **默认 180s，用户偏好 turn_timeout_secs 覆盖（钳位 [30,3600]，sign-off 轮裁决归用户级 BYOK 权衡）**，审计 C6；
   超时后 **try_send 非阻塞**投递，满 mpsc 不消费亦不永久阻塞，任务结束释放活跃锁，审计 R3/A1）、
   每会话单活跃回合锁（`ActiveGuard` 归执行体）；detach semaphore 默认 4；**上游退避重试**（LLM/TTS 可重试错误 bounded 2，审计 C8）；
   TTS 流响应 cancel；`shutdown` 退出屏障（**tasks 锁内置标志+取快照，与 run_turn 锁内复检+spawn+注册互斥，H1** + cancel
@@ -62,7 +63,7 @@ schema 列细节、迁移编排与备份策略见 [storage.md](storage.md)。双
 ## M1d 用户级扩展（偏好/文件夹/会话元数据）
 
 - `src/path.rs`：会话虚拟路径域逻辑（NFC 归一化 + 固定上限校验 + 前缀匹配/子树改写 helpers，服务端权威）。详见 [storage.md](storage.md)。
-- `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema）+ get/put（UPSERT last-write-wins，跨设备随账户）。
+- `src/preferences.rs`：`Preferences`（typed 已知键，ToSchema；**turn_timeout_secs 回合超时用户偏好，sign-off 轮**）+ get/put（UPSERT last-write-wins，跨设备随账户）。
 - `src/folders.rs`：`Folder`/`FolderError` + CRUD（create 归一化+祖先链同事务登记+UNIQUE 冲突→Conflict /
   rename 子树批量改写防环+**冲突预检（子树外既有路径）+改写后上限重校验**+目标祖先链登记 /
   delete 子树上移一层绝不删会话+父链登记+**上移冲突预检（审计 F1，与 rename 对称→Conflict 400）+目标先删释放路径（/a/a→/a）** /

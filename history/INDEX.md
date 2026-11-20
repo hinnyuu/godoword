@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 67 条。
+共 68 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -71,3 +71,4 @@
 - [M2 设计决策（需求驱动六轮讨论定案 + 实施蓝图）](2026-11-20-1614-m2-design.md) — 2026-11-20T16:14+08:00 · decision · accepted · scope: project, kernel, kernel-api, godoword · keywords: m2, teach-assess, teach-gojuon, teach-free, placement, plan, extraction, replan, module-registry, lazy-chunk, static-asset, gojuon, contract
 - [M2 设计第三方审计 + 修订定案（静态音频→用户侧生成 + 白名单回归 + 用户级备份设计）](2026-11-20-1721-m2-audit-revision.md) — 2026-11-20T17:21+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, tts-qwen-audio · keywords: m2, audit, static-asset, user-side-synthesis, whitelist, persistent-asset, backup, export-import, placement, mobile, drift, contract
 - [M2 审计代码修复轮（F1 + O 系列，设计定案后独立 PR）](2026-11-20-1802-m2-audit-code-fixes.md) — 2026-11-20T18:02+08:00 · change · accepted · scope: kernel, godoword, auth-local · keywords: audit, code-fixes, folders, conflict, metering, cancelled, speak, validation, frontend, ux
+- [PR #22 人工 sign-off 轮：滚动信号补全 + 回合超时归用户级（默认 180s）](2026-11-20-1913-pr22-signoff-fixes.md) — 2026-11-20T19:13+08:00 · change · accepted · scope: kernel, godoword · keywords: sign-off, auto-scroll, turn-timeout, preferences, byok, user-level, hard-boundary

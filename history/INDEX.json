@@ -1653,5 +1653,28 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-1913-pr22-signoff-fixes.md",
+    "title": "PR #22 人工 sign-off 轮：滚动信号补全 + 回合超时归用户级（默认 180s）",
+    "date": "2026-11-20T19:13+08:00",
+    "keywords": [
+      "sign-off",
+      "auto-scroll",
+      "turn-timeout",
+      "preferences",
+      "byok",
+      "user-level",
+      "hard-boundary"
+    ],
+    "scope": [
+      "kernel",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "22"
   }
 ]

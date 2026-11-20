@@ -38,7 +38,8 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 
 ## M1d REST 扩展（用户级，均 AuthUser + 对象级归属）
 
-- **偏好**（`src/prefs.rs`）：`GET/PUT /api/v1/preferences`（kernel::Preferences，跨设备随账户，UPSERT）。
+- **偏好**（`src/prefs.rs`）：`GET/PUT /api/v1/preferences`（kernel::Preferences，跨设备随账户，UPSERT；
+  **turn_timeout_secs 回合超时用户自配，默认 180s 钳位 [30,3600]，sign-off 轮**）。
 - **文件夹**（`src/folders.rs`）：`GET/POST /folders`、`PUT/DELETE /folders/{id}`（虚拟路径目录树；module 查询默认 default；
   FolderError→400/500；改名子树批量改写防环、删非空上移一层绝不删会话）。
 - **会话**（`src/rest.rs`）：`GET /sessions?folder=&module=`（元数据列表 SessionListItem：title/created_at/last_active/message_count/path）、

@@ -60,7 +60,8 @@ audio-chunk / audio-end / word-timestamps / usage / error / run-end。
 词级时间戳驱动高亮；缓存回放走完整文件 + 时间戳 JSON。
 
 上下文预算：每会话 token 预算（模块可配），淘汰策略 truncate（默认）/ summarize（opt-in）。
-淘汰与会话结束发持久事件，评估模块异步提取教学进度（提取报告）。守护：工具迭代上限、回合超时、
+淘汰与会话结束发持久事件，评估模块异步提取教学进度（提取报告）。守护：工具迭代上限、回合超时
+（**默认 180s，用户偏好 turn_timeout_secs 自配，钳位 [30,3600]**）、
 上游重试策略、每会话单活跃回合锁。
 
 完整 trait 签名见 [kernel-api 文档](../../crates/kernel-api/docs/)。
@@ -135,7 +136,7 @@ Svelte 5 SPA + Vite + TS 纯 SPA（axum 伺服静态，不用 SvelteKit/SSR，hi
   领域逻辑不进组件——shell 调 core 域函数（封装 api 细节，CSRF header param 等），不裸调 api。
 - **web/shell**（Svelte 5 视图层，runes 自动检测兼容 legacy lib）：**P4–P6 已落** svelte-spa-router hash 路由（静态伺服深链稳健）+
   svelte-i18n（core zh-CN catalog）+ runes store（auth 用户态 / prefs 偏好+主题应用）+ 认证门 + 401 钩子 + AGPL 页脚；
-  页面 Login/Register/Reset/Admin/Onboarding/Settings（provider 三卡片+绑定矩阵+音色试听+主题面板+偏好）/
+  页面 Login/Register/Reset/Admin/Onboarding/Settings（provider 三卡片+绑定矩阵+音色试听+主题面板+偏好【含回合超时自配】）/
   Home（ChatView 流式对话+音频卡片+词级高亮+usage+错误分流；**播放中按钮切换停止、近底自动滚动、错误横幅主题变量，审计 O10**）/
   Sessions（SessionSidebar 文件夹目录树+会话元数据列表+移动/删除；**删隐式文件夹先确认再登记，审计 O10**）。
   core 服务层（api/services.ts）封装域函数，组件不裸调 api。

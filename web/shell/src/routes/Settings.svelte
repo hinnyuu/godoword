@@ -498,7 +498,18 @@
           onchange={(e) => prefs.update({ font_size: Number(e.currentTarget.value) || null })}
         />
       </label>
+      <label>{$_('settings.turnTimeout')}
+        <input
+          type="number"
+          min="30"
+          max="3600"
+          title={$_('settings.turnTimeoutHint')}
+          value={prefs.prefs.turn_timeout_secs ?? 180}
+          onchange={(e) => prefs.update({ turn_timeout_secs: Number(e.currentTarget.value) || null })}
+        />
+      </label>
     </div>
+    <p class="hint">{$_('settings.turnTimeoutHint')}</p>
   </div>
 
   <!-- 账户自助 -->

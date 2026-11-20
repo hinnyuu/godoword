@@ -53,9 +53,12 @@
   let messagesEl: HTMLDivElement | undefined = $state();
 
   // 审计 O10：新消息/流式增长自动滚动（仅在近底时，不与手动上滚阅读打架）。
+  // sign-off 轮补全：信号须覆盖气泡内全部流式内容——正文 + 思考 + 音频词 + 折叠展开（原仅跟踪正文）。
   $effect(() => {
-    const sig = `${messages.length}:${(messages[messages.length - 1]?.text ?? '').length}`;
-    if (!messagesEl || sig === '0:0') return;
+    const last = messages[messages.length - 1];
+    const words = last?.segments.reduce((n, s) => n + s.words.length, 0) ?? 0;
+    const sig = `${messages.length}:${(last?.text ?? '').length}:${(last?.reasoning ?? '').length}:${words}:${last?.showReasoning ? 1 : 0}`;
+    if (!messagesEl || sig === '0:0:0:0:0') return;
     const nearBottom =
       messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
     if (nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;

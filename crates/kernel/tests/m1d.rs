@@ -37,12 +37,18 @@ async fn run_test(store: Arc<Store>) {
     let p1 = Preferences {
         theme: Some("dark".to_string()),
         auto_play: Some(true),
+        turn_timeout_secs: Some(300),
         ..Default::default()
     };
     kernel::put_preferences(&store, user, &p1).await.unwrap();
     let got = kernel::get_preferences(&store, user).await.unwrap();
     assert_eq!(got.theme.as_deref(), Some("dark"), "{b} 偏好 round-trip");
     assert_eq!(got.auto_play, Some(true), "{b} 偏好 auto_play");
+    assert_eq!(
+        got.turn_timeout_secs,
+        Some(300),
+        "{b} 回合超时偏好 round-trip"
+    );
     let p2 = Preferences {
         theme: Some("light".to_string()),
         ..Default::default()

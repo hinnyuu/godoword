@@ -109,6 +109,8 @@ export const zhCN = {
     comfortable: '舒适',
     compact: '紧凑',
     fontSize: '字号',
+    turnTimeout: '回合超时（秒）',
+    turnTimeoutHint: '30–3600，默认 180。长讲解/多段领读可调大；超时回合被截断报错（保护你的额度）。',
     customCss: '自定义 CSS（高级）',
     cssExample: '示例：.msg.assistant { border-radius: 16px; }\n:root { --gw-radius: 12px; }',
     resetTheme: '重置主题',

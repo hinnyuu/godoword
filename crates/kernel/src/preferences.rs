@@ -28,6 +28,10 @@ pub struct Preferences {
     /// 字号（px）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_size: Option<u32>,
+    /// 回合硬超时秒数（用户级 BYOK 成本/耐心权衡，同 on_disconnect 轴；缺省内核默认 180s，
+    /// 使用时钳位 [30,3600]；sign-off 轮裁决：用户自配而非部署级）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub turn_timeout_secs: Option<u32>,
     /// 高级自定义 CSS（scoped 注入，一键重置）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_css: Option<String>,
