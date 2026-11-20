@@ -67,9 +67,11 @@
   let previewStatus = $state('');
   let testStatus = $state('');
   let engine: AudioEngine | null = null;
+  let previewSeq = 0;
 
   // 二审 R2-5：卸载释放试听音频资源（防 AudioContext 泄漏）。
   onDestroy(() => {
+    previewSeq++;
     engine?.dispose();
   });
 
@@ -214,23 +216,30 @@
   }
 
   async function doPreview() {
+    // 审计 A4 同族：失效令牌——重复点击/卸载使在途试听作废，防迟到请求幽灵播放。
+    const token = ++previewSeq;
     error = '';
     previewStatus = $_('settings.previewSynthesizing');
     try {
       if (!engine) engine = new AudioEngine({ workletUrl });
       await engine.init();
+      if (token !== previewSeq) return;
       engine.stop();
       const audioId = await previewVoice(previewProviderId, previewModel, previewVoiceId, previewText || undefined);
+      if (token !== previewSeq) return;
       const meta = await getAudioMeta(audioId);
       const { bytes } = await getAudioPcm(audioId);
+      if (token !== previewSeq) return;
       engine.setWords(meta.words);
       engine.pushPcm(bytes);
       engine.markComplete();
       await engine.play();
-      previewStatus = $_('settings.previewPlaying');
+      if (token === previewSeq) previewStatus = $_('settings.previewPlaying');
     } catch (err) {
-      error = err instanceof Error ? err.message : $_('common.opFailed');
-      previewStatus = '';
+      if (token === previewSeq) {
+        error = err instanceof Error ? err.message : $_('common.opFailed');
+        previewStatus = '';
+      }
     }
   }
 

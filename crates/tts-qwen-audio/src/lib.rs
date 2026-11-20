@@ -6,6 +6,7 @@ mod sse;
 mod wire;
 
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use kernel_api::{
     AudioFormat, AudioStream, ModelInfo, ProviderConn, ProviderError, TtsProvider, TtsRequest,
     TtsUsage, VoiceInfo,
@@ -16,6 +17,9 @@ use std::time::Duration;
 
 /// DashScope 路径（base_url 为 host 根，如 `https://host`）。
 const TTS_PATH: &str = "api/v1/services/audio/tts/SpeechSynthesizer";
+
+/// URL 模式下载大小上限（审计 A1：防异常/恶意响应撑爆内存；正常 TTS 输出远小于此）。
+const MAX_AUDIO_BYTES: usize = 32 * 1024 * 1024;
 
 /// qwen-audio TTS 适配器（DashScope 原生协议，不走 OpenAI 兼容）。
 pub struct QwenTtsProvider {
@@ -135,6 +139,41 @@ fn map_usage(u: &wire::TtsUsageWire) -> TtsUsage {
     }
 }
 
+/// URL 模式音频下载（审计 A1）：**查 HTTP 状态**（403/404 错误体不得当音频缓存播放）
+/// + 流式累积**大小上限**（防异常响应撑爆内存）。错误归一化复用 map_error。
+async fn download_audio(
+    client: &reqwest::Client,
+    url: &str,
+    model: &str,
+) -> Result<Vec<u8>, ProviderError> {
+    let resp = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| ProviderError::Network {
+            message: e.to_string(),
+            retryable: true,
+        })?;
+    if !resp.status().is_success() {
+        return Err(map_error(resp, model).await);
+    }
+    let mut pcm: Vec<u8> = Vec::new();
+    let mut chunks = resp.bytes_stream();
+    while let Some(chunk) = chunks.next().await {
+        let chunk = chunk.map_err(|e| ProviderError::Network {
+            message: e.to_string(),
+            retryable: true,
+        })?;
+        if pcm.len() + chunk.len() > MAX_AUDIO_BYTES {
+            return Err(ProviderError::Internal {
+                message: format!("音频 URL 下载超上限 {MAX_AUDIO_BYTES} 字节"),
+            });
+        }
+        pcm.extend_from_slice(&chunk);
+    }
+    Ok(pcm)
+}
+
 #[async_trait]
 impl TtsProvider for QwenTtsProvider {
     fn id(&self) -> &'static str {
@@ -222,21 +261,152 @@ impl TtsProvider for QwenTtsProvider {
                 message: "URL 模式响应缺 audio.url".to_string(),
             })?;
         let usage = frame.usage.as_ref().map(map_usage);
-        let pcm = self
-            .client
-            .get(&url)
-            .send()
+        let pcm = download_audio(&self.client, &url, &req.model).await?;
+        Ok(sse::normalize_url(
+            bytes::Bytes::from(pcm),
+            usage,
+            req.format,
+            req.sample_rate,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel_api::AudioEvent;
+    use secrecy::SecretString;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// 本地顺序 HTTP 服务（每连接一响应，读至请求头结束即回）；返回 root URL。
+    async fn serve_seq(make: impl FnOnce(String) -> Vec<(String, Vec<u8>)>) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let root = format!("http://{}", listener.local_addr().unwrap());
+        let responses = make(root.clone());
+        tokio::spawn(async move {
+            for (head, body) in responses {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut buf = Vec::new();
+                let mut tmp = [0u8; 4096];
+                loop {
+                    let n = sock.read(&mut tmp).await.unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&tmp[..n]);
+                    if buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let _ = sock.write_all(head.as_bytes()).await;
+                let _ = sock.write_all(&body).await;
+                let _ = sock.shutdown().await;
+            }
+        });
+        root
+    }
+
+    fn conn(root: &str) -> ProviderConn {
+        ProviderConn {
+            base_url: root.to_string(),
+            api_key: SecretString::from("test-key".to_string()),
+            extra: json!({}),
+        }
+    }
+
+    fn req() -> TtsRequest {
+        TtsRequest {
+            model: "m".to_string(),
+            text: "あ".to_string(),
+            voice: "v".to_string(),
+            format: AudioFormat::Pcm,
+            sample_rate: 24000,
+            rate: None,
+            pitch: None,
+            instruction: None,
+            language_hints: vec![],
+            word_timestamps: false,
+            extra: json!({}),
+        }
+    }
+
+    fn json_head() -> String {
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n".to_string()
+    }
+
+    /// 审计 A1 负例：URL 下载 404 → 归一化错误，**错误体不得当音频**。
+    #[tokio::test]
+    async fn url_download_http_error_is_error() {
+        let root = serve_seq(|root| {
+            let frame = json!({ "output": { "audio": { "url": format!("{root}/audio") } } });
+            vec![
+                (json_head(), serde_json::to_vec(&frame).unwrap()),
+                (
+                    "HTTP/1.1 404 Not Found\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n".to_string(),
+                    br#"{"code":"NotFound","message":"audio expired"}"#.to_vec(),
+                ),
+            ]
+        })
+        .await;
+        let p = QwenTtsProvider::new();
+        let r = p.synthesize_stream(&conn(&root), req()).await;
+        assert!(
+            matches!(r, Err(ProviderError::ModelUnavailable { .. })),
+            "404 须归一化错误，错误体不得当音频"
+        );
+    }
+
+    /// 审计 A1 负例：URL 下载超大小上限 → 错误，不得无界累积。
+    #[tokio::test]
+    async fn url_download_oversize_is_error() {
+        let root = serve_seq(|root| {
+            let frame = json!({ "output": { "audio": { "url": format!("{root}/audio") } } });
+            vec![
+                (json_head(), serde_json::to_vec(&frame).unwrap()),
+                (
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n".to_string(),
+                    vec![0u8; MAX_AUDIO_BYTES + 1],
+                ),
+            ]
+        })
+        .await;
+        let p = QwenTtsProvider::new();
+        let r = p.synthesize_stream(&conn(&root), req()).await;
+        assert!(
+            matches!(r, Err(ProviderError::Internal { ref message }) if message.contains("超上限")),
+            "超限须报错，不得无界累积"
+        );
+    }
+
+    /// URL 模式正例：小音频下载归一化为 Start/Chunk/Usage/End。
+    #[tokio::test]
+    async fn url_download_success_normalizes() {
+        let root = serve_seq(|root| {
+            let frame = json!({
+                "output": { "audio": { "url": format!("{root}/audio") } },
+                "usage": { "characters": 1 }
+            });
+            vec![
+                (json_head(), serde_json::to_vec(&frame).unwrap()),
+                (
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nConnection: close\r\n\r\n".to_string(),
+                    vec![1u8, 2, 3, 4],
+                ),
+            ]
+        })
+        .await;
+        let p = QwenTtsProvider::new();
+        let stream = p.synthesize_stream(&conn(&root), req()).await.unwrap();
+        let events: Vec<_> = stream
+            .collect::<Vec<_>>()
             .await
-            .map_err(|e| ProviderError::Network {
-                message: e.to_string(),
-                retryable: true,
-            })?
-            .bytes()
-            .await
-            .map_err(|e| ProviderError::Network {
-                message: e.to_string(),
-                retryable: true,
-            })?;
-        Ok(sse::normalize_url(pcm, usage, req.format, req.sample_rate))
+            .into_iter()
+            .map(|r| r.unwrap())
+            .collect();
+        assert_eq!(events.len(), 4);
+        assert!(matches!(events[0], AudioEvent::Start { .. }));
+        assert!(matches!(&events[1], AudioEvent::Chunk { seq: 0, pcm } if pcm.len() == 4));
+        assert!(matches!(events[2], AudioEvent::Usage(_)));
+        assert!(matches!(&events[3], AudioEvent::End { complete: Some(b) } if b.len() == 4));
     }
 }

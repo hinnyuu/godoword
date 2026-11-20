@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 69 条。
+共 70 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -73,3 +73,4 @@
 - [M2 审计代码修复轮（F1 + O 系列，设计定案后独立 PR）](2026-11-20-1802-m2-audit-code-fixes.md) — 2026-11-20T18:02+08:00 · change · accepted · scope: kernel, godoword, auth-local · keywords: audit, code-fixes, folders, conflict, metering, cancelled, speak, validation, frontend, ux
 - [PR #22 人工 sign-off 轮：滚动信号补全 + 回合超时归用户级（默认 180s）](2026-11-20-1913-pr22-signoff-fixes.md) — 2026-11-20T19:13+08:00 · change · accepted · scope: kernel, godoword · keywords: sign-off, auto-scroll, turn-timeout, preferences, byok, user-level, hard-boundary
 - [M2 审计验收全闭环（PR #21/#22 合并 + sign-off 全过 + P1 待启动）](2026-11-20-2031-m2-audit-accepted.md) — 2026-11-20T20:31+08:00 · change · accepted · scope: project · keywords: m2, audit, acceptance, merge, sign-off, p1-handoff, closure
+- [M2 P1 前置全量审计 + 前置修复（A1–A5）+ B3/B7 定案](2026-11-20-2130-m2-pre-p1-audit-fixes.md) — 2026-11-20T21:30+08:00 · change · accepted · scope: project, llm-openai, tts-qwen-audio, godoword · keywords: m2, p1, audit, pre-fix, tts-url, tool-arguments, reattach, play-guard, scroll, b3, b7, noyalib

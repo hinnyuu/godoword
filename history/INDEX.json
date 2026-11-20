@@ -1698,5 +1698,35 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-20-2130-m2-pre-p1-audit-fixes.md",
+    "title": "M2 P1 前置全量审计 + 前置修复（A1–A5）+ B3/B7 定案",
+    "date": "2026-11-20T21:30+08:00",
+    "keywords": [
+      "m2",
+      "p1",
+      "audit",
+      "pre-fix",
+      "tts-url",
+      "tool-arguments",
+      "reattach",
+      "play-guard",
+      "scroll",
+      "b3",
+      "b7",
+      "noyalib"
+    ],
+    "scope": [
+      "project",
+      "llm-openai",
+      "tts-qwen-audio",
+      "godoword"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": ""
   }
 ]

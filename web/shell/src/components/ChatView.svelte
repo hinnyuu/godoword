@@ -1,7 +1,7 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
   import { push } from 'svelte-spa-router';
-  import { untrack, onDestroy } from 'svelte';
+  import { untrack, onDestroy, tick } from 'svelte';
   import {
     streamTurn,
     cancelSession,
@@ -49,6 +49,8 @@
   let lastText = '';
   let autoQueue: Segment[] = [];
   let playPending = false;
+  // 审计 A4：播放失效令牌——stop/切会话/重复点击使在途 playSeg 作废，防幽灵播放/双音叠加。
+  let playSeq = 0;
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
   let messagesEl: HTMLDivElement | undefined = $state();
 
@@ -78,6 +80,8 @@
   async function loadHistory(id: string) {
     try {
       const detail = await getSession(id);
+      // 在途窗口已切会话：丢弃陈旧响应（审计 A4 同族守卫）。
+      if (untrack(() => currentId) !== id) return;
       // 单遍构建：tool 消息的音频段挂到**其前驱** assistant（M1：多轮 speak 回放不错位）。
       const msgs: Msg[] = [];
       for (const m of detail.messages) {
@@ -96,7 +100,13 @@
         msgs.push(toMsg(m.role, m.content, m.reasoning ?? null));
       }
       messages = msgs;
+      // 审计 A5：初始历史加载滚到底（流式自动滚动的近底信号不覆盖初始加载场景）。
+      await tick();
+      if (messagesEl && untrack(() => currentId) === id) {
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+      }
     } catch (err) {
+      if (untrack(() => currentId) !== id) return;
       errorRoute = { kind: 'info', message: err instanceof Error ? err.message : $_('session.loadFailed') };
     }
   }
@@ -114,6 +124,8 @@
     usageLlm = null;
     usageTts = null;
     autoQueue = [];
+    playSeq++;
+    playPending = false;
     engine?.stop();
     activeAudio = null;
     highlight = -1;
@@ -228,6 +240,9 @@
     } catch (err) {
       if (!abort.signal.aborted) {
         showError({ kind: 'info', message: err instanceof Error ? err.message : $_('session.turnFailed') });
+        // 审计 A3：断线重附=重附持久态（history 2049 定案，shell 处理）——流异常重拉已持久转录，
+        // continue 回合服务端跑完的余下内容不丢至手动刷新。
+        if (currentId) await loadHistory(currentId);
       }
     } finally {
       streaming = false;
@@ -256,10 +271,12 @@
 
   async function playSeg(seg: Segment, fromQueue = false) {
     if (!fromQueue) autoQueue = [];
+    const token = ++playSeq;
     playPending = true;
     try {
       const eng = ensureEngine();
       await eng.init();
+      if (token !== playSeq) return;
       eng.stop();
       activeAudio = seg.audioId;
       highlight = -1;
@@ -268,25 +285,35 @@
         const { getAudioPcm, getAudioMeta } = await import('@godoword/core');
         try {
           const meta = await getAudioMeta(seg.audioId);
+          if (token !== playSeq) return;
           seg.words = meta.words;
           const { bytes } = await getAudioPcm(seg.audioId);
+          if (token !== playSeq) return;
           eng.pushPcm(bytes);
         } catch {
-          showError({ kind: 'info', message: $_('session.replayFailed') });
+          // 审计 A4：失败重置播放态（原 ⏹ 残留）；已失效的在途请求不动当前状态。
+          if (token === playSeq) {
+            activeAudio = null;
+            highlight = -1;
+            showError({ kind: 'info', message: $_('session.replayFailed') });
+          }
           return;
         }
       } else {
         for (const c of seg.chunks) eng.pushChunk(c);
       }
+      if (token !== playSeq) return;
       eng.setWords(seg.words);
       eng.markComplete();
       await eng.play();
     } finally {
-      playPending = false;
+      if (token === playSeq) playPending = false;
     }
   }
 
   function stopAudio() {
+    playSeq++;
+    playPending = false;
     autoQueue = [];
     engine?.stop();
     activeAudio = null;

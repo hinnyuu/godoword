@@ -14,14 +14,16 @@
 - `synthesize_stream`：`POST {base_url}/api/v1/services/audio/tts/SpeechSynthesizer`
   （`X-DashScope-SSE: enable`）→ SSE 归一化为 `AudioEvent` 流（`src/sse.rs`：Start → Words 跨帧去重 →
   Chunk 裸 PCM → Usage → End complete 拼接）。content-type 非 event-stream 时走 URL 模式
-  （单响应 audio.url 内部下载 → `normalize_url` 合成流）。
+  （单响应 audio.url 内部下载 → `normalize_url` 合成流）。**URL 下载查 HTTP 状态 + 32MiB 大小上限
+  （审计 A1：错误体不得当音频缓存播放，异常响应不得无界累积；错误归一化复用 map_error）**。
 - 错误归一化（`map_error`）：401/403→Auth、429→RateLimit、404→ModelUnavailable、
   InvalidApiKey/AccessDenied→Auth、Throttling/quota→Quota、5xx→Network(retryable)、其余→Internal。
 - `base_url` 为 host 根（如 `https://host`），适配器追加 DashScope 路径。
 - **超时（审计 F1）**：reqwest connect 10s + read 30s（块间隔，流式安全；URL 模式下载亦受约束）。
 
 测试：`src/sse.rs` 单元测试用 fixture 黄金锚定（流式单块 + 13 字节切片，7 事件精确断言含 complete=52800 字节；
-URL 模式合成流）；`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
+URL 模式合成流）；`src/lib.rs` URL 下载本地 HTTP 服务测试（**审计 A1 负例：404 归一化错误/超限报错** + 正例归一化）；
+`tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
 
 ## 脱敏 fixtures（tests/fixtures/）
 
