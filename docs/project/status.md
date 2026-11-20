@@ -3,8 +3,8 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T20:45+08:00
-- 当前里程碑: **M2 审计全闭环（设计 PR #21 b1a19b8 + 代码 PR #22 234a95f 均合并验收）→ P1 风险前置切片待启动**
+- verified: 2026-11-20T21:35+08:00
+- 当前里程碑: **M2 审计全闭环 → P1 前置修复 PR 在飞（A1–A5）→ P1 风险前置切片待启动（B3/B7 已定案）**
 - 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ 代码修复合并（234a95f）→ **审计闭环，P1 待启动**
 
 ## done
@@ -51,7 +51,12 @@
 
 ## in-flight
 
-- **P1 风险前置切片待启动**（主开发者裁决：**新 agent 交接**；开工指引见下一动作）。
+- **P1 前置修复 PR**（分支 fix/m2-pre-p1-audit，history 2130）：全量审计（侧重 #22/#23，无 P0）发现 A1–A5 修复——
+  A1 TTS URL 下载状态检查+32MiB 上限 / A2 LLM tool arguments 解析失败报错+空参{}+index 帽 255 /
+  A3 断线重附持久态（2049 定案落地）/ A4 播放失效令牌+失败重置（ChatView+Settings）/ A5 历史加载滚到底；
+  负例同配（适配器本地 HTTP 服务 + SSE 负例 3）；适配器测试全绿 + 前端 tsc/vitest 54/svelte-check 0 错。
+  **待 CI + 人工残留 sign-off（A3–A5 UI 交互）→ 合并**。
+- **P1 待启动**（前置修复合并后；B3/B7 已定案见 history 2130，开工指引见下一动作）。
 
 ## blocked / 待拍板决策
 
@@ -60,12 +65,14 @@
 
 ## 下一动作
 
-- **启动 P1 风险前置切片**（新 agent 交接，主开发者已裁决）
-  （模块注册表 + ModuleContext 实现 + 回合接线 + teach-free，模块会话端到端；契约新增此 phase 落 + 契约级全量审查 + 二审；
-  **B3 必决项**：session_id vs for_user 张力 + plan_version 类型对齐）。
-  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/1802/1913/2031 →
+- **启动 P1 风险前置切片**（前置修复 PR 合并后；B3/B7 已定案 history 2130：session_id→Option<SessionId> /
+  plan_version→u32 INTEGER（P1 迁移，列从未写入零风险）/ YAML→noyalib 0.0.63（MSRV 1.89）；
+  phase 边界提案见 history 2130：P1 自带 0006 + complete_session + cached-synthesis 机制 + teach-free kernel 迁移，
+  B2 DELETE 翻转/模块迁移 runner 仍 P2）
+  （模块注册表 + ModuleContext 实现 + 回合接线 + teach-free，模块会话端到端；契约新增此 phase 落 + 契约级全量审查 + 二审）。
+  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/1802/1913/2031/2130 →
   kernel-api contract + kernel docs（心智模型）；①查 git log + 开放 PR 交叉验证；③P1 首任务建议：
-  YAML crate 选型（B7，serde_yaml 废弃）+ ModuleKind::Kernel + 注册表骨架，再 ModuleContext/ctx 工厂（B3 先定），
+  noyalib 入 workspace + ModuleKind::Kernel + 注册表骨架，再 ModuleContext/ctx 工厂（B3 已定），
   再回合接线 + teach-free crate（persona 移入 + 既有会话/文件夹迁移，哨兵涟漪 B8 核对）；
   ④契约新增落地即触发**契约级全量语义审查 + 二审**（conventions，附核对矩阵）；⑤测试锚定：serde 黄金 +
   backends() 双后端 + 两用户越权负例 + 迁移幂等/回滚负例；⑥环境：2H2G jobs≤2 重构建走 CI（devenv.md），

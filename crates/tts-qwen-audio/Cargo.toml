@@ -22,4 +22,4 @@ serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-tokio.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }

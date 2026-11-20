@@ -11,13 +11,16 @@
 - `list_models`：`GET {base_url}/models` → `ModelInfo`。
 - `chat_stream`：`POST {base_url}/chat/completions`（stream=true）→ SSE 归一化为 `ChatChunk` 流
   （`src/sse.rs`：reasoning_content/content 增量、tool_calls 按 index 组装完整后一次性发、usage、finish）。
+  **arguments 解析失败报 Internal 错误不静默 Null（审计 A2：截断/非法参数不得冒充成功 ToolCall）；
+  空 arguments → `{}`（无参工具惯例）；index 上限 255（防异常上游无界 resize OOM）**。
 - 错误归一化（`map_error`）：401/403→Auth、402→Quota、429→RateLimit(retry_after)、404→ModelUnavailable、
   400 context_length→ContextLength、5xx→Network(retryable)、其余→Internal。
 - `base_url` 为 v1 根（如 `https://host/compatible-mode/v1`），适配器追加 `/models`、`/chat/completions`。
 - **超时（审计 F1）**：reqwest connect 10s + read 30s（块间隔，流式安全；上游停滞→Network(retryable)，
   kernel 重试/硬超时兜底；测试端点不无限挂起）。
 
-测试：`src/sse.rs` 单元测试用 fixture 黄金锚定归一化（单块 + 7 字节切片跨块缓冲，83 块精确断言）；
+测试：`src/sse.rs` 单元测试用 fixture 黄金锚定归一化（单块 + 7 字节切片跨块缓冲，83 块精确断言）
++ **审计 A2 负例**（非法 arguments 报错/空参→`{}`/巨 index 报错）；
 `tests/live.rs` 本地真 key 活体验证（`#[ignore]`，CI 不跑）。
 
 ## 脱敏 fixtures（tests/fixtures/）

@@ -17,6 +17,9 @@ struct ToolBuilder {
     arguments: String,
 }
 
+/// tool_calls index 上限（审计前置加固：上游异常/恶意巨 index 不得致无界 resize OOM）。
+const MAX_TOOL_INDEX: usize = 255;
+
 fn map_finish(reason: &str) -> FinishReason {
     match reason {
         "stop" => FinishReason::Stop,
@@ -36,13 +39,24 @@ fn map_usage(u: UsageWire) -> Usage {
     }
 }
 
-fn assemble(builders: &[ToolBuilder]) -> Vec<ToolCall> {
+/// 组装完整 tool_calls。arguments 解析失败**报错不静默**（审计 A2：截断/非法 JSON
+/// 不得以 Null 参数冒充成功 ToolCall 下发执行）；空串视为无参工具 `{}`（OpenAI 兼容惯例）。
+fn assemble(builders: &[ToolBuilder]) -> Result<Vec<ToolCall>, ProviderError> {
     builders
         .iter()
-        .map(|b| ToolCall {
-            id: b.id.clone(),
-            name: b.name.clone(),
-            arguments: serde_json::from_str(&b.arguments).unwrap_or(Value::Null),
+        .map(|b| {
+            let arguments = if b.arguments.trim().is_empty() {
+                Value::Object(serde_json::Map::new())
+            } else {
+                serde_json::from_str(&b.arguments).map_err(|e| ProviderError::Internal {
+                    message: format!("tool_calls arguments 解析失败（{}）：{e}", b.name),
+                })?
+            };
+            Ok(ToolCall {
+                id: b.id.clone(),
+                name: b.name.clone(),
+                arguments,
+            })
         })
         .collect()
 }
@@ -99,6 +113,12 @@ where
                     if let Some(tcs) = choice.delta.tool_calls {
                         for tc in tcs {
                             let idx = tc.index as usize;
+                            if idx > MAX_TOOL_INDEX {
+                                yield Err(ProviderError::Internal {
+                                    message: format!("tool_calls index 超上限 {MAX_TOOL_INDEX}：{idx}"),
+                                });
+                                return;
+                            }
                             if builders.len() <= idx {
                                 builders.resize_with(idx + 1, ToolBuilder::default);
                             }
@@ -118,7 +138,13 @@ where
                     }
                     if let Some(fr) = choice.finish_reason {
                         if fr == "tool_calls" && !builders.is_empty() {
-                            yield Ok(ChatChunk::ToolCalls(assemble(&builders)));
+                            match assemble(&builders) {
+                                Ok(tcs) => yield Ok(ChatChunk::ToolCalls(tcs)),
+                                Err(e) => {
+                                    yield Err(e);
+                                    return;
+                                }
+                            }
                         }
                         yield Ok(ChatChunk::Finish(map_finish(&fr)));
                     }
@@ -208,5 +234,59 @@ mod tests {
             .collect();
         let chunks = collect(pieces).await;
         assert_golden(&chunks);
+    }
+
+    /// 审计 A2 负例：截断/非法 arguments 须报错，不得以 Null 冒充成功 ToolCall。
+    #[tokio::test]
+    async fn malformed_arguments_yields_error() {
+        let sse = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"speak\",\"arguments\":\"{\\\"text\\\":\"}}]},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n";
+        let items: Vec<_> = normalize(stream::iter(vec![Ok::<_, reqwest::Error>(Bytes::from(
+            sse,
+        ))]))
+        .collect()
+        .await;
+        assert!(
+            items.iter().any(|r| matches!(r, Err(ProviderError::Internal { message }) if message.contains("arguments 解析失败"))),
+            "非法 arguments 须发 Internal 错误"
+        );
+        assert!(
+            !items
+                .iter()
+                .any(|r| matches!(r, Ok(ChatChunk::ToolCalls(_)))),
+            "不得下发组装结果"
+        );
+    }
+
+    /// 空 arguments（无参工具兼容惯例）→ `{}` 而非 Null/报错。
+    #[tokio::test]
+    async fn empty_arguments_becomes_empty_object() {
+        let sse = "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"c1\",\"function\":{\"name\":\"noop\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n";
+        let chunks = collect(vec![Bytes::from(sse)]).await;
+        let tcs = chunks
+            .iter()
+            .find_map(|c| match c {
+                ChatChunk::ToolCalls(t) => Some(t),
+                _ => None,
+            })
+            .expect("tool_calls 帧");
+        assert_eq!(tcs[0].arguments, serde_json::json!({}), "空参 → {{}}");
+    }
+
+    /// 审计前置加固负例：巨 index 须报错，不得无界 resize。
+    #[tokio::test]
+    async fn huge_tool_index_yields_error() {
+        let sse = format!(
+            "data: {{\"choices\":[{{\"delta\":{{\"tool_calls\":[{{\"index\":{},\"id\":\"c1\",\"function\":{{\"name\":\"x\",\"arguments\":\"\"}}}}]}},\"finish_reason\":null}}]}}\n\n",
+            MAX_TOOL_INDEX + 1
+        );
+        let items: Vec<_> = normalize(stream::iter(vec![Ok::<_, reqwest::Error>(Bytes::from(
+            sse,
+        ))]))
+        .collect()
+        .await;
+        assert!(
+            items.iter().any(|r| matches!(r, Err(ProviderError::Internal { message }) if message.contains("index 超上限"))),
+            "巨 index 须发 Internal 错误"
+        );
     }
 }
