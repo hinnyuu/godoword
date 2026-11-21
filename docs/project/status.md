@@ -52,6 +52,12 @@
   A1 TTS URL 下载状态检查+32MiB 上限 / A2 LLM arguments 报错不静默 Null+空参{}+index 帽 / A3 断线重附（2049 定案落地）/
   A4 播放失效令牌+失败重置 / A5 历史滚底；负例同配；CI 全 8 绿；sign-off 全过（A3 触发方法修订：DevTools Offline
   不切已建立流，改 ss -K/socat 真断 TCP，服务端 detach 语义实验锚定）。B3/B7 定案（Option/INTEGER/noyalib）。
+- **M2 P1 风险前置切片合并验收**（history 0010 实现 + 1316 验收交接，PR #25 squash → main 27c5720）：
+  注册表（noyalib）+ ModuleContext/ctx 工厂（llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 +
+  teach-free（T4 回归）+ 0006（plan_version INTEGER/call_log.module_id/progress 结构化列/completed_at/teach-free 迁移/audio_assets）+
+  REST（modules/complete/module_id 校验）+ OpenAPI 再生 + 冒烟扩展。契约级全量审查 + 二审（含 CI 首轮 docs-gate 漏改 3 项补修 +
+  预检时序教训落档）。CI 全 8 绿；主开发者 sign-off 两项全过（跨版本迁移升级 pr-24→pr-25 同卷旧数据 intact +
+  真 key teach-free persona/speak/高亮感官）；R4 main 冒烟重测。**M2 P1 正式闭环，P2 待新 agent 启动**。
 
 ## in-flight
 
