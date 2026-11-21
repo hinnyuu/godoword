@@ -46,7 +46,8 @@
 14. **status 新鲜度**：改 `src/`、`tests/`、`migrations/` 或 `web/` 须同 PR 更新 `docs/project/status.md`（live 交接），
     可 docs-nochange 豁免。见 [conventions](conventions.md#agent-交接与入门)。
 
-本地预检：`python3 scripts/docs-gate/gate.py --local`（覆盖率/漏改/链接/术语/中文/禁入/status 新鲜度，无需网络）；
+本地预检：`python3 scripts/docs-gate/gate.py --local`（覆盖率/漏改/链接/术语/中文/禁入/status 新鲜度，无需网络）。
+**须在提交后跑**：漏改/status 新鲜度按已提交 diff（`base...HEAD`）判定，提交前跑 diff 为空会空转假绿（P1 实证）；
 门禁逻辑改动须过 `python3 scripts/docs-gate/test_gate.py`（合成回归：kernel-api 跨模块/migration-only/web-only，审计 D6/D7）；
 容器冒烟可本地跑 `bash scripts/acceptance/smoke.sh <镜像>`（需 podman，自动清理）；
 双后端存储测试本地需 PG 容器（设 `TEST_PG_URL`），`cargo test -p kernel-api --test storage`。
@@ -58,7 +59,7 @@
 3. 逐一确认已更新，或走豁免流程。
 4. 行为/接口/决策变更 → 写 history 条目（[格式](conventions.md#历史格式)）。
 5. 新术语 → glossary.yaml 入表。
-6. 跑 `gate.py --local` 预检。
+6. 提交后跑 `gate.py --local` 预检（按已提交 diff 判定，推送前必过）。
 7. 确认无密钥、无禁入文件。
 8. commit message 合规（type/scope 英文 + subject 中文）。
 9. 有人工残留项时：PR 清单逐项含完整命令（具体镜像 tag）+ 通过标准 + 清理命令，覆盖全部残留项
