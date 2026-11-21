@@ -85,12 +85,10 @@
   ⑤环境：2H2G jobs≤2 重构建走 CI（devenv.md），本机 PG 测试容器 gw-pg 已停（按需 podman start gw-pg，TEST_PG_URL 见 devenv），
   真 key 仅 env；⑥status 逐 phase 维护，**提交后**跑 gate --local 预检（漏改按已提交 diff 判定，提交前跑假绿，P1 教训），
   conventional commits（subject 中文）。
-- M2 技术接缝（设计已定，P1/P2 落地）：kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师）；
-  outbox 跨模块订阅（consumes_events）+ event_consumptions 幂等（A5）+ 消费守护（B5 有界并发/毒丸上限）；
-  SessionEnded 完成≠删除语义（complete_session 发事件 + sessions.completed_at；**DELETE 不发事件**，B2）；
-  ModuleContext LLM 接缝（extractor/assessor）+ cached-synthesis 音频服务 + ctx 工厂注入 + ModuleKind::Kernel；
-  progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id**（0006，B1/B4）；模块迁移版本键 mod_<id>_NNNN 命名空间。
-  详见 history 1614/1721 / roadmap 蓝图。
+- **M2 P2 剩余接缝**（P1 已落注册表/ModuleContext/ctx 工厂/回合接线/0006/complete_session/cached-synthesis 机制，见上「P1 已落事实」）：
+  outbox 跨模块订阅扇出（consumes_events，现 dispatch_once 串行按 ev.module_id 路由）+ event_consumptions 幂等（A5）+
+  消费守护（B5 有界并发/毒丸上限）；**DELETE 不发事件语义翻转（B2，complete_session 已发事件，end_session 现仍 DELETE+事件须改）**；
+  模块迁移 runner（mod_<id>_NNNN 注册序追加，首个消费者 assess P3）；0007 其余基底。详见 history 1614/1721/1316 / roadmap 蓝图。
 - 用户侧音频机制（P4）：白名单合成服务 + 持久资产区 /data/assets + 资产登记表 + 懒生成/一键全量 + 降级（UX-A3）。
 - 用户级资产备份：设计已定案（roadmap 专节），实施 M2 后（M3 前或独立小里程碑）。
 
