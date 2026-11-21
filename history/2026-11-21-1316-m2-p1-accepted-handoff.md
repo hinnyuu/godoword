@@ -1,5 +1,5 @@
 ---
-date: 2026-11-21T11:58+08:00
+date: 2026-11-21T13:16+08:00
 keywords: [m2, p1, acceptance, merge, sign-off, handoff, p2, outbox, delete-semantics, migration-runner]
 scope: [project]
 type: change

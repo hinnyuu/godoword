@@ -69,7 +69,7 @@
   范围：0007 其余基底 + outbox 扇出（consumes_events 订阅，现 dispatch_once 按 ev.module_id 串行路由须改扇出）+
   event_consumptions per-subscriber 幂等表（A5）+ 消费守护（B5 有界并发/per-event spawn/超时/重试上限/死信）+
   **DELETE 不发事件语义翻转（B2）**+ 模块迁移 runner（mod_<id>_NNNN，注册序追加）。
-  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/2130/0010/1158 →
+  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/2130/0010/1316 →
   kernel docs（README+storage）+ journal.rs/migrate.rs/registry.rs（心智模型）；②查 git log + 开放 PR 交叉验证
   （无 gh 须显式写「开放 PR 未核验」，审计 D9）；③P2 首任务建议：event_consumptions 表 + 扇出订阅骨架，
   再消费守护（B5），再 DELETE 翻转（B2，**改 journal::end_session + 更新 tests/journal.rs
@@ -119,7 +119,7 @@
   改密错旧密 403（401 专属会话）；preview 500 字符/60s/Usage 计量；适配器 connect 10s/read 30s；
   前端树=登记表∪会话路径；auto_play 队列靠引擎 onEnded（pushedMs+markComplete）；prefs 串行队列+清残留变量；
   core session/ux.ts（routeError/parseUsage）；frontend 已入 main required checks + image needs。
-- **M2 P1 已落事实**（history 0010/1158，P2 接缝）：模块注册表（kernel/registry.rs，noyalib，manifest.consumes_events 已就绪供扇出）+
+- **M2 P1 已落事实**（history 0010/1316，P2 接缝）：模块注册表（kernel/registry.rs，noyalib，manifest.consumes_events 已就绪供扇出）+
   KernelCtxFactory/ModuleContext（llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 + teach-free（persona 权威，feature default-on）+
   0006（plan_version INTEGER/completed_at/call_log.module_id/progress 结构化列/teach-free 迁移/audio_assets）+
   REST（modules/complete/module_id 校验/binding 注册表校验）+ 持久资产区 /data/assets。**journal.rs dispatch_once 现串行按
