@@ -98,7 +98,8 @@ CI 从 frontmatter 生成 `history/INDEX.md` + `INDEX.json`（派生物，可再
 - **时间戳应用侧生成**（`Utc::now()` 插入）——不用 DB 默认值 `now()`/`CURRENT_TIMESTAMP`（灭默认值方言）。
 - **JSON 整取回 Rust 处理**——不在 SQL 里按子字段过滤/查询（灭 `->>` vs `json_extract` 分裂）。
 - 占位符 `$1,$2…`（SQLite 由驱动翻译为 `?`）；不用 `::cast`（SQLite 把 `$1::uuid` 静默解析为命名参数）。
-- 单一 PG 风格类型名迁移集（UUID/TIMESTAMPTZ/JSONB/BOOLEAN）靠 SQLite 类型亲和性双后端通用。
+- 单一 PG 风格类型名迁移集（UUID/TIMESTAMPTZ/JSONB/BOOLEAN/INTEGER/REAL/BYTEA/TEXT）靠 SQLite 类型亲和性双后端通用
+  （REAL↔f32 / INTEGER↔i32 / COUNT(*)↔i64，映射细节见 kernel storage.md）。
 
 残余真方言点收口 kernel helper。共享代码用运行时 `query_as` + 薄分发宏；`query!` 仅驱动专属。
 **CI 真测双后端**（纪律➀，storage required check）兜底：违反子集 → 某一后端测试红，双向捕获。
