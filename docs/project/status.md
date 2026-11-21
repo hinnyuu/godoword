@@ -4,8 +4,8 @@
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
 - verified: 2026-11-21T00:10+08:00
-- 当前里程碑: **M2 P1 模块切片实施完成待 PR 验收**（前置修复 PR #24 已合并 9dc5cdf）
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ 代码修复合并（234a95f）→ 审计闭环 → P1 前置修复合并（9dc5cdf，A1–A5 sign-off 全过）→ **P1 实施中**
+- 当前里程碑: **M2 P1 合并验收闭环（PR #25 → main 27c5720，sign-off 全过）→ P2 待启动（新 agent 交接）**
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ 代码修复合并（234a95f）→ 审计闭环 → P1 前置修复合并（9dc5cdf）→ P1 模块切片合并（27c5720）→ **P2 待启动**
 
 ## done
 
@@ -52,14 +52,16 @@
   A1 TTS URL 下载状态检查+32MiB 上限 / A2 LLM arguments 报错不静默 Null+空参{}+index 帽 / A3 断线重附（2049 定案落地）/
   A4 播放失效令牌+失败重置 / A5 历史滚底；负例同配；CI 全 8 绿；sign-off 全过（A3 触发方法修订：DevTools Offline
   不切已建立流，改 ss -K/socat 真断 TCP，服务端 detach 语义实验锚定）。B3/B7 定案（Option/INTEGER/noyalib）。
+- **M2 P1 风险前置切片合并验收**（history 0010 实现 + 1316 验收交接，PR #25 squash → main 27c5720）：
+  注册表（noyalib）+ ModuleContext/ctx 工厂（llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 +
+  teach-free（T4 回归）+ 0006（plan_version INTEGER/call_log.module_id/progress 结构化列/completed_at/teach-free 迁移/audio_assets）+
+  REST（modules/complete/module_id 校验）+ OpenAPI 再生 + 冒烟扩展。契约级全量审查 + 二审（含 CI 首轮 docs-gate 漏改 3 项补修 +
+  预检时序教训落档）。CI 全 8 绿；主开发者 sign-off 两项全过（跨版本迁移升级 pr-24→pr-25 同卷旧数据 intact +
+  真 key teach-free persona/speak/高亮感官）；R4 main 冒烟重测。**M2 P1 正式闭环，P2 待新 agent 启动**。
 
 ## in-flight
 
-- **M2 P1 模块切片 PR**（分支 feat/m2-p1-module-slice，history 0010）：实施完成——注册表（noyalib）+ ModuleContext/ctx 工厂
-  （llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 + teach-free（T4 回归）+ 0006（plan_version INTEGER/
-  call_log.module_id/progress 结构化列/completed_at/teach-free 迁移/audio_assets）+ REST（modules/complete/module_id 校验）+
-  OpenAPI 再生 + 冒烟扩展。契约级全量审查 + 二审已做（history 0010 矩阵）。测试：registry 5 + module_slice 5 +
-  journal 双后端 4 组 + handler 3 + serde 黄金 14 + 全量 workspace 双后端零回归。**待 PR + CI + 人工残留 sign-off → 合并**。
+- **P2 待启动**（主开发者裁决：**新 agent 交接**，本会话收工；开工指引见下一动作）。
 
 ## blocked / 待拍板决策
 
@@ -68,19 +70,25 @@
 
 ## 下一动作
 
-- **P1 PR 验收合并**（CI 全 8 绿 + 人工残留 sign-off：模块会话端到端真 key 验证【teach-free 对话 + speak + 完成语义】+
-  存量数据迁移核对【旧会话/文件夹归入 teach-free】；清单见 PR）。
-- **合并后启动 P2 kernel 基底**：0007 其余基底 + outbox 扇出（consumes_events）+ event_consumptions 幂等（A5）+
-  消费守护（B5 有界并发/毒丸上限）+ **DELETE 不发事件语义翻转（B2，R6/N2 测试随 P2 更新）**+ 模块迁移 runner（mod_<id>_NNNN）。
-  开工指引：①AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/2130/0010 → kernel docs；
-  ②git log + 开放 PR 交叉验证；③测试锚定：双后端 + 两用户越权负例 + 幂等/毒丸/并发负例；
-  ④环境 2H2G jobs≤2 重构建走 CI（devenv.md），真 key 仅 env；⑤status 逐 phase 维护，gate --local，conventional commits。
-- M2 技术接缝（设计已定，P1/P2 落地）：kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师）；
-  outbox 跨模块订阅（consumes_events）+ event_consumptions 幂等（A5）+ 消费守护（B5 有界并发/毒丸上限）；
-  SessionEnded 完成≠删除语义（complete_session 发事件 + sessions.completed_at；**DELETE 不发事件**，B2）；
-  ModuleContext LLM 接缝（extractor/assessor）+ cached-synthesis 音频服务 + ctx 工厂注入 + ModuleKind::Kernel；
-  progress_events 补 outcome/item_ref/difficulty 列 + **call_log 补 module_id**（0006，B1/B4）；模块迁移版本键 mod_<id>_NNNN 命名空间。
-  详见 history 1614/1721 / roadmap 蓝图。
+- **启动 P2 kernel 基底**（新 agent 交接，主开发者已裁决；预计无 kernel-api 契约变更——consumes_events 早在
+  ModuleManifest，扇出/幂等/守护/DELETE 翻转/迁移 runner 皆 kernel 实现层；若触 trait 则触发契约级全量审查）。
+  范围：0007 其余基底 + outbox 扇出（consumes_events 订阅，现 dispatch_once 按 ev.module_id 串行路由须改扇出）+
+  event_consumptions per-subscriber 幂等表（A5）+ 消费守护（B5 有界并发/per-event spawn/超时/重试上限/死信）+
+  **DELETE 不发事件语义翻转（B2）**+ 模块迁移 runner（mod_<id>_NNNN，注册序追加）。
+  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/2130/0010/1316 →
+  kernel docs（README+storage）+ journal.rs/migrate.rs/registry.rs（心智模型）；②查 git log + 开放 PR 交叉验证
+  （无 gh 须显式写「开放 PR 未核验」，审计 D9）；③P2 首任务建议：event_consumptions 表 + 扇出订阅骨架，
+  再消费守护（B5），再 DELETE 翻转（B2，**改 journal::end_session + 更新 tests/journal.rs
+  end_session_atomicity/end_session_concurrent_unique**），再模块迁移 runner；
+  ④测试锚定：backends() 双后端 + 两用户越权负例 + **幂等/毒丸重试上限/并发负例（B5）+ DELETE vs complete 事件语义负例（B2）**+
+  迁移幂等/回滚；可靠性声称须失败路径测试（conventions，不能只测 happy path）；
+  ⑤环境：2H2G jobs≤2 重构建走 CI（devenv.md），本机 PG 测试容器 gw-pg 已停（按需 podman start gw-pg，TEST_PG_URL 见 devenv），
+  真 key 仅 env；⑥status 逐 phase 维护，**提交后**跑 gate --local 预检（漏改按已提交 diff 判定，提交前跑假绿，P1 教训），
+  conventional commits（subject 中文）。
+- **M2 P2 剩余接缝**（P1 已落注册表/ModuleContext/ctx 工厂/回合接线/0006/complete_session/cached-synthesis 机制，见上「P1 已落事实」）：
+  outbox 跨模块订阅扇出（consumes_events，现 dispatch_once 串行按 ev.module_id 路由）+ event_consumptions 幂等（A5）+
+  消费守护（B5 有界并发/毒丸上限）；**DELETE 不发事件语义翻转（B2，complete_session 已发事件，end_session 现仍 DELETE+事件须改）**；
+  模块迁移 runner（mod_<id>_NNNN 注册序追加，首个消费者 assess P3）；0007 其余基底。详见 history 1614/1721/1316 / roadmap 蓝图。
 - 用户侧音频机制（P4）：白名单合成服务 + 持久资产区 /data/assets + 资产登记表 + 懒生成/一键全量 + 降级（UX-A3）。
 - 用户级资产备份：设计已定案（roadmap 专节），实施 M2 后（M3 前或独立小里程碑）。
 
@@ -115,6 +123,12 @@
   改密错旧密 403（401 专属会话）；preview 500 字符/60s/Usage 计量；适配器 connect 10s/read 30s；
   前端树=登记表∪会话路径；auto_play 队列靠引擎 onEnded（pushedMs+markComplete）；prefs 串行队列+清残留变量；
   core session/ux.ts（routeError/parseUsage）；frontend 已入 main required checks + image needs。
+- **M2 P1 已落事实**（history 0010/1316，P2 接缝）：模块注册表（kernel/registry.rs，noyalib，manifest.consumes_events 已就绪供扇出）+
+  KernelCtxFactory/ModuleContext（llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 + teach-free（persona 权威，feature default-on）+
+  0006（plan_version INTEGER/completed_at/call_log.module_id/progress 结构化列/teach-free 迁移/audio_assets）+
+  REST（modules/complete/module_id 校验/binding 注册表校验）+ 持久资产区 /data/assets。**journal.rs dispatch_once 现串行按
+  ev.module_id 路由（main.rs handlers 空 HashMap 骨架）→ P2 改扇出**；end_session 现 DELETE+事件（B2 翻转点）；
+  complete_session 已发事件（完成≠删除）；migrate.rs run_migrations 双后端 runner（模块迁移 mod_<id>_NNNN 注册序追加，P2）。
 - **M2 设计关键事实**（history 1614 + 审计修订 1721）：三模块 teach-assess/teach-gojuon/teach-free；混合式课程双通道进度（操练 ExerciseOutcome + 对话提取报告）；
   一课三段式（引入→操练→收尾，完成 session-ended≠删除，**DELETE 不发事件**）；全量再生重规划 version+1（阈值 ≥20 事件/≥3 报告 + 手动，
   并发锁**不跨 LLM 持写事务**，失败保留旧版）；全假名 ~104 数据驱动 + **用户侧标准音频**（白名单 get_or_synthesize + 持久资产区 /data/assets

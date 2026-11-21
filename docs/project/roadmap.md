@@ -8,7 +8,7 @@
 |---|---|---|---|
 | M0 | 脚手架 + CI + 门禁 + 首批文档 + kernel-api 契约 + 最小 hello 镜像 + 容器冒烟测试（CI 集成） | — | 完成 |
 | M1 | kernel 完整实现 + auth-local + llm-openai + tts-qwen-audio + 设置 UI（BYOK 可配 + 测试按钮）+ 管理员重置 + schema 前瞻（tokens/users.email）+ Svelte 前端骨架。**拆为 M1a–M1d 四子里程碑**（见下） | — | 完成（M1a/M1b/M1c/M1d 全部完成） |
-| M2 | teach-assess + teach-gojuon + teach-free（placement → plan → 自适应课程，黄金路径全通） | — | 实施中（P1 模块切片） |
+| M2 | teach-assess + teach-gojuon + teach-free（placement → plan → 自适应课程，黄金路径全通） | — | 实施中（P1 已合并，P2 待启动） |
 | M2+ | 用户级资产备份（导出/导入，设计定案见 roadmap 专节） | — | 设计定案（实施 M2 后） |
 | M3 | teach-dialogue | v1.0 | 未开始 |
 | M4 | SMTP 自助重置/邮箱验证 + auth-oidc（authentik）+ 账户关联 | v1.1 | 未开始 |
