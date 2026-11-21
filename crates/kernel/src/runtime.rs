@@ -8,8 +8,8 @@ use futures_core::Stream;
 use futures_util::StreamExt;
 use kernel_api::{
     speak_tool_spec, AudioEvent, Capability, ChatChunk, ChatMessage, ChatRequest, FinishReason,
-    LlmProvider, ProviderError, Role, RunId, SessionEvent, SessionId, Store, ToolCall, ToolResult,
-    TtsProvider, TtsUsage, Usage, UserId, SPEAK_TOOL_NAME,
+    LlmProvider, ModuleId, PlanProvider, ProviderError, Role, RunId, SessionEvent, SessionId,
+    Store, ToolCall, ToolResult, TtsProvider, TtsUsage, Usage, UserId, SPEAK_TOOL_NAME,
 };
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -23,6 +23,7 @@ use crate::journal::{
     CallRecord,
 };
 use crate::persona::DEFAULT_TEACHER_PERSONA;
+use crate::registry::ModuleRegistry;
 use crate::seam::{AudioCache, BindingResolver, CachedAudio, SessionRepo, StoredMessage};
 use crate::speak::prepare_speak;
 
@@ -90,6 +91,7 @@ fn llm_call_record(
     user: UserId,
     session: SessionId,
     run_id: RunId,
+    module_id: Option<&str>,
     model: &str,
     adapter_id: &str,
     start: Instant,
@@ -98,6 +100,7 @@ fn llm_call_record(
     error_code: Option<String>,
 ) -> CallRecord {
     CallRecord {
+        module_id: module_id.map(|m| m.to_string()),
         user_id: user.0,
         session_id: Some(session.0),
         run_id: Some(run_id.0),
@@ -133,6 +136,7 @@ fn tts_call_record(
     user: UserId,
     session: SessionId,
     run_id: RunId,
+    module_id: Option<&str>,
     model: &str,
     adapter_id: &str,
     start: Instant,
@@ -141,6 +145,7 @@ fn tts_call_record(
     error_code: Option<String>,
 ) -> CallRecord {
     CallRecord {
+        module_id: module_id.map(|m| m.to_string()),
         user_id: user.0,
         session_id: Some(session.0),
         run_id: Some(run_id.0),
@@ -190,6 +195,7 @@ async fn resolve_turn_timeout(store: &Store, user: UserId, default: Duration) ->
 
 /// summarize 淘汰：解析 Summarizer role 绑定 → LLM 压缩 evicted span → 摘要消息（记 call_log）。
 /// 失败（无绑定/上游错）返回 None → 调用方回退 truncate。
+#[allow(clippy::too_many_arguments)]
 async fn summarize_span(
     llm: &Arc<dyn LlmProvider>,
     bindings: &Arc<dyn BindingResolver>,
@@ -197,10 +203,12 @@ async fn summarize_span(
     user: UserId,
     session: SessionId,
     run_id: RunId,
+    module: Option<&ModuleId>,
     evicted: &[StoredMessage],
 ) -> Option<String> {
+    let module_str = module.map(|m| m.0.as_str());
     let binding = bindings
-        .resolve(user, None, Capability::Llm, Role::Summarizer)
+        .resolve(user, module, Capability::Llm, Role::Summarizer)
         .await
         .ok()?;
     let span: String = evicted
@@ -237,6 +245,7 @@ async fn summarize_span(
                     user,
                     session,
                     run_id,
+                    module_str,
                     &binding.model,
                     llm.id(),
                     start,
@@ -286,6 +295,7 @@ async fn summarize_span(
             user,
             session,
             run_id,
+            module_str,
             &binding.model,
             llm.id(),
             start,
@@ -321,6 +331,10 @@ pub struct Runtime {
     sessions: Arc<dyn SessionRepo>,
     audio: Arc<dyn AudioCache>,
     store: Arc<Store>,
+    /// 模块注册表（M2 P1；None=无注册表测试路径，legacy 默认教师 persona）。
+    modules: Option<Arc<ModuleRegistry>>,
+    /// 方案提供者（teach-assess，P3 注册；None → current_plan 恒 None，persona-only）。
+    plan: Option<Arc<dyn PlanProvider>>,
     turn_timeout: Duration,
     active: Arc<Mutex<HashSet<SessionId>>>,
     cancels: Arc<Mutex<HashMap<SessionId, Arc<AtomicBool>>>>,
@@ -347,6 +361,8 @@ impl Runtime {
             sessions,
             audio,
             store,
+            modules: None,
+            plan: None,
             turn_timeout: Duration::from_secs(180),
             active: Arc::new(Mutex::new(HashSet::new())),
             cancels: Arc::new(Mutex::new(HashMap::new())),
@@ -368,6 +384,22 @@ impl Runtime {
     pub fn with_turn_timeout(self, timeout: Duration) -> Self {
         Self {
             turn_timeout: timeout,
+            ..self
+        }
+    }
+
+    /// 注入模块注册表（M2 P1 回合接线：persona/工具/绑定 module_id/方案钉住）。
+    pub fn with_modules(self, modules: Arc<ModuleRegistry>) -> Self {
+        Self {
+            modules: Some(modules),
+            ..self
+        }
+    }
+
+    /// 注入方案提供者（teach-assess P3；plan.teacher_prompt 钉住 + RunStart.plan_version）。
+    pub fn with_plan_provider(self, plan: Arc<dyn PlanProvider>) -> Self {
+        Self {
+            plan: Some(plan),
             ..self
         }
     }
@@ -560,6 +592,8 @@ impl Runtime {
         let store = self.store.clone();
         let active = self.active.clone();
         let cancels = self.cancels.clone();
+        let modules = self.modules.clone();
+        let plan_provider = self.plan.clone();
 
         async_stream::stream! {
             if !try_acquire(&active, session) {
@@ -576,21 +610,6 @@ impl Runtime {
             cancels.lock().unwrap().insert(session, cancel_flag.clone());
             let _guard = ActiveGuard { active: active.clone(), cancels: cancels.clone(), session };
             let deadline = Instant::now() + turn_timeout;
-
-            let binding = match bindings.resolve(user, None, Capability::Llm, Role::Default).await {
-                Ok(b) => b,
-                Err(e) => {
-                    yield SessionEvent::Error {
-                        code: "unconfigured".to_string(),
-                        message: e.to_string(),
-                        retryable: false,
-                        action: Some("settings".to_string()),
-                    };
-                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
-                    return;
-                }
-            };
-            yield SessionEvent::RunStart { run_id, plan_version: None, model: binding.model.clone() };
 
             // 归属 + 失败关闭（审计 C1/C4）：会话不存在/非本用户/DB 错误 → 中止，不调计费上游。
             let meta = match sessions.meta(user, session).await {
@@ -618,6 +637,75 @@ impl Runtime {
             };
             let params = meta.params.clone();
             let tool_cap = meta.params.tool_iteration_cap;
+
+            // 模块接线（M2 P1）：注册表取模块（persona/工具/ctx 工厂）；有注册表时会话必带模块
+            //（0006 迁移后无 NULL；缺失 fail-closed 不静默回退默认教师）。无注册表=测试路径 legacy。
+            let module_id = meta.module_id.clone();
+            let registered = match (&modules, &module_id) {
+                (Some(reg), Some(mid)) => match reg.get(&mid.0) {
+                    Some(r) => Some(r),
+                    None => {
+                        yield SessionEvent::Error {
+                            code: "module_not_found".to_string(),
+                            message: format!("会话模块未注册：{}", mid.0),
+                            retryable: false,
+                            action: None,
+                        };
+                        yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                        return;
+                    }
+                },
+                (Some(_), None) => {
+                    yield SessionEvent::Error {
+                        code: "module_not_found".to_string(),
+                        message: "会话无模块（0006 迁移后不应出现）".to_string(),
+                        retryable: false,
+                        action: None,
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+                (None, _) => None,
+            };
+            let module_str = module_id.as_ref().map(|m| m.0.as_str());
+            let persona = registered
+                .map(|r| r.module.persona())
+                .unwrap_or_else(|| DEFAULT_TEACHER_PERSONA.to_string());
+
+            // 方案钉住（M2 P1）：每回合取当前方案（resume 取当前），teacher_prompt 入系统提示词，
+            // plan_version 写会话 + RunStart。读失败降级 persona-only（warn 留痕，不阻塞回合）。
+            let mut plan_version = meta.plan_version;
+            let mut teacher_prompt: Option<String> = None;
+            if let Some(p) = &plan_provider {
+                match p.current_plan(user).await {
+                    Ok(Some(pl)) => {
+                        plan_version = Some(pl.version);
+                        teacher_prompt = Some(pl.teacher_prompt.clone());
+                        if let Err(e) = crate::journal::set_plan_version(
+                            &store, user.0, session.0, pl.version,
+                        ).await {
+                            tracing::warn!("plan_version 写入失败（不阻塞回合）：{e}");
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(e) => tracing::warn!("读当前方案失败（persona-only 降级）：{e}"),
+                }
+            }
+
+            let binding = match bindings.resolve(user, module_id.as_ref(), Capability::Llm, Role::Default).await {
+                Ok(b) => b,
+                Err(e) => {
+                    yield SessionEvent::Error {
+                        code: "unconfigured".to_string(),
+                        message: e.to_string(),
+                        retryable: false,
+                        action: Some("settings".to_string()),
+                    };
+                    yield SessionEvent::RunEnd { run_id, finish_reason: FinishReason::Error };
+                    return;
+                }
+            };
+            yield SessionEvent::RunStart { run_id, plan_version, model: binding.model.clone() };
             let history = match sessions.history_with_ids(user, session).await {
                 Ok(h) => h,
                 Err(e) => {
@@ -653,9 +741,13 @@ impl Runtime {
                 .into_iter()
                 .filter(|m| m.seq > meta.evicted_up_to)
                 .collect();
+            let system_base = match &teacher_prompt {
+                Some(tp) => format!("{persona}\n\n教学方案：{tp}"),
+                None => persona.clone(),
+            };
             let system_content = match &meta.summary {
-                Some(s) => format!("{DEFAULT_TEACHER_PERSONA}\n\n先前对话摘要：{s}"),
-                None => DEFAULT_TEACHER_PERSONA.to_string(),
+                Some(s) => format!("{system_base}\n\n先前对话摘要：{s}"),
+                None => system_base.clone(),
             };
             let mut assembled = assemble_truncate(
                 system_message(&system_content),
@@ -673,7 +765,8 @@ impl Runtime {
                         Ok(Some(f)) => Some(f),
                         Ok(None) => {
                             let f = summarize_span(
-                                &llm, &bindings, &store, user, session, run_id, &assembled.evicted,
+                                &llm, &bindings, &store, user, session, run_id,
+                                module_id.as_ref(), &assembled.evicted,
                             )
                             .await;
                             if let Some(frag) = &f {
@@ -716,8 +809,7 @@ impl Runtime {
                     .map(|m| m.seq)
                     .max()
                     .unwrap_or(meta.evicted_up_to);
-                let module_id = meta
-                    .module_id
+                let evict_module = module_id
                     .as_ref()
                     .map(|m| m.0.clone())
                     .unwrap_or_else(|| "kernel".to_string());
@@ -728,7 +820,7 @@ impl Runtime {
                     &store,
                     user.0,
                     session.0,
-                    &module_id,
+                    &evict_module,
                     rolling.clone(),
                     new_watermark,
                     &ids,
@@ -747,12 +839,15 @@ impl Runtime {
                 // 当前回合即用更新后的滚动摘要。
                 if let Some(s) = rolling {
                     assembled.messages[0] =
-                        system_message(&format!("{DEFAULT_TEACHER_PERSONA}\n\n先前对话摘要：{s}"));
+                        system_message(&format!("{system_base}\n\n先前对话摘要：{s}"));
                 }
             }
             let mut convo = assembled.messages;
 
-            let tools = vec![speak_tool_spec()];
+            let mut tools = vec![speak_tool_spec()];
+            if let Some(r) = registered {
+                tools.extend(r.module.tools());
+            }
             let mut iterations: u32 = 0;
 
             let finish = 'turn: loop {
@@ -800,7 +895,7 @@ impl Runtime {
                                     retryable && attempt < 2 && !cancel_flag.load(Ordering::Relaxed);
                                 let _ = record_call(
                                     &store,
-                                    llm_call_record(user, session, run_id, &binding.model, llm.id(), llm_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
+                                    llm_call_record(user, session, run_id, module_str, &binding.model, llm.id(), llm_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
                                 )
                                 .await;
                                 if will_retry {
@@ -869,7 +964,7 @@ impl Runtime {
                 let llm_status = if llm_err.is_some() { "error" } else { "ok" };
                 let _ = record_call(
                     &store,
-                    llm_call_record(user, session, run_id, &binding.model, llm.id(), llm_start, llm_usage, llm_status, llm_err),
+                    llm_call_record(user, session, run_id, module_str, &binding.model, llm.id(), llm_start, llm_usage, llm_status, llm_err),
                 )
                 .await;
 
@@ -899,7 +994,7 @@ impl Runtime {
                     for tc in pending {
                         let result = if tc.name == SPEAK_TOOL_NAME {
                             // 内联 speak：live 发 audio 事件（prepare → 合成流迭代 → 缓存）。
-                            match prepare_speak(bindings.as_ref(), user, &tc).await {
+                            match prepare_speak(bindings.as_ref(), user, module_id.as_ref(), &tc).await {
                                 Err(e) => ToolResult {
                                     tool_call_id: tc.id.clone(),
                                     ok: false,
@@ -921,7 +1016,7 @@ impl Runtime {
                                                     let will_retry = e.retryable() && attempt < 2 && !cancel_flag.load(Ordering::Relaxed);
                                                     let _ = record_call(
                                                         &store,
-                                                        tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
+                                                        tts_call_record(user, session, run_id, module_str, &tts_binding.model, tts.id(), tts_start, None, if will_retry { "retry" } else { "error" }, Some(provider_error_code(&e).to_string())),
                                                     )
                                                     .await;
                                                     if will_retry {
@@ -1033,7 +1128,7 @@ impl Runtime {
                                             };
                                             let _ = record_call(
                                                 &store,
-                                                tts_call_record(user, session, run_id, &tts_binding.model, tts.id(), tts_start, tts_usage, tts_status, tts_err),
+                                                tts_call_record(user, session, run_id, module_str, &tts_binding.model, tts.id(), tts_start, tts_usage, tts_status, tts_err),
                                             )
                                             .await;
                                             ToolResult {
@@ -1048,6 +1143,17 @@ impl Runtime {
                                         }
                                     }
                                 }
+                            }
+                        } else if let Some(r) = registered {
+                            // 模块专属工具分发（M2 P1）：ctx 工厂 for_session 注入。
+                            let ctx = r.factory.for_session(user, session);
+                            match r.module.execute_tool(ctx.as_ref(), tc.clone()).await {
+                                Ok(res) => res,
+                                Err(e) => ToolResult {
+                                    tool_call_id: tc.id.clone(),
+                                    ok: false,
+                                    content: json!({ "error": e.to_string() }),
+                                },
                             }
                         } else {
                             ToolResult {

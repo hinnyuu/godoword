@@ -39,7 +39,7 @@ godoword：私有部署外语学习 Web 应用（日语优先），LLM 担任语
 - **子里程碑收尾定向全表面核对**（审计 D8）：交接 PR 须核对 status/roadmap/architecture/README/wiki/web/OpenAPI/PR 模板
   是否受本轮影响并同步至单一事实；设计阶段审查不能替代实现后的"代码—设计—测试—当前事实"验收。
 - 改 `src/`、`tests/` 或 `migrations/`、`web/` 须同 PR 更新 status.md（gate 强制新鲜度）+ 命中的模块 docs/wiki + history。
-- 提交前跑 `python3 scripts/docs-gate/gate.py --local` 预检；门禁逻辑改动须过 `scripts/docs-gate/test_gate.py`。
+- 提交后、推送前跑 `python3 scripts/docs-gate/gate.py --local` 预检（漏改按已提交 diff 判定，提交前跑会假绿）；门禁逻辑改动须过 `scripts/docs-gate/test_gate.py`。
 - 重构建走 CI；本机 `cargo check` 为主、`CARGO_BUILD_JOBS≤2`（2H2G 防 OOM）。
 - 双后端：含共享 SQL 的测试走 `backends()` 夹具（SQLite 恒跑 + `TEST_PG_URL` 驱动 PG）；
   共享 SQL 守双兼容 SQL 子集（uuid 主键 / 应用侧时间戳 / JSON 整取回 Rust）。

@@ -24,10 +24,10 @@ pub enum InitError {
     Msg(String),
 }
 
-/// 幂等准备 /data：自适应降权 → 建 db/keys/cache/backups 子目录。容器误删重建零丢失。
+/// 幂等准备 /data：自适应降权 → 建 db/keys/cache/assets/backups 子目录。容器误删重建零丢失。
 pub fn init_data_dir(data_dir: &Path) -> Result<(), InitError> {
     drop_privileges(data_dir)?;
-    for sub in ["db", "keys", "cache", "backups"] {
+    for sub in ["db", "keys", "cache", "assets", "backups"] {
         let p = data_dir.join(sub);
         std::fs::create_dir_all(&p).map_err(|e| permission_hint(&p, e))?;
     }

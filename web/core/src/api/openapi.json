@@ -240,8 +240,15 @@
                 "type": "object"
             },
             "CreateSessionReq": {
-                "description": "创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配）。",
+                "description": "创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配；M2 P1：module_id 可选）。",
                 "properties": {
+                    "module_id": {
+                        "description": "教学模块 id（缺省 teach-free；未注册 → 400）。",
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
                     "on_disconnect": {
                         "description": "断开行为 cancel/continue（默认 cancel）。",
                         "type": [
@@ -360,6 +367,45 @@
                 },
                 "required": [
                     "id"
+                ],
+                "type": "object"
+            },
+            "ModuleListItem": {
+                "description": "模块清单项（GET /modules）。",
+                "properties": {
+                    "description": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id",
+                    "name",
+                    "version",
+                    "description"
+                ],
+                "type": "object"
+            },
+            "ModuleListResp": {
+                "description": "模块清单响应。",
+                "properties": {
+                    "modules": {
+                        "items": {
+                            "$ref": "#/components/schemas/ModuleListItem"
+                        },
+                        "type": "array"
+                    }
+                },
+                "required": [
+                    "modules"
                 ],
                 "type": "object"
             },
@@ -2057,6 +2103,35 @@
                 ]
             }
         },
+        "/api/v1/modules": {
+            "get": {
+                "operationId": "list_modules",
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ModuleListResp"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "列出已注册教学模块（M2 P1）。",
+                "tags": [
+                    "modules"
+                ]
+            }
+        },
         "/api/v1/openapi.json": {
             "get": {
                 "operationId": "openapi_json",
@@ -2832,6 +2907,63 @@
                 ]
             }
         },
+        "/api/v1/sessions/{id}/complete": {
+            "post": {
+                "operationId": "complete_session",
+                "parameters": [
+                    {
+                        "description": "会话 id",
+                        "in": "path",
+                        "name": "id",
+                        "required": true,
+                        "schema": {
+                            "format": "uuid",
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "CSRF 自定义头（变更请求必带，缺则 403）",
+                        "in": "header",
+                        "name": "X-Requested-With",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {}
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": ""
+                    },
+                    "403": {
+                        "description": "CSRF 头缺失或非管理员"
+                    },
+                    "404": {
+                        "description": ""
+                    },
+                    "409": {
+                        "description": ""
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "summary": "完成会话（M2 P1，完成≠删除）：completed_at + session-ended 事件，转录保留。\n幂等：已完成 → 409；不存在/越权 → 404。",
+                "tags": [
+                    "sessions"
+                ]
+            }
+        },
         "/api/v1/sessions/{id}/messages": {
             "post": {
                 "operationId": "messages",
@@ -3037,6 +3169,10 @@
         {
             "description": "模块→provider 绑定",
             "name": "bindings"
+        },
+        {
+            "description": "教学模块清单（M2 P1）",
+            "name": "modules"
         }
     ]
 }

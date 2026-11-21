@@ -134,14 +134,37 @@ pub async fn state(tts_mode: TtsMode) -> Arc<AppState> {
         store.clone(),
         master.clone(),
     ));
-    let runtime = Arc::new(kernel::Runtime::new(
-        llm.clone(),
-        tts.clone(),
-        resolver,
-        sessions.clone(),
-        audio.clone(),
-        store.clone(),
-    ));
+    // 模块注册表（M2 P1）：teach-free 注册（与生产同构）+ 临时资产目录。
+    let assets_dir = std::env::temp_dir().join(format!("gw-test-assets-{}", uuid::Uuid::new_v4()));
+    let assets = Arc::new(kernel::AssetStore::new(assets_dir, store.clone()));
+    let mut registry = kernel::ModuleRegistry::new();
+    #[cfg(feature = "teach-free")]
+    {
+        let factory = Arc::new(kernel::KernelCtxFactory::new(
+            kernel_api::ModuleId(teach_free::TEACH_FREE_ID.to_string()),
+            store.clone(),
+            resolver.clone(),
+            llm.clone(),
+            tts.clone(),
+            assets.clone(),
+            None,
+        ));
+        registry
+            .register_yaml(teach_free::module_yaml(), teach_free::module(), factory)
+            .unwrap();
+    }
+    let registry = Arc::new(registry);
+    let runtime = Arc::new(
+        kernel::Runtime::new(
+            llm.clone(),
+            tts.clone(),
+            resolver,
+            sessions.clone(),
+            audio.clone(),
+            store.clone(),
+        )
+        .with_modules(registry.clone()),
+    );
     Arc::new(AppState {
         sessions,
         audio,
@@ -151,6 +174,7 @@ pub async fn state(tts_mode: TtsMode) -> Arc<AppState> {
         master,
         llm,
         tts,
+        registry,
         rate_limiter: Arc::new(crate::auth::RateLimiter::new()),
         trusted_proxies: vec![],
     })

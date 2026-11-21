@@ -36,7 +36,8 @@
     （healthz/readyz/meta/config/openapi/SPA 伺服（title+assets）、双栈、优雅退出、用户级 REST 未认证 401 + auth 流
     注册首用户成管理员/cookie/me/会话/providers + CSRF 守卫 403、/data 初始化断言 db/master.key 0600/backups、
     完整 uid/卷矩阵 rootless named/bind 非 1000 uid + rootful bind/named 降权属主、删容器重建数据存活 + 主密钥复用、
-    **M1d REST 面：偏好 round-trip/文件夹祖先链登记+删除/改密错旧密 403/试听文本上限 400/audio-meta 缺失 404**），
+    **M1d REST 面：偏好 round-trip/文件夹祖先链登记+删除/改密错旧密 403/试听文本上限 400/audio-meta 缺失 404**、
+    **M2 P1 模块面：modules 清单/缺省会话模块 teach-free/未注册模块 400/完成 200+409 幂等/越权 404/assets 目录**），
     资源隔离 + 自动清理。容器以 GODOWORD_COOKIE_SECURE=false 运行（CI HTTP cookie 可回传）。
 13. **双后端存储测试**（纪律➀）：`storage` job 以 postgres service + SQLite 跑 **workspace 级**
     `cargo test --workspace`（设 `TEST_PG_URL`），任何读此变量的测试自动获双后端；
@@ -45,7 +46,8 @@
 14. **status 新鲜度**：改 `src/`、`tests/`、`migrations/` 或 `web/` 须同 PR 更新 `docs/project/status.md`（live 交接），
     可 docs-nochange 豁免。见 [conventions](conventions.md#agent-交接与入门)。
 
-本地预检：`python3 scripts/docs-gate/gate.py --local`（覆盖率/漏改/链接/术语/中文/禁入/status 新鲜度，无需网络）；
+本地预检：`python3 scripts/docs-gate/gate.py --local`（覆盖率/漏改/链接/术语/中文/禁入/status 新鲜度，无需网络）。
+**须在提交后跑**：漏改/status 新鲜度按已提交 diff（`base...HEAD`）判定，提交前跑 diff 为空会空转假绿（P1 实证）；
 门禁逻辑改动须过 `python3 scripts/docs-gate/test_gate.py`（合成回归：kernel-api 跨模块/migration-only/web-only，审计 D6/D7）；
 容器冒烟可本地跑 `bash scripts/acceptance/smoke.sh <镜像>`（需 podman，自动清理）；
 双后端存储测试本地需 PG 容器（设 `TEST_PG_URL`），`cargo test -p kernel-api --test storage`。
@@ -57,7 +59,7 @@
 3. 逐一确认已更新，或走豁免流程。
 4. 行为/接口/决策变更 → 写 history 条目（[格式](conventions.md#历史格式)）。
 5. 新术语 → glossary.yaml 入表。
-6. 跑 `gate.py --local` 预检。
+6. 提交后跑 `gate.py --local` 预检（按已提交 diff 判定，推送前必过）。
 7. 确认无密钥、无禁入文件。
 8. commit message 合规（type/scope 英文 + subject 中文）。
 9. 有人工残留项时：PR 清单逐项含完整命令（具体镜像 tag）+ 通过标准 + 清理命令，覆盖全部残留项

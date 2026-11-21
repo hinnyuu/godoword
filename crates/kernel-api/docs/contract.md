@@ -11,8 +11,9 @@
 | `LlmProvider` | llm-openai / 未来 llm-anthropic | list_models / chat_stream → ChatChunk 流 |
 | `TtsProvider` | tts-qwen-audio / 每款 TTS | models / list_voices / synthesize_stream → AudioEvent 流 |
 | `AuthProvider` | auth-local / auth-oidc | authenticate（统一 enum）/ extra_routes |
-| `TeachingModule` | teach-gojuon / teach-dialogue / teach-assess | manifest / persona / tools / routes / execute_tool / handle_event |
-| `ModuleContext` | kernel | 模块受控服务：store / emit_progress / current_plan |
+| `TeachingModule` | teach-free / teach-gojuon / teach-dialogue / teach-assess | manifest / persona / tools / routes / execute_tool / handle_event |
+| `ModuleContext` | kernel | 模块受控服务：store / emit_progress / current_plan / **llm / complete_session / get_or_synthesize** |
+| `ModuleContextFactory` | kernel | **for_session / for_user**（每模块一实例，module_id 构造期绑定） |
 | `PlanProvider` | teach-assess | current_plan（薄接口） |
 
 ## 关键约定
@@ -46,25 +47,36 @@ kernel-api **有意耦合 axum**（`TeachingModule::routes() -> Router`）、**s
 
 ## 当前状态与 roadmap 差异
 
-契约 M0 定义；M1a 新增 speak 工具契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）。
-kernel（回合循环）+ llm-openai + tts-qwen-audio 适配器 M1a 已实现；auth-local M1c、教学模块 M2+。
-token 估算当前为字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
+契约 M0 定义；M1a 新增 speak 工具契约（SPEAK_TOOL_NAME/SpeakArgs/speak_tool_spec）；
+M1d utoipa 有意耦合（5 REST-facing 类型 ToSchema）。
+**M2 P1 契约新增已落地**（history 2130 定案，本节下方详述）：ModuleContext 扩展 + ModuleContextFactory +
+ModuleKind::Kernel + ProgressEvent.difficulty + AssetAudio。
+kernel（回合循环）+ llm-openai + tts-qwen-audio 适配器 M1a 已实现；auth-local M1c、teach-free M2 P1；
+teach-assess/teach-gojuon P3/P4。token 估算当前为字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
 
-## M2 契约新增预告（待 P1 落地 + 契约级全量审查）
+## M2 P1 契约新增（已落地，契约级全量审查 + 二审见 history P1 条目）
 
 > 设计定案见 [history M2](../../../history/2026-11-20-1614-m2-design.md) / [history M2 审计修订](../../../history/2026-11-20-1721-m2-audit-revision.md)
+> / [history P1 前置审计 + B3/B7 定案](../../../history/2026-11-20-2130-m2-pre-p1-audit-fixes.md)
 > / [roadmap M2 蓝图](../../../docs/project/roadmap.md#m2-实施蓝图)。
-> 以下为**预告**（非当前契约事实），P1 落地时触发契约级全量语义审查 + 二审。
 
-- `ModuleContext` 新增 `llm(role, ChatRequest) -> ChatStream`：kernel 中介 LLM 调用（按 user+module+cap+role 解析绑定解密，
-  全计量 call_log **含 module_id 归因**，模块永不触 key/上游）+ `complete_session()`（完成语义，转录保留，发 session-ended；
-  **DELETE 隐私删除不发事件**——现 end_session 删除发事件行为须改，审计 B2）+ **cached-synthesis 音频服务**
-  （`get_or_synthesize`，模块声明稳定 key，持久资产区 `/data/assets` 豁免淘汰，白名单回归 M2，审计 UX-A3）。
-- 新增 `ModuleContextFactory`（`for_session(user, session)` / `for_user(user)`）：组合根构造模块时注入，`TeachingModule::routes()` 签名不动。
-  **P1 必决项（审计 B3）**：现 `ModuleContext::session_id() -> SessionId` 非可选 vs for_user 无会话（placement/plan 路由/outbox 消费）张力
-  ——Option/独立 UserContext/哨兵三选一；`sessions.plan_version TEXT` vs `LearningPlan.version u32` vs `RunStart.plan_version Option<u32>` 类型对齐（B4）。
-- `ModuleKind` 补 `Kernel` 变体（module.yaml kind=kernel 反序列化；YAML crate 选维护中方案，serde_yaml 废弃，审计 B7）。
-- **`ProgressEvent` 补 `difficulty` 字段——契约形状新增（审计 B1 诚实标注）**：现 ProgressEvent 有 outcome/item_ref 但**无 difficulty**
-  （仅 ProgressInput 有），原「契约形状已有，非契约变更」声称不成立；kernel 0006 DB 补列 + `emit_progress` 签名扩 outcome/item_ref/difficulty。
+- **`ModuleContext::session_id() -> Option<SessionId>`（B3a 定案）**：for_user ctx 无会话 → None
+  （与 ProgressEvent.session_id Option 一致）；需会话方法对 None fail-closed。
+- **`ModuleContext::llm(role, ChatRequest) -> ChatStream`**：kernel 中介（按 user+module+cap+role 解析绑定解密，
+  **model 由绑定填，req.model 忽略**；流终止全计量 call_log **含 module_id 归因**；模块永不触 key/上游）。
+- **`ModuleContext::complete_session() -> bool`**：完成≠删除（completed_at + session-ended 事件，转录保留触发提取）；
+  幂等（重复 false）；无会话 → 错误。**DELETE 隐私删除不发事件**语义翻转归 P2（审计 B2，现 end_session 行为暂不动）。
+- **`ModuleContext::get_or_synthesize(key, TtsRequest) -> AssetAudio`**：白名单缓存合成（UX-A3 用户侧标准音频）。
+  模块声明稳定 key（如 `gojuon:あ`）；命中持久资产直供（cache_hit=true 零上游）；miss 按用户 TTS 绑定合成→
+  持久化 /data/assets（豁免淘汰）→计量（module 归因）。作用域 user+module+key+provider 身份（adapter_id+base_url）+voice+model，
+  换音色/服务商懒再生新版旧版保留。无 TTS 绑定 → Unconfigured（模块降级不阻塞课时）。
+  `AssetAudio{audio_id, pcm, words, format, sample_rate, cache_hit}`（types.rs，非 REST-facing 无 ToSchema）。
+- **`ModuleContextFactory`（for_session/for_user）**：每模块一实例（module_id 构造期绑定），组合根构造模块时注入，
+  `TeachingModule::routes()` 签名不动。
+- **`ModuleKind::Kernel` 变体**：kernel/module.yaml kind=kernel 反序列化（注册表测试锚定全部 crate 清单）。
+  YAML 解析 crate = **noyalib 0.0.63**（B7 定案：维护中/MIT-Apache/forbid unsafe/serde 原生；kernel 与模块 crate 依赖）。
+- **`ProgressEvent.difficulty: Option<f32>`——契约形状新增（审计 B1 诚实标注）**：serde default 旧信封兼容；
+  kernel 0006 DB 补列（outcome/item_ref/difficulty）；**trait `emit_progress(ProgressInput)` 签名不动**
+  （ProgressInput 早含三字段，变的是 kernel journal 内部函数 + DB 列）。
 - 角色音色档案实体 **M2+ 推迟**（无黄金路径消费者），不入本次契约新增。
 - **用户级资产备份模块钩子**（模块贡献导出/导入）契约新增**归备份里程碑（实施 M2 后）**，不入 M2 P1。

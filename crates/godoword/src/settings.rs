@@ -347,6 +347,7 @@ async fn meter_test<T>(
     let _ = kernel::record_call(
         store,
         kernel::CallRecord {
+            module_id: None,
             user_id: user.0,
             session_id: None,
             run_id: None,
@@ -377,7 +378,7 @@ fn upstream_status(e: &ProviderError) -> StatusCode {
 }
 
 /// binding 输入边界校验（审计 O5）：capability/role 须属契约枚举，model 非空。
-/// module_id 注册表校验留 M2（注册表落地后）。
+/// module_id 注册表校验在 handler（M2 P1：`*` 或已注册模块）。
 fn binding_input_valid(capability: &str, role: &str, model: &str) -> bool {
     let cap_ok = matches!(capability, "llm" | "tts" | "stt");
     let role_ok = matches!(role, "default" | "summarizer" | "extractor" | "assessor");
@@ -395,6 +396,10 @@ pub async fn create_binding(
     Json(req): Json<CreateBindingReq>,
 ) -> Result<(StatusCode, Json<Binding>), StatusCode> {
     if !binding_input_valid(&req.capability, &req.role, &req.model) {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+    // module_id 注册表校验（M2 P1）：`*` 全模块默认哨兵或已注册教学模块。
+    if req.module_id != "*" && !st.registry.contains(&req.module_id) {
         return Err(StatusCode::BAD_REQUEST);
     }
     if !provider_owned(&st, user, req.provider_id).await {
@@ -575,6 +580,7 @@ async fn meter_preview(
     let _ = kernel::record_call(
         store,
         kernel::CallRecord {
+            module_id: None,
             user_id: user.0,
             session_id: None,
             run_id: None,

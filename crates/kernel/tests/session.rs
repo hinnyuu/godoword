@@ -31,6 +31,7 @@ async fn run_test(store: Arc<Store>) {
     let sid = SessionId::new();
     let meta = SessionMeta {
         module_id: Some(ModuleId("teach-gojuon".to_string())),
+        plan_version: Some(3),
         on_disconnect: OnDisconnect::Continue,
         params: SessionParams {
             context_budget_tokens: 4000,
@@ -43,6 +44,11 @@ async fn run_test(store: Arc<Store>) {
     repo.create(user, sid, meta.clone()).await.unwrap();
     let got = repo.meta(user, sid).await.unwrap().expect("meta 存在");
     assert_eq!(got.module_id, meta.module_id, "{b} module_id round-trip");
+    assert_eq!(
+        got.plan_version,
+        Some(3),
+        "{b} plan_version round-trip（0006 INTEGER）"
+    );
     assert_eq!(
         got.on_disconnect,
         OnDisconnect::Continue,

@@ -261,6 +261,7 @@ pub enum Eviction {
 #[serde(rename_all = "kebab-case")]
 pub enum ModuleKind {
     KernelApi,
+    Kernel,
     Adapter,
     Teaching,
     Root,
@@ -321,3 +322,21 @@ pub struct ModuleManifest {
 
 /// 音频字节块别名。
 pub type AudioBytes = Bytes;
+
+/// 白名单缓存合成结果（M2 P1，UX-A3 用户侧标准音频）。
+/// 命中持久资产直供（cache_hit=true，零上游零费用）；未命中合成后持久化 /data/assets。
+#[derive(Debug, Clone)]
+pub struct AssetAudio {
+    /// 资产音频标识（登记表关联）。
+    pub audio_id: AudioId,
+    /// 完整裸 PCM。
+    pub pcm: Bytes,
+    /// 词级时间戳。
+    pub words: Vec<WordTimestamp>,
+    /// 编码。
+    pub format: AudioFormat,
+    /// 采样率。
+    pub sample_rate: u32,
+    /// 是否命中持久资产（true=零上游）。
+    pub cache_hit: bool,
+}

@@ -88,7 +88,8 @@ quadlet 双栈发布用单条不带 IP 的 `PublishPort=8080:8080`（pasta 默�
 /data
 ├── db/godoword.sqlite        # 默认 SQLite（WAL）；外接 PostgreSQL 时不用此文件
 ├── keys/master.key           # 主密钥（raw 32 字节，0600），加密用户 API key
-├── cache/                    # 音频缓存（可再生可丢弃）
+├── cache/                    # 音频缓存（可再生可丢弃，TTL+容量有界）
+├── assets/                   # 持久资产（用户侧标准音频，一次生成永久使用，豁免淘汰；M2 P1）
 └── backups/                  # 迁移前自动备份（SQLite VACUUM INTO 一致快照）
 ```
 

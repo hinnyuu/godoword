@@ -3,6 +3,7 @@
 //! M1a：最小回合循环 + 内部接缝 + 默认教师 persona。M1b：存储基底（pool + 双后端迁移）。
 //! M1c：会话/音频持久化 + 上下文淘汰 + outbox/call_log + continue。M1c-hardening：对象级授权 + 失败关闭 + 硬边界 + 水位制。
 
+mod assets;
 mod audio;
 mod binding;
 mod config;
@@ -12,9 +13,11 @@ mod folders;
 mod journal;
 mod memory;
 mod migrate;
+mod module_ctx;
 mod path;
 mod persona;
 mod preferences;
+mod registry;
 pub mod repo;
 mod runtime;
 mod seam;
@@ -23,6 +26,7 @@ mod session_meta;
 mod speak;
 mod storage;
 
+pub use assets::AssetStore;
 pub use audio::FsAudio;
 pub use binding::DbBindingResolver;
 pub use config::{Config, ConfigView, ProviderPreset, RegistrationMode};
@@ -36,18 +40,21 @@ pub use folders::{
     FolderError,
 };
 pub use journal::{
-    call_log_count, call_log_rows, dispatch_once, emit_progress, end_session, evict_session,
-    lookup_summary_span, mark_processed, pending_events, record_call, store_summary_span,
-    summary_span_hash, CallRecord, OutboxEvent, OutboxHandler,
+    call_log_count, call_log_rows, complete_session, dispatch_once, emit_progress, end_session,
+    evict_session, lookup_summary_span, mark_processed, pending_events, record_call,
+    set_plan_version, store_summary_span, summary_span_hash, CallRecord, OutboxEvent,
+    OutboxHandler,
 };
 pub use memory::{MemAudio, MemSessions};
 pub use migrate::{run_migrations, Migration, KERNEL_MIGRATIONS};
+pub use module_ctx::KernelCtxFactory;
 pub use path::{
     depth, is_within, normalize_path, parent, rewrite_prefix, PathError, DEFAULT_NAMESPACE,
     MAX_DEPTH, MAX_PATH_CHARS, MAX_SEGMENT_CHARS,
 };
 pub use persona::DEFAULT_TEACHER_PERSONA;
 pub use preferences::{get_preferences, put_preferences, Preferences};
+pub use registry::{parse_manifest, ModuleRegistry, RegisteredModule};
 pub use repo::{Binding, Provider};
 pub use runtime::Runtime;
 pub use seam::{

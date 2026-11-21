@@ -2,7 +2,7 @@
 
 > 由 scripts/docs-gate 从 frontmatter 生成（派生物，勿手改）。规则见 conventions.md。
 
-共 70 条。
+共 71 条。
 
 - [项目初始化与定位](2026-11-16-0030-project-init.md) — 2026-11-16T00:30+08:00 · decision · accepted · scope: project · keywords: project, agpl, byok, japanese, podman
 - [三层模块化架构](2026-11-16-0100-modular-architecture.md) — 2026-11-16T01:00+08:00 · decision · accepted · scope: project, kernel-api · keywords: modularity, kernel, adapter, teaching, compile-time
@@ -74,3 +74,4 @@
 - [PR #22 人工 sign-off 轮：滚动信号补全 + 回合超时归用户级（默认 180s）](2026-11-20-1913-pr22-signoff-fixes.md) — 2026-11-20T19:13+08:00 · change · accepted · scope: kernel, godoword · keywords: sign-off, auto-scroll, turn-timeout, preferences, byok, user-level, hard-boundary
 - [M2 审计验收全闭环（PR #21/#22 合并 + sign-off 全过 + P1 待启动）](2026-11-20-2031-m2-audit-accepted.md) — 2026-11-20T20:31+08:00 · change · accepted · scope: project · keywords: m2, audit, acceptance, merge, sign-off, p1-handoff, closure
 - [M2 P1 前置全量审计 + 前置修复（A1–A5）+ B3/B7 定案](2026-11-20-2130-m2-pre-p1-audit-fixes.md) — 2026-11-20T21:30+08:00 · change · accepted · scope: project, llm-openai, tts-qwen-audio, godoword · keywords: m2, p1, audit, pre-fix, tts-url, tool-arguments, reattach, play-guard, scroll, b3, b7, noyalib
+- [M2 P1 风险前置切片实现（注册表 + ModuleContext + 回合接线 + teach-free 端到端）+ 契约级全量审查](2026-11-21-0010-m2-p1-module-slice.md) — 2026-11-21T00:10+08:00 · change · accepted · scope: project, kernel, kernel-api, godoword, teach-free · keywords: m2, p1, module-registry, module-context, ctx-factory, teach-free, turn-wiring, cached-synthesis, asset, contract, full-audit, noyalib

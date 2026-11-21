@@ -3,9 +3,9 @@
 > 老 agent 持续维护，新 agent **先读此文件**（入口见 [AGENTS.md](../../AGENTS.md)）。
 > committed（随仓库走，跨机器交接）。可能滞后——用 git log + 开放 PR + history INDEX 交叉验证。
 
-- verified: 2026-11-20T21:35+08:00
-- 当前里程碑: **M2 审计全闭环 → P1 前置修复 PR 在飞（A1–A5）→ P1 风险前置切片待启动（B3/B7 已定案）**
-- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ 代码修复合并（234a95f）→ **审计闭环，P1 待启动**
+- verified: 2026-11-21T00:10+08:00
+- 当前里程碑: **M2 P1 模块切片实施完成待 PR 验收**（前置修复 PR #24 已合并 9dc5cdf）
+- 主线: M0（51d16c3）→ M1 前置（bf952a3/f8ff64c）→ 蓝图（bde1ba8）→ M1a（20efa24）→ M1b（9d9c907）→ M1c（3c4dc0b）→ hardening（fa59c4e/a2bdf17）→ 验收（9d15342）→ M1d 设计（bf3a413）→ M1d 实施+审计修复（PR #18）→ M1d 合并（6a64852）→ 漂移清扫（4a0fd7b）→ M2 设计定案（1614）→ M2 审计修订合并（b1a19b8）→ 代码修复合并（234a95f）→ 审计闭环 → P1 前置修复合并（9dc5cdf，A1–A5 sign-off 全过）→ **P1 实施中**
 
 ## done
 
@@ -47,16 +47,19 @@
   OpenAPI 再生（本地服务 dump，实验垃圾已清）。新增残留：滚动复验 + 超时设置 UI 生效。
 - **M2 审计验收全闭环**（history 2031）：PR #22 squash → main 234a95f（CI 全 8 绿两轮）；
   主开发者 sign-off 全通过（首轮 3 项 ✔ + 2 项发现修复后复验全过，PC+移动双侧，PR 评论 20261120-20:17 记录）；
-  R4 main 冒烟重测通过。**M2 设计审计 + 代码修复审计正式闭环，P1 待启动**。
+  R4 main 冒烟重测通过。**M2 设计审计 + 代码修复审计正式闭环**。
+- **P1 前置全量审计 + 修复轮**（history 2130，PR #24 squash → main 9dc5cdf）：全量审计（侧重 #22/#23）无 P0；
+  A1 TTS URL 下载状态检查+32MiB 上限 / A2 LLM arguments 报错不静默 Null+空参{}+index 帽 / A3 断线重附（2049 定案落地）/
+  A4 播放失效令牌+失败重置 / A5 历史滚底；负例同配；CI 全 8 绿；sign-off 全过（A3 触发方法修订：DevTools Offline
+  不切已建立流，改 ss -K/socat 真断 TCP，服务端 detach 语义实验锚定）。B3/B7 定案（Option/INTEGER/noyalib）。
 
 ## in-flight
 
-- **P1 前置修复 PR**（分支 fix/m2-pre-p1-audit，history 2130）：全量审计（侧重 #22/#23，无 P0）发现 A1–A5 修复——
-  A1 TTS URL 下载状态检查+32MiB 上限 / A2 LLM tool arguments 解析失败报错+空参{}+index 帽 255 /
-  A3 断线重附持久态（2049 定案落地）/ A4 播放失效令牌+失败重置（ChatView+Settings）/ A5 历史加载滚到底；
-  负例同配（适配器本地 HTTP 服务 + SSE 负例 3）；适配器测试全绿 + 前端 tsc/vitest 54/svelte-check 0 错。
-  **待 CI + 人工残留 sign-off（A3–A5 UI 交互）→ 合并**。
-- **P1 待启动**（前置修复合并后；B3/B7 已定案见 history 2130，开工指引见下一动作）。
+- **M2 P1 模块切片 PR**（分支 feat/m2-p1-module-slice，history 0010）：实施完成——注册表（noyalib）+ ModuleContext/ctx 工厂
+  （llm 中介/complete_session/get_or_synthesize）+ 回合模块接线 + teach-free（T4 回归）+ 0006（plan_version INTEGER/
+  call_log.module_id/progress 结构化列/completed_at/teach-free 迁移/audio_assets）+ REST（modules/complete/module_id 校验）+
+  OpenAPI 再生 + 冒烟扩展。契约级全量审查 + 二审已做（history 0010 矩阵）。测试：registry 5 + module_slice 5 +
+  journal 双后端 4 组 + handler 3 + serde 黄金 14 + 全量 workspace 双后端零回归。**待 PR + CI + 人工残留 sign-off → 合并**。
 
 ## blocked / 待拍板决策
 
@@ -65,18 +68,13 @@
 
 ## 下一动作
 
-- **启动 P1 风险前置切片**（前置修复 PR 合并后；B3/B7 已定案 history 2130：session_id→Option<SessionId> /
-  plan_version→u32 INTEGER（P1 迁移，列从未写入零风险）/ YAML→noyalib 0.0.63（MSRV 1.89）；
-  phase 边界提案见 history 2130：P1 自带 0006 + complete_session + cached-synthesis 机制 + teach-free kernel 迁移，
-  B2 DELETE 翻转/模块迁移 runner 仍 P2）
-  （模块注册表 + ModuleContext 实现 + 回合接线 + teach-free，模块会话端到端；契约新增此 phase 落 + 契约级全量审查 + 二审）。
-  **新 agent 开工指引**：①读 AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/1802/1913/2031/2130 →
-  kernel-api contract + kernel docs（心智模型）；①查 git log + 开放 PR 交叉验证；③P1 首任务建议：
-  noyalib 入 workspace + ModuleKind::Kernel + 注册表骨架，再 ModuleContext/ctx 工厂（B3 已定），
-  再回合接线 + teach-free crate（persona 移入 + 既有会话/文件夹迁移，哨兵涟漪 B8 核对）；
-  ④契约新增落地即触发**契约级全量语义审查 + 二审**（conventions，附核对矩阵）；⑤测试锚定：serde 黄金 +
-  backends() 双后端 + 两用户越权负例 + 迁移幂等/回滚负例；⑥环境：2H2G jobs≤2 重构建走 CI（devenv.md），
-  真 key 仅 env；⑦status 逐 phase 维护，gate --local 预检，conventional commits（subject 中文）。
+- **P1 PR 验收合并**（CI 全 8 绿 + 人工残留 sign-off：模块会话端到端真 key 验证【teach-free 对话 + speak + 完成语义】+
+  存量数据迁移核对【旧会话/文件夹归入 teach-free】；清单见 PR）。
+- **合并后启动 P2 kernel 基底**：0007 其余基底 + outbox 扇出（consumes_events）+ event_consumptions 幂等（A5）+
+  消费守护（B5 有界并发/毒丸上限）+ **DELETE 不发事件语义翻转（B2，R6/N2 测试随 P2 更新）**+ 模块迁移 runner（mod_<id>_NNNN）。
+  开工指引：①AGENTS.md → 本文件 → roadmap M2 蓝图 → history 1614/1721/2130/0010 → kernel docs；
+  ②git log + 开放 PR 交叉验证；③测试锚定：双后端 + 两用户越权负例 + 幂等/毒丸/并发负例；
+  ④环境 2H2G jobs≤2 重构建走 CI（devenv.md），真 key 仅 env；⑤status 逐 phase 维护，gate --local，conventional commits。
 - M2 技术接缝（设计已定，P1/P2 落地）：kernel 模块注册表/ModuleContext 实现未立（回合循环现硬编码默认教师）；
   outbox 跨模块订阅（consumes_events）+ event_consumptions 幂等（A5）+ 消费守护（B5 有界并发/毒丸上限）；
   SessionEnded 完成≠删除语义（complete_session 发事件 + sessions.completed_at；**DELETE 不发事件**，B2）；
@@ -95,7 +93,7 @@
 | T1 | env dev key 旁路 + 固定 dev user | M1a | M1c | **已回归** |
 | T2 | 内存 impl 作生产默认 | M1a | M1b/M1c | **已回归** |
 | T3 | 容器 root 运行 | M1a | M1b | **已回归** |
-| T4 | 无模块默认教师模式 | M1a | M2 决议 | **已决议**（teach-free 轻量模块，history 1614） |
+| T4 | 无模块默认教师模式 | M1a | M2 P1 | **已回归**（teach-free 落地，persona 移入 + 数据迁移，history 1614/0010） |
 
 ## 近期关键上下文（M2 交接用）
 

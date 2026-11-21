@@ -49,4 +49,4 @@
 - token 估算当前字符启发式（roadmap 换 tokenizer，适配器未来提供 count_tokens）。
 - anthropic 兼容另立 llm-anthropic 适配器（roadmap 远期）。
 - kernel-api M1d 新增 utoipa 有意耦合：本适配器返回的 `ModelInfo` 派生 ToSchema（OpenAPI schema 补全→前端类型生成），适配器实现不变。
-- **M2 预告**（history 1614/1721）：ModuleContext.llm 中介经 kernel 调用本适配器（extractor/assessor role 提取/重规划），全计量 call_log（含 module_id 归因）；适配器实现不变。
+- **M2**（history 1614/1721/0010）：ModuleContext.llm 中介经 kernel 调用本适配器（**P1 机制已落**；extractor/assessor role 提取/重规划消费者 P3），全计量 call_log（含 module_id 归因）；适配器实现不变。

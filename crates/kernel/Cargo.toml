@@ -17,6 +17,7 @@ bytes.workspace = true
 chrono.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
+noyalib.workspace = true
 rand.workspace = true
 secrecy.workspace = true
 serde.workspace = true

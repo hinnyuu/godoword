@@ -47,6 +47,7 @@ struct MessageRow {
 #[derive(sqlx::FromRow)]
 struct SessionRow {
     module_id: Option<String>,
+    plan_version: Option<i32>,
     on_disconnect: String,
     params_json: Option<Value>,
     summary: Option<String>,
@@ -84,7 +85,7 @@ impl SessionRepo for DbSessions {
             id.0,
             user.0,
             module_id,
-            Option::<String>::None,
+            meta.plan_version.map(|v| v as i32),
             meta.on_disconnect.as_str(),
             &params,
             meta.summary,
@@ -99,7 +100,7 @@ impl SessionRepo for DbSessions {
     async fn meta(&self, user: UserId, id: SessionId) -> Result<Option<SessionMeta>, KernelError> {
         let row: Option<SessionRow> = fetch_optional_both!(
             &*self.store,
-            "SELECT module_id, on_disconnect, params_json, summary, evicted_up_to FROM sessions WHERE id = $1 AND user_id = $2",
+            "SELECT module_id, plan_version, on_disconnect, params_json, summary, evicted_up_to FROM sessions WHERE id = $1 AND user_id = $2",
             SessionRow,
             id.0,
             user.0
@@ -107,6 +108,7 @@ impl SessionRepo for DbSessions {
         .map_err(storage_err)?;
         Ok(row.map(|r| SessionMeta {
             module_id: r.module_id.map(ModuleId),
+            plan_version: r.plan_version.and_then(|v| u32::try_from(v).ok()),
             on_disconnect: OnDisconnect::parse(&r.on_disconnect),
             params: r
                 .params_json

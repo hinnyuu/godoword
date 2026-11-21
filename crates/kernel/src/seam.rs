@@ -65,8 +65,10 @@ impl OnDisconnect {
 /// 会话元数据（创建时写入，运行时读取：on_disconnect 决定断开行为，params 决定预算/淘汰/工具上限）。
 #[derive(Debug, Clone, Default)]
 pub struct SessionMeta {
-    /// 教学模块 id（M1 无模块为 None）。
+    /// 教学模块 id（M2 P1 起新会话缺省 teach-free；历史 NULL 行已由 0006 迁入）。
     pub module_id: Option<ModuleId>,
+    /// 钉住的教学方案版本（M2 P1：回合开始取当前方案写入；无方案 None）。
+    pub plan_version: Option<u32>,
     /// 断开行为。
     pub on_disconnect: OnDisconnect,
     /// 会话运行时参数（预算/淘汰/工具上限）。

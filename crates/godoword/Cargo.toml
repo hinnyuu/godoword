@@ -17,6 +17,7 @@ kernel.workspace = true
 auth-local.workspace = true
 llm-openai.workspace = true
 tts-qwen-audio.workspace = true
+teach-free = { workspace = true, optional = true }
 async-trait.workspace = true
 axum = { workspace = true, features = ["http1", "json", "tokio", "query"] }
 bytes.workspace = true
@@ -34,3 +35,6 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid.workspace = true
 utoipa.workspace = true
+[features]
+default = ["teach-free"]
+teach-free = ["dep:teach-free"]

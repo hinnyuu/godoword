@@ -12,7 +12,8 @@
 
 ## 如何新增一个教学模块
 
-1. 在 `crates/` 建 crate，依赖 `kernel-api`，实现 `TeachingModule` trait。
+1. 在 `crates/` 建 crate，依赖 `kernel-api`，实现 `TeachingModule` trait；模块受控服务经构造期注入的
+   `ModuleContextFactory` 取 per-request ctx（for_session/for_user；LLM/完成/白名单合成皆经 kernel 中介，不触 key）。
 2. 写 `module.yaml`（id/kind/requires/session_params/frontend/impact/cross_module）。
 3. 建 `docs/`（agent 向：接口契约、内部设计）与 `wiki/`（人类向：模块是什么、怎么用）。
 4. 自有迁移放 `migrations/`，表用 `mod_<id>_*` 前缀。SQL 须守**双兼容 SQL 子集**

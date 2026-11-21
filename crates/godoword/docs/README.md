@@ -2,15 +2,17 @@
 
 bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 axum 服务。
 
-## 当前状态（M1c + M1c-hardening 加固 + M1d）
+## 当前状态（M1c + M1c-hardening 加固 + M1d + M2 P1 模块切片）
 
-幂等 entrypoint + 存储基底 + DB 绑定解析 + 会话 REST/SSE + 认证/管理 REST + 配置只读：
+幂等 entrypoint + 存储基底 + DB 绑定解析 + 会话 REST/SSE + 认证/管理 REST + 配置只读 + **模块注册表**：
 
-- 启动序（`src/main.rs`）：`Config::load` → `init::init_data_dir`（自适应降权 + 建 /data 子目录）
-  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001–0005，迁移前备份 + 每条迁移同事务原子 A2）
-  → 适配器 + DbBindingResolver + Runtime（**无条件构建**）→ 监听（`into_make_service_with_connect_info` 供 IP 限流）。
+- 启动序（`src/main.rs`）：`Config::load` → `init::init_data_dir`（自适应降权 + 建 /data 子目录【含 **assets** 持久资产区】）
+  → `MasterKey::load` → `open_sqlite`/`open_pg` → `run_migrations`（0001–0006，迁移前备份 + 每条迁移同事务原子 A2）
+  → 适配器 + DbBindingResolver + **AssetStore + ModuleRegistry（feature 注册 teach-free + KernelCtxFactory 注入）**
+  → Runtime（**无条件构建** + with_modules）→ 监听（`into_make_service_with_connect_info` 供 IP 限流）。
   后台 task：音频缓存周期清理 + outbox dispatcher 骨架。退出屏障：`runtime.shutdown`（cancel + 有界等待 + 超时 abort+join，R3）+ WAL checkpoint（真屏障）。
-- `/healthz`、`/readyz`、`/api/v1/meta`（milestone=M1d）、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、SPA 伺服（web/shell/public，M1d 构建产物）。
+- `/healthz`、`/readyz`、`/api/v1/meta`（milestone=M1d）、**`/api/v1/modules`（模块清单，M2 P1）**、`/api/v1/config`（脱敏）、`/api/v1/openapi.json`、SPA 伺服（web/shell/public，M1d 构建产物）。
+- **模块路由挂载（M2 P1）**：`/api/v1/m/{id}/`（TeachingModule.routes，先 with_state 再 nest，CSRF 层最后包裹覆盖模块路由）。
 - **认证**（`src/auth.rs`）：per-request `AuthUser`/`AdminUser` extractor（cookie → `validate_session` 联查 active）；
   cookie HttpOnly/SameSite=Lax/Secure 可配；CSRF 自定义头守卫（`/api/v1` 变更须 `X-Requested-With`，缺则 403）；
   登录限流内存（username + **IP** 双维度，10 次/5 分钟；**过期窗口清理 + 容量满新键 fail-closed（绝不淘汰活跃封禁，R9.2/N5）**；
@@ -21,13 +23,16 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
   并发互禁不失锁，R7 串行化守卫收口 auth-local `set_user_status_guarded`**）。
   **重置 token 化（C8）+ 事务原子单次（R1）**：admin/reset 生成令牌 → 用户 POST auth/reset-password 持令牌设密码
   （密码策略经 auth-local `validate_password` 统一，弱密码 → 400；重置条件认领事务，并发仅一次成功）。
-- 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params，C5**）、`GET/DELETE /sessions/{id}`（DELETE SessionEnded outbox + 删除同事务原子，R6）、
+- 会话：`POST/GET /sessions`（**create 接受 on_disconnect/params/module_id，C5/M2 P1**；module 未注册 400，
+  **缺省 teach-free**【T4 默认命名空间】；on_session_start 钩子失败关闭回滚会话）、
+  `GET/DELETE /sessions/{id}`（DELETE SessionEnded outbox + 删除同事务原子，R6；**B2 翻转归 P2**）、
+  **`POST /sessions/{id}/complete`（M2 P1 完成语义：completed_at + session-ended，转录保留；幂等 409/越权 404；on_session_end 钩子）**、
   `POST /sessions/{id}/messages`（→SSE）、`POST /sessions/{id}/cancel`、`GET /audio/{id}`（均经 AuthUser + **对象级归属校验，越权 404，C1**）。
 - provider/binding CRUD + models/voices 测试端点（`src/settings.rs`，经 AuthUser，**binding 强制 provider 同主 C2**，key 加密不回显，**测试端点计量 C9**；
   **二审 R2-4：provider 输入边界校验**——adapter 须已注册、label/base_url 非空、base_url 须 http(s)、key 非空，更新留空 key 保留原 key；
   **审计 O4：models/voices 端点校验 provider.adapter_id 与能力匹配（不匹配 400，防拿用户 key 打错误上游路径）**；
-  **审计 O5：binding capability/role 枚举校验 + model 非空（400；module_id 注册表校验留 M2）**）。
-- 状态 `AppState`：DbSessions/FsAudio（trait 对象）+ Runtime + `Arc<Store>` + Config + MasterKey + 适配器 + RateLimiter；
+  **审计 O5：binding capability/role 枚举校验 + model 非空（400）；M2 P1：module_id 注册表校验（`*` 或已注册模块，否则 400）**）。
+- 状态 `AppState`：DbSessions/FsAudio（trait 对象）+ Runtime + `Arc<Store>` + Config + MasterKey + 适配器 + **ModuleRegistry（M2 P1）** + RateLimiter；
   **用户经 per-request AuthUser**（无固定 user）。
 
 ## 部署初始化（`src/init.rs`，DEV-DEBT T3 已回归）
@@ -40,7 +45,7 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 
 - **偏好**（`src/prefs.rs`）：`GET/PUT /api/v1/preferences`（kernel::Preferences，跨设备随账户，UPSERT；
   **turn_timeout_secs 回合超时用户自配，默认 180s 钳位 [30,3600]，sign-off 轮**）。
-- **文件夹**（`src/folders.rs`）：`GET/POST /folders`、`PUT/DELETE /folders/{id}`（虚拟路径目录树；module 查询默认 default；
+- **文件夹**（`src/folders.rs`）：`GET/POST /folders`、`PUT/DELETE /folders/{id}`（虚拟路径目录树；**module 查询默认 teach-free，M2 P1/T4**；
   FolderError→400/500；改名子树批量改写防环、删非空上移一层绝不删会话）。
 - **会话**（`src/rest.rs`）：`GET /sessions?folder=&module=`（元数据列表 SessionListItem：title/created_at/last_active/message_count/path）、
   `PUT /sessions/{id}/path`（移动，自动注册路径链）、`GET /sessions/{id}`（+path，SessionDetailResp）。
@@ -61,8 +66,11 @@ bin crate，以 cargo feature 注册适配器与教学模块到 kernel，启动 
 
 - M1c 已落地：会话/音频持久化（DB/文件系统）+ 认证/管理 + 上下文预算/淘汰 + outbox/call_log + continue detach。
   **dev-bypass 已删除（DEV-DEBT T1 回归）**，适配器非 optional，用户级 REST release 开放（未认证 401）。
-- 用户侧标准音频机制 M2（白名单合成 + 持久资产区）；角色音色档案实体 M2+ 推迟（音频默认新鲜合成，M1c 机制无关 M2 形态）。
-- Svelte 前端 M1d；教学模块 M2+。models/voices 响应 typed（Vec<ModelInfo>/Vec<VoiceInfo>，M1d 决策 B）。
+- **M2 P1 已落地**：模块注册表（teach-free feature default-on）+ ctx 工厂注入 + 会话模块接线 + 完成语义 +
+  模块清单/路由挂载 + binding module_id 注册表校验 + 持久资产区目录。**T4 回归**（默认教师模式→teach-free 模块）。
+- 用户侧标准音频 UX（gojuon 消费者/一键全量/预取/降级）P4；角色音色档案实体 M2+ 推迟。
+- Svelte 前端 M1d；模块前端（仪表盘/懒加载/移动适配）P5。models/voices 响应 typed（Vec<ModelInfo>/Vec<VoiceInfo>，M1d 决策 B）。
   **OpenAPI 完整性（R5/N1）**：CreateSessionReq 注册 + cookieAuth securityScheme + **操作级 security 矩阵**（公开端点 security:[]、受保护 cookieAuth，不用根级全局以免误伤 register/login/healthz，N1）+ 变更端点 CSRF header/403 + 404 标注 + openapi.json 自登记 + `$ref` 全解析与 security 矩阵单元测试，M1d 可生成 TS。
-- **M2 预告**（history 1614/1721）：组合根注册教学模块（teach-assess/teach-gojuon/teach-free）+ 模块路由挂载 /api/v1/m/{id}/ +
-  REST 扩展（modules/placement/plan/complete/regenerate/usage）+ 用户音频资产路由 + ctx 工厂构造期注入；契约新增见 kernel-api 预告。
+  **M2 P1 新增**：modules/complete 端点 + ModuleListItem/ModuleListResp schema + CreateSessionReq.module_id（再生 openapi.json/schema.d.ts）。
+- **M2 后续预告**（history 1614/1721/2130）：P2 outbox 扇出/幂等/消费守护 + DELETE 语义翻转（B2）+ 模块迁移 runner；
+  P3 teach-assess（placement/提取/重规划）；P4 teach-gojuon + 用户侧音频 UX；P5 前端；P6 看板/再生/一致性；P7/P8 构建/验收。

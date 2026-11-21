@@ -38,6 +38,7 @@ async fn run_test(store: Arc<Store>) {
     record_call(
         &store,
         CallRecord {
+            module_id: None,
             user_id: user,
             session_id: Some(session),
             run_id: Some(run),
@@ -59,6 +60,7 @@ async fn run_test(store: Arc<Store>) {
     record_call(
         &store,
         CallRecord {
+            module_id: None,
             user_id: user,
             session_id: Some(session),
             run_id: Some(run),
@@ -100,9 +102,14 @@ async fn run_test(store: Arc<Store>) {
         user,
         Some(session),
         "kernel",
-        "session-evicted",
-        json!([]),
-        json!({ "message_ids": ["m1", "m2"] }),
+        &kernel_api::ProgressInput {
+            kind: Some(kernel_api::EventKind::SessionEvicted),
+            skill_tags: vec![],
+            outcome: None,
+            item_ref: None,
+            difficulty: None,
+            detail: json!({ "message_ids": ["m1", "m2"] }),
+        },
     )
     .await
     .unwrap();
@@ -550,5 +557,431 @@ async fn end_session_concurrent_unique() {
             .unwrap();
     } else {
         eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过（CI storage job 必设跑双后端）");
+    }
+}
+
+// ===== M2 P1b：结构化进度事件 + call_log 模块归因 + complete_session + teach-free 迁移 =====
+
+async fn assert_progress_structured(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let user = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, user).await.unwrap();
+    let ev_id = emit_progress(
+        &store,
+        user,
+        None,
+        "teach-gojuon",
+        &kernel_api::ProgressInput {
+            kind: Some(kernel_api::EventKind::ExerciseOutcome),
+            skill_tags: vec!["kana:あ".to_string()],
+            outcome: Some(kernel_api::Outcome::Correct),
+            item_ref: Some("あ".to_string()),
+            difficulty: Some(0.25),
+            detail: json!({ "mode": "identify" }),
+        },
+    )
+    .await
+    .unwrap();
+    let pending = pending_events(&store, 100).await.unwrap();
+    let ev = pending
+        .iter()
+        .find(|e| e.id == ev_id)
+        .expect("事件在 pending");
+    assert_eq!(ev.kind, "exercise-outcome", "{b} kind kebab");
+    assert_eq!(ev.outcome.as_deref(), Some("correct"), "{b} outcome 列");
+    assert_eq!(ev.item_ref.as_deref(), Some("あ"), "{b} item_ref 列");
+    assert_eq!(ev.difficulty, Some(0.25), "{b} difficulty REAL↔f32");
+    assert_eq!(ev.skill_tags, Some(json!(["kana:あ"])), "{b} skill_tags");
+    // for_user 事件无会话（B3：session_id 可空）。
+    assert_eq!(ev.session_id, None, "{b} 无会话事件");
+
+    // call_log 模块归因（B4）。
+    record_call(
+        &store,
+        CallRecord {
+            user_id: user,
+            session_id: None,
+            run_id: None,
+            module_id: Some("teach-assess".to_string()),
+            capability: "llm".to_string(),
+            adapter_id: "mock".to_string(),
+            model: "m".to_string(),
+            prompt_tokens: Some(1),
+            completion_tokens: Some(2),
+            reasoning_tokens: None,
+            total_tokens: Some(3),
+            characters: None,
+            latency_ms: 10,
+            status: "ok".to_string(),
+            error_code: None,
+        },
+    )
+    .await
+    .unwrap();
+    let row: (Option<String>,) = fetch_one_both!(
+        &*store,
+        "SELECT module_id FROM call_log WHERE user_id = $1",
+        (Option<String>,),
+        user
+    )
+    .unwrap();
+    assert_eq!(
+        row.0.as_deref(),
+        Some("teach-assess"),
+        "{b} call_log.module_id 归因"
+    );
+}
+
+#[tokio::test]
+async fn progress_structured_and_module_attribution() {
+    let dir = std::env::temp_dir().join(format!("gw-p1b-prog-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_progress_structured(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_p1b_prog_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_progress_structured(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过");
+    }
+}
+
+async fn assert_complete_session(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let a = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, a).await.unwrap();
+    kernel::repo::ensure_user(&store, other).await.unwrap();
+    let sessions = kernel::DbSessions::new(store.clone());
+    let sid = kernel_api::SessionId::new();
+    sessions
+        .create(
+            kernel_api::UserId(a),
+            sid,
+            kernel::SessionMeta {
+                module_id: Some(kernel_api::ModuleId("teach-free".to_string())),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    sessions
+        .append(
+            kernel_api::UserId(a),
+            sid,
+            kernel_api::ChatMessage {
+                role: "user".to_string(),
+                content: "你好".to_string(),
+                reasoning: None,
+                tool_calls: None,
+                tool_call_id: None,
+            },
+        )
+        .await
+        .unwrap();
+    // 越权 complete → false，无事件。
+    assert!(
+        !kernel::complete_session(&store, other, sid.0)
+            .await
+            .unwrap(),
+        "{b} 越权 false"
+    );
+    // 不存在 → false。
+    assert!(
+        !kernel::complete_session(&store, a, Uuid::new_v4())
+            .await
+            .unwrap(),
+        "{b} 不存在 false"
+    );
+    // 完成 → true + session-ended 事件（module 归因）+ 转录保留（完成≠删除）。
+    assert!(
+        kernel::complete_session(&store, a, sid.0).await.unwrap(),
+        "{b} 完成 true"
+    );
+    assert!(
+        sessions.exists(kernel_api::UserId(a), sid).await.unwrap(),
+        "{b} 完成不删会话"
+    );
+    let msgs = sessions.history(kernel_api::UserId(a), sid).await.unwrap();
+    assert_eq!(msgs.len(), 1, "{b} 转录保留");
+    let pending = pending_events(&store, 100).await.unwrap();
+    let ended: Vec<_> = pending
+        .iter()
+        .filter(|e| e.kind == "session-ended")
+        .collect();
+    assert_eq!(ended.len(), 1, "{b} 恰一个 session-ended");
+    assert_eq!(ended[0].module_id, "teach-free", "{b} 事件 module 归因");
+    assert_eq!(ended[0].session_id, Some(sid.0), "{b} 事件带会话");
+    // 幂等：重复完成 → false，不重复发事件。
+    assert!(
+        !kernel::complete_session(&store, a, sid.0).await.unwrap(),
+        "{b} 重复完成 false"
+    );
+    let pending = pending_events(&store, 100).await.unwrap();
+    assert_eq!(
+        pending.iter().filter(|e| e.kind == "session-ended").count(),
+        1,
+        "{b} 事件不重复"
+    );
+}
+
+#[tokio::test]
+async fn complete_session_semantics() {
+    let dir = std::env::temp_dir().join(format!("gw-p1b-comp-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_complete_session(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_p1b_comp_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_complete_session(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过");
+    }
+}
+
+async fn assert_complete_concurrent(store: Arc<Store>) {
+    let b = store.backend();
+    run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    let user = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, user).await.unwrap();
+    let sessions = kernel::DbSessions::new(store.clone());
+    let sid = kernel_api::SessionId::new();
+    sessions
+        .create(
+            kernel_api::UserId(user),
+            sid,
+            kernel::SessionMeta::default(),
+        )
+        .await
+        .unwrap();
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let s = store.clone();
+        handles.push(tokio::spawn(async move {
+            kernel::complete_session(&s, user, sid.0).await.unwrap()
+        }));
+    }
+    let mut trues = 0;
+    for h in handles {
+        if h.await.unwrap() {
+            trues += 1;
+        }
+    }
+    assert_eq!(trues, 1, "{b} 并发完成恰一个 true（条件 UPDATE 唯一认领）");
+    let pending = pending_events(&store, 100).await.unwrap();
+    assert_eq!(
+        pending.iter().filter(|e| e.kind == "session-ended").count(),
+        1,
+        "{b} 并发恰一个事件"
+    );
+}
+
+#[tokio::test]
+async fn complete_session_concurrent_unique() {
+    let dir = std::env::temp_dir().join(format!("gw-p1b-conc-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_complete_concurrent(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_p1b_conc_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(8)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_complete_concurrent(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过");
+    }
+}
+
+/// teach-free 迁移数据效果（B8）：0005 态 NULL 会话/default 文件夹 → 0006 后迁入 teach-free。
+async fn assert_teach_free_migration(store: Arc<Store>) {
+    let b = store.backend();
+    // 先跑 0001–0005（旧态）。
+    run_migrations(&store, &KERNEL_MIGRATIONS[..5], None)
+        .await
+        .unwrap();
+    let user = Uuid::new_v4();
+    kernel::repo::ensure_user(&store, user).await.unwrap();
+    let sid = Uuid::new_v4();
+    let now = chrono::Utc::now();
+    kernel_api::execute_both!(
+        &*store,
+        "INSERT INTO sessions (id, user_id, module_id, on_disconnect, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6)",
+        sid,
+        user,
+        Option::<String>::None,
+        "cancel",
+        now,
+        now
+    )
+    .unwrap();
+    kernel_api::execute_both!(
+        &*store,
+        "INSERT INTO session_folders (id, user_id, module_id, path, created_at, updated_at)
+         VALUES ($1,$2,$3,$4,$5,$6)",
+        Uuid::new_v4(),
+        user,
+        "default",
+        "/日语",
+        now,
+        now
+    )
+    .unwrap();
+    // 0006 迁入。
+    let applied = run_migrations(&store, KERNEL_MIGRATIONS, None)
+        .await
+        .unwrap();
+    assert_eq!(applied, 1, "{b} 仅 0006 待应用");
+    let row: (Option<String>,) = fetch_one_both!(
+        &*store,
+        "SELECT module_id FROM sessions WHERE id = $1",
+        (Option<String>,),
+        sid
+    )
+    .unwrap();
+    assert_eq!(
+        row.0.as_deref(),
+        Some("teach-free"),
+        "{b} NULL 会话迁入 teach-free"
+    );
+    let f: (String,) = fetch_one_both!(
+        &*store,
+        "SELECT module_id FROM session_folders WHERE user_id = $1",
+        (String,),
+        user
+    )
+    .unwrap();
+    assert_eq!(f.0, "teach-free", "{b} default 文件夹迁入 teach-free");
+    // 幂等重跑。
+    assert_eq!(
+        run_migrations(&store, KERNEL_MIGRATIONS, None)
+            .await
+            .unwrap(),
+        0,
+        "{b} 幂等"
+    );
+}
+
+#[tokio::test]
+async fn teach_free_migration_data() {
+    let dir = std::env::temp_dir().join(format!("gw-p1b-mig-{}", Uuid::new_v4()));
+    let sqlite = kernel::open_sqlite(&dir.join("db").join("t.sqlite"))
+        .await
+        .unwrap();
+    assert_teach_free_migration(Arc::new(sqlite)).await;
+    std::fs::remove_dir_all(&dir).unwrap();
+    if let Ok(url) = std::env::var("TEST_PG_URL") {
+        let schema = format!("gw_p1b_mig_{}", Uuid::new_v4().simple());
+        let admin = PgPool::connect(&url).await.unwrap();
+        sqlx::query(&format!("CREATE SCHEMA {schema}"))
+            .execute(&admin)
+            .await
+            .unwrap();
+        let s = schema.clone();
+        let pg = PgPoolOptions::new()
+            .max_connections(4)
+            .after_connect(move |conn, _| {
+                let s = s.clone();
+                Box::pin(async move {
+                    sqlx::query(&format!("SET search_path TO {s}"))
+                        .execute(conn)
+                        .await?;
+                    Ok(())
+                })
+            })
+            .connect(&url)
+            .await
+            .unwrap();
+        assert_teach_free_migration(Arc::new(Store::Pg(pg))).await;
+        sqlx::query(&format!("DROP SCHEMA {schema} CASCADE"))
+            .execute(&admin)
+            .await
+            .unwrap();
+    } else {
+        eprintln!("[skip] TEST_PG_URL 未设，PostgreSQL 侧跳过");
     }
 }

@@ -39,11 +39,19 @@ pub struct AppState {
     pub llm: Arc<dyn LlmProvider>,
     /// TTS 适配器。
     pub tts: Arc<dyn TtsProvider>,
+    /// 模块注册表（M2 P1：会话模块校验/ctx 工厂/模块路由）。
+    pub registry: Arc<kernel::ModuleRegistry>,
     /// 登录限流器。
     pub rate_limiter: Arc<RateLimiter>,
     /// 可信反向代理 IP/CIDR（审计 R9.4，启动时从配置解析）：XFF 客户端 IP 解析用。
     pub trusted_proxies: Vec<ipnet::IpNet>,
 }
+
+/// 缺省会话模块（T4 决议：自由对话为默认命名空间；feature 关闭时回退无模块 legacy）。
+#[cfg(feature = "teach-free")]
+pub(crate) const DEFAULT_MODULE: &str = teach_free::TEACH_FREE_ID;
+#[cfg(not(feature = "teach-free"))]
+pub(crate) const DEFAULT_MODULE: &str = "";
 
 /// 存活探针。
 #[utoipa::path(get, path = "/healthz", tag = "system", responses((status = 200, description = "存活", body = Value)))]
@@ -82,7 +90,7 @@ fn to_sse(ev: SessionEvent) -> Event {
     Event::default().event(name).data(v["data"].to_string())
 }
 
-/// 创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配）。
+/// 创建会话请求（可选配置断开行为与运行时参数，审计 C5：continue 公开可配；M2 P1：module_id 可选）。
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct CreateSessionReq {
     /// 断开行为 cancel/continue（默认 cancel）。
@@ -91,6 +99,9 @@ pub struct CreateSessionReq {
     /// 运行时参数（预算/淘汰/工具上限，默认值见 SessionParams；JSON 对象）。
     #[serde(default)]
     pub params: Option<Value>,
+    /// 教学模块 id（缺省 teach-free；未注册 → 400）。
+    #[serde(default)]
+    pub module_id: Option<String>,
 }
 
 /// 创建会话。
@@ -101,6 +112,7 @@ pub async fn create_session(
     body: Option<Json<CreateSessionReq>>,
 ) -> Result<Json<Value>, StatusCode> {
     let mut meta = SessionMeta::default();
+    let mut req_module: Option<String> = None;
     if let Some(Json(req)) = body {
         if let Some(od) = req.on_disconnect {
             meta.on_disconnect = match od.as_str() {
@@ -112,13 +124,113 @@ pub async fn create_session(
         if let Some(p) = req.params {
             meta.params = serde_json::from_value(p).map_err(|_| StatusCode::BAD_REQUEST)?;
         }
+        req_module = req.module_id;
     }
+    // 模块校验（M2 P1）：显式 module 须已注册；缺省 teach-free（T4 默认命名空间）。
+    let module_id = match req_module {
+        Some(id) => {
+            if !st.registry.contains(&id) {
+                return Err(StatusCode::BAD_REQUEST);
+            }
+            Some(kernel_api::ModuleId(id))
+        }
+        None => {
+            if !DEFAULT_MODULE.is_empty() && st.registry.contains(DEFAULT_MODULE) {
+                Some(kernel_api::ModuleId(DEFAULT_MODULE.to_string()))
+            } else {
+                None
+            }
+        }
+    };
+    meta.module_id = module_id.clone();
     let id = SessionId::new();
     st.sessions
         .create(user, id, meta)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // on_session_start 钩子（失败关闭：回滚会话，不留半初始化）。
+    if let Some(mid) = &module_id {
+        if let Some(r) = st.registry.get(&mid.0) {
+            let ctx = r.factory.for_session(user, id);
+            if let Err(e) = r.module.on_session_start(ctx.as_ref()).await {
+                tracing::warn!("on_session_start 失败（会话回滚）：{e}");
+                let _ = st.sessions.delete(user, id).await;
+                return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            }
+        }
+    }
     Ok(Json(json!({ "id": id.to_string() })))
+}
+
+/// 模块清单项（GET /modules）。
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct ModuleListItem {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+}
+
+/// 模块清单响应。
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct ModuleListResp {
+    pub modules: Vec<ModuleListItem>,
+}
+
+/// 列出已注册教学模块（M2 P1）。
+#[utoipa::path(get, path = "/api/v1/modules", tag = "modules", responses((status = 200, body = ModuleListResp), (status = 401)))]
+pub async fn list_modules(
+    State(st): State<Arc<AppState>>,
+    AuthUser(_user): AuthUser,
+) -> Json<ModuleListResp> {
+    Json(ModuleListResp {
+        modules: st
+            .registry
+            .list()
+            .iter()
+            .map(|r| ModuleListItem {
+                id: r.manifest.id.clone(),
+                name: r.manifest.name.clone(),
+                version: r.manifest.version.clone(),
+                description: r.manifest.description.clone(),
+            })
+            .collect(),
+    })
+}
+
+/// 完成会话（M2 P1，完成≠删除）：completed_at + session-ended 事件，转录保留。
+/// 幂等：已完成 → 409；不存在/越权 → 404。
+#[utoipa::path(post, path = "/api/v1/sessions/{id}/complete", tag = "sessions", params(("id" = Uuid, Path, description = "会话 id")), responses((status = 200, body = Value), (status = 401), (status = 404), (status = 409)))]
+pub async fn complete_session(
+    State(st): State<Arc<AppState>>,
+    AuthUser(user): AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Value>, StatusCode> {
+    let sid = SessionId(id);
+    let meta = st
+        .sessions
+        .meta(user, sid)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+    let module_id = meta
+        .module_id
+        .as_ref()
+        .map(|m| m.0.clone())
+        .unwrap_or_else(|| DEFAULT_MODULE.to_string());
+    let r = st.registry.get(&module_id).ok_or(StatusCode::NOT_FOUND)?;
+    let ctx = r.factory.for_session(user, sid);
+    match ctx.complete_session().await {
+        Ok(true) => {
+            // 完成钩子（模块自清理；失败仅 warn——完成语义已原子落库）。
+            if let Err(e) = r.module.on_session_end(ctx.as_ref()).await {
+                tracing::warn!("on_session_end 失败（完成已落库）：{e}");
+            }
+            Ok(Json(json!({ "ok": true })))
+        }
+        Ok(false) => Err(StatusCode::CONFLICT),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 /// 会话列表查询（folder 子树过滤 / module 命名空间过滤；page 预留，M1d 全量返回私有规模有界）。
@@ -414,5 +526,98 @@ mod tests {
         };
         let r = list_sessions(State(st.clone()), AuthUser(user), Query(bad)).await;
         assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "非法 folder 400");
+    }
+
+    /// M2 P1：会话创建模块校验（未注册 400）+ 缺省 teach-free（T4 默认命名空间）。
+    #[tokio::test]
+    async fn create_session_module_validation_and_default() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "cs-mod").await;
+        // 未注册模块 → 400。
+        let r = create_session(
+            State(st.clone()),
+            AuthUser(user),
+            Some(Json(CreateSessionReq {
+                on_disconnect: None,
+                params: None,
+                module_id: Some("absent-module".to_string()),
+            })),
+        )
+        .await;
+        assert_eq!(r.unwrap_err(), StatusCode::BAD_REQUEST, "未注册模块 400");
+        // 缺省 → teach-free。
+        let resp = create_session(State(st.clone()), AuthUser(user), None)
+            .await
+            .unwrap();
+        let sid = SessionId(resp.0["id"].as_str().unwrap().parse().unwrap());
+        let meta = st.sessions.meta(user, sid).await.unwrap().unwrap();
+        assert_eq!(
+            meta.module_id.as_ref().map(|m| m.0.as_str()),
+            Some("teach-free"),
+            "缺省会话模块 teach-free"
+        );
+        // 显式 teach-free 亦可。
+        let resp = create_session(
+            State(st.clone()),
+            AuthUser(user),
+            Some(Json(CreateSessionReq {
+                on_disconnect: None,
+                params: None,
+                module_id: Some("teach-free".to_string()),
+            })),
+        )
+        .await
+        .unwrap();
+        assert!(resp.0["id"].as_str().is_some());
+    }
+
+    /// M2 P1：完成语义（完成≠删除）+ 幂等 409 + 越权 404 + 转录保留 + 事件。
+    #[tokio::test]
+    async fn complete_session_semantics_rest() {
+        let st = state(TtsMode::Ok).await;
+        let (u1, _) = user_with_token(&st, "comp1").await;
+        let (u2, _) = user_with_token(&st, "comp2").await;
+        let resp = create_session(State(st.clone()), AuthUser(u1), None)
+            .await
+            .unwrap();
+        let sid: Uuid = resp.0["id"].as_str().unwrap().parse().unwrap();
+        // 越权 → 404。
+        let r = complete_session(State(st.clone()), AuthUser(u2), Path(sid)).await;
+        assert_eq!(r.unwrap_err(), StatusCode::NOT_FOUND, "越权完成 404");
+        // 完成 → 200，会话仍在（完成≠删除）。
+        let ok = complete_session(State(st.clone()), AuthUser(u1), Path(sid))
+            .await
+            .unwrap();
+        assert_eq!(ok.0["ok"], serde_json::json!(true));
+        assert!(
+            st.sessions.exists(u1, SessionId(sid)).await.unwrap(),
+            "完成不删会话"
+        );
+        // session-ended 事件（module 归因 teach-free）。
+        let pending = kernel::pending_events(&st.store, 100).await.unwrap();
+        assert!(
+            pending.iter().any(|e| e.kind == "session-ended"
+                && e.session_id == Some(sid)
+                && e.module_id == "teach-free"),
+            "完成事件 + 归因"
+        );
+        // 重复完成 → 409（幂等）。
+        let r = complete_session(State(st.clone()), AuthUser(u1), Path(sid)).await;
+        assert_eq!(r.unwrap_err(), StatusCode::CONFLICT, "重复完成 409");
+        // 不存在 → 404。
+        let r = complete_session(State(st.clone()), AuthUser(u1), Path(Uuid::new_v4())).await;
+        assert_eq!(r.unwrap_err(), StatusCode::NOT_FOUND);
+    }
+
+    /// M2 P1：模块清单端点。
+    #[tokio::test]
+    async fn list_modules_contains_teach_free() {
+        let st = state(TtsMode::Ok).await;
+        let (user, _) = user_with_token(&st, "lm1").await;
+        let resp = list_modules(State(st.clone()), AuthUser(user)).await;
+        assert!(
+            resp.modules.iter().any(|m| m.id == "teach-free"),
+            "清单含 teach-free"
+        );
     }
 }
