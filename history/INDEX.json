@@ -1759,5 +1759,30 @@
     "supersedes": [],
     "superseded_by": [],
     "pr": ""
+  },
+  {
+    "file": "2026-11-21-1158-m2-p1-accepted-handoff.md",
+    "title": "M2 P1 合并验收闭环 + P2 新 agent 交接",
+    "date": "2026-11-21T11:58+08:00",
+    "keywords": [
+      "m2",
+      "p1",
+      "acceptance",
+      "merge",
+      "sign-off",
+      "handoff",
+      "p2",
+      "outbox",
+      "delete-semantics",
+      "migration-runner"
+    ],
+    "scope": [
+      "project"
+    ],
+    "type": "change",
+    "status": "accepted",
+    "supersedes": [],
+    "superseded_by": [],
+    "pr": "25"
   }
 ]
